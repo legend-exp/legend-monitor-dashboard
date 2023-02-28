@@ -42,6 +42,7 @@ class monitoring(param.Parameterized):
                        "Tau":plot_pz_consts, "Alpha": plot_alpha, 
                        "Valid. E": plot_no_fitted_energy_peaks, 
                        "Valid. A/E": plot_no_fitted_aoe_slices,
+                       "Stability": plot_fep_stability_channels2d,
                       "Baseline": plot_bls, "Spectra": plot_energy_spectra}
     
     plot_types_tracking_dict = {"Energy": plot_energy,"Energy Res Qbb": plot_energy_res_Qbb, 
@@ -184,6 +185,7 @@ class monitoring(param.Parameterized):
         self.channel = channel_list[0]
         
         self.update_strings()
+        self.cached_plots ={}
     
     
     @param.depends("parameter", watch=True)
