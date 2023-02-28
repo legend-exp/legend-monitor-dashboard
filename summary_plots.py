@@ -16,7 +16,7 @@ from  datetime import datetime
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
-from util import *
+from src.util import *
 
 
 def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):

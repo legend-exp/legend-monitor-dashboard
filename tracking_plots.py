@@ -18,7 +18,7 @@ from  datetime import datetime
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
-from util import *
+from src.util import *
 
 def plot_energy(path, run_dict, det, plot, colour):
     

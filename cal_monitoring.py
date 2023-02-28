@@ -15,10 +15,12 @@ from  datetime import datetime
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
-from util import *
-from summary_plots import *
-from tracking_plots import *
-from detailed_plots import *
+from bokeh.models.widgets.tables import NumberFormatter, BooleanFormatter
+
+from src.util import *
+from src.summary_plots import *
+from src.tracking_plots import *
+from src.detailed_plots import *
 
 class monitoring(param.Parameterized):
     
