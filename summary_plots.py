@@ -8,7 +8,7 @@ import shelve
 import bisect
 
 from bokeh.models import Span, Label, Title, Range1d
-from bokeh.palettes import Category10, Category20
+from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
 import datetime as dtt
 from  datetime import datetime
@@ -484,7 +484,10 @@ def plot_bls(plot_dict,chan_dict, channels,
     p.title.text = string
     p.title.align = "center"
     p.title.text_font_size = "15px"
-    colours = Category20[len(channels)]
+    if len(channels) > 19:
+        colours = Turbo256[len(channels)]
+    else:
+        colours = Category20[len(channels)]
     with shelve.open(plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
         for i,channel in enumerate(channels):
             try:
@@ -514,7 +517,10 @@ def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string
     p.title.text = string
     p.title.align = "center"
     p.title.text_font_size = "15px"
-    colours = Category20[len(channels)]
+    if len(channels) > 19:
+        colours = Turbo256[len(channels)]
+    else:
+        colours = Category20[len(channels)]
     with shelve.open(plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
         for i,channel in enumerate(channels):
             try:
@@ -543,7 +549,10 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
     p.title.text = string
     p.title.align = "center"
     p.title.text_font_size = "15px"
-    colours = Category20[len(channels)]
+    if len(channels) > 19:
+        colours = Turbo256[len(channels)]
+    else:
+        colours = Category20[len(channels)]
     
     with shelve.open(plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
         for i,channel in enumerate(channels):
