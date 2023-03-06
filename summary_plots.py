@@ -503,7 +503,7 @@ def plot_bls(plot_dict,chan_dict, channels,
 
             plot_dict_chan=None
         
-    p.add_layout(Title(text="bl\_mean", align="center"), "below")
+    p.add_layout(Title(text="Baseline Mean (ADC)", align="center"), "below")
     p.add_layout(Title(text="Counts", align="center"), "left")
     p.legend.location = "top_left"
     p.legend.click_policy="hide"

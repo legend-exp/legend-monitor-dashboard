@@ -28,33 +28,35 @@ class monitoring(param.Parameterized):
     plt.rcParams['figure.figsize'] = (16, 6)
     plt.rcParams['figure.dpi'] = 100
     
-    
     cal_plots = ['cal_stability', 'peak_fits', 'cal_fit', 'fwhm_fit', 'spectrum_plot', 'survival_frac', "spectrum", "logged_spectrum"]
+    
     aoe_plots = ['dt_deps', 'compt_bands_nocorr', 'band_fits', 'mean_fit', 'sigma_fit', 'compt_bands_corr', 'surv_fracs', 'PSD_spectrum', 'psd_sf']
+    
     tau_plots =["slope", "waveforms"]
+    
     optimisation_plots = ["trap_kernel", "zac_kernel", "cusp_kernel", "trap_acq", "zac_acq", "cusp_acq"]
     
     _options = {'cuspEmax_ctc': cal_plots , 'zacEmax_ctc': cal_plots,
             'trapEmax_ctc': cal_plots , 'trapTmax': cal_plots,
             "A/E": aoe_plots, "Tau": tau_plots, "Optimisation": optimisation_plots}
         
-    plot_types_summary_dict = {"Energy Qbb": plot_energy_resolutions_Qbb, 
-                        "Energy 2.6MeV": plot_energy_resolutions_2614,
+    plot_types_summary_dict = {"FWHM Qbb": plot_energy_resolutions_Qbb, 
+                        "FWHM FEP": plot_energy_resolutions_2614,
                         "A/E":get_aoe_results, 
                        "Tau":plot_pz_consts, "Alpha": plot_alpha, 
                        "Valid. E": plot_no_fitted_energy_peaks, 
                        "Valid. A/E": plot_no_fitted_aoe_slices,
-                       "Stability": plot_fep_stability_channels2d,
+                       "FEP Stability": plot_fep_stability_channels2d,
                       "Baseline": plot_bls, "Spectra": plot_energy_spectra}
     
     plot_types_tracking_dict = {"Energy": plot_energy,"Energy Res Qbb": plot_energy_res_Qbb, 
                                 "Energy Res 2.6": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
-                "A/E Sigma": plot_aoe_sig, "Tau": plot_tau,  "Alpha": plot_ctc_const}
+                                "A/E Sigma": plot_aoe_sig, "Tau": plot_tau,  "Alpha": plot_ctc_const}
     
     plot_type_tracking = param.ObjectSelector(default = list(plot_types_tracking_dict)[0], objects= list(plot_types_tracking_dict))
     sort_by = param.ObjectSelector(default = list(sort_dict)[0], objects= list(sort_dict))
     parameter = param.ObjectSelector(default = list(_options)[0], objects = list(_options))
-    plot_type_details = param.ObjectSelector(default = cal_plots[0], objects= cal_plots)
+    plot_type_details = param.ObjectSelector(default = cal_plots[0], objects= cal_plots)#, labels=cal_plots_labels)
     plot_type_summary = param.ObjectSelector(default = list(plot_types_summary_dict)[0], objects= list(plot_types_summary_dict))
     date_range = param.DateRange(default = (datetime.now()-dtt.timedelta(minutes = 10),
                                         datetime.now()+dtt.timedelta(minutes = 10)) , 
@@ -126,7 +128,7 @@ class monitoring(param.Parameterized):
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None
-        if self.plot_type_summary in ["Energy Qbb", "Energy 2.6MeV","A/E", "Tau", 
+        if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E", "Tau", 
                                       "Alpha", "Valid. E", "Valid. A/E"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
