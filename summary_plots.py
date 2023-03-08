@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import pickle as pkl
 import shelve
 import bisect
+import seaborn as sns
+import matplotlib
 
 from bokeh.models import Span, Label, Title, Range1d
 from bokeh.palettes import Category10, Category20, Turbo256
@@ -18,6 +20,166 @@ from legendmeta.catalog import Props
 
 from src.util import *
 
+def build_string_array(chan_map):
+    dets = []
+    strings = []
+    positions = []
+    for key,entry in chan_map.items():
+        if entry.system == "geds":
+            string = entry.location.string
+            pos = entry.location.position
+            dets.append(key)
+            strings.append(string)
+            positions.append(int(pos))
+            
+    return dets, strings, positions
+
+def build_status_map(chan_map, data):
+    
+    
+    dets, strings, positions = build_string_array(chan_map)
+    
+    string_nos = np.array(sorted(np.unique(strings)))
+    pos_nos = np.array(sorted(np.unique(positions)))
+    n_strings = len(string_nos)
+    max_pos = np.max(positions)
+    
+    data_array = np.full((max_pos *2+1, n_strings*2+1), np.nan)
+    annot_array = np.empty((max_pos *2+1, n_strings*2+1), dtype="object")
+
+    
+    for i,det in enumerate(dets):
+        index = (2*positions[i]-1, 2*(np.where(strings[i] == string_nos)[0]+1)-1)
+        annot_array[index] = det
+        proc_status=None
+        use_status=None
+        proc_status = data[det]["processable"]
+        use_status = data[det]["usability"]
+        if proc_status == True:
+            if use_status == "On":
+                data_array[index] =2.
+            else :
+                data_array[index] =1.
+        else:
+            data_array[index]=0.
+            
+    x_axes = np.full(n_strings*2+1, " ",dtype = object)
+    for i, s in enumerate(string_nos):
+        x_axes[2*(i+1)-1] = f'Str {s}'
+    
+    y_axes = np.full(max_pos *2+1, " ", dtype = object)
+    for i, n in enumerate(pos_nos):
+        y_axes[2*(i+1)-1] = f'Pos {n}'
+            
+    return data_array, x_axes, y_axes, annot_array
+
+def plot_status(run, run_dict, path, key =None):
+    prod_config = os.path.join(path,"config.json")
+    prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
+    chmap = LegendMetadata(path = prod_config["paths"]["metadata"])
+    cfg = LegendMetadata(path = prod_config["paths"]["config"])
+    
+    config = cfg.on(run_dict["timestamp"], system="phy")
+    cmap = chmap.channelmap(run_dict["timestamp"])
+    
+    status_map = config["analysis"]
+    
+    data_array, x_labels, y_labels, annotations = build_status_map(cmap, status_map)
+    fig = plt.figure(figsize=(10, 6), dpi=1000, facecolor="w", edgecolor="k")
+    sns.set(font_scale=1)
+
+    stat_map = sns.heatmap(
+        data=data_array,
+        yticklabels=y_labels,
+        xticklabels=x_labels,
+        cmap="Set1",
+        fmt='s',
+        cbar=False,
+
+        annot=annotations,
+        annot_kws={"fontsize":5, 'color':'white'}
+    )
+
+    plt.title("Working Detectors")
+    plt.tight_layout()
+    plt.close()
+    return fig
+
+def build_counts_map(chan_map, data):
+    dets, strings, positions = build_string_array(chan_map)
+    
+    string_nos = np.array(sorted(np.unique(strings)))
+    pos_nos = np.array(sorted(np.unique(positions)))
+    n_strings = len(string_nos)
+    max_pos = np.max(positions)
+    
+    data_array = np.full((max_pos *2+1, n_strings*2+1), np.nan)
+    annot_array = np.empty((max_pos *2+1, n_strings*2+1), dtype="object")
+
+    
+    for i,det in enumerate(dets):
+        index = (2*positions[i]-1, 2*(np.where(strings[i] == string_nos)[0]+1)-1)
+        annot_array[index] = data[det]
+        data_array[index] =data[det]
+        
+            
+    x_axes = np.full(n_strings*2+1, " ",dtype = object)
+    for i, s in enumerate(string_nos):
+        x_axes[2*(i+1)-1] = f'Str {s}'
+    
+    y_axes = np.full(max_pos *2+1, " ", dtype = object)
+    for i, n in enumerate(pos_nos):
+        y_axes[2*(i+1)-1] = f'Pos {n}'
+            
+    return data_array, x_axes, y_axes, annot_array
+
+def plot_counts(run, run_dict, path, key =None):
+    prod_config = os.path.join(path,"config.json")
+    prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
+    chmap = LegendMetadata(path = prod_config["paths"]["metadata"])
+    cfg = LegendMetadata(path = prod_config["paths"]["config"])
+    
+    config = cfg.on(run_dict["timestamp"], system="phy")
+    cmap = chmap.channelmap(run_dict["timestamp"])
+    
+    file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict["period"]}/{run}')
+    path = os.path.join(file_path, 
+                        f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+    
+    with open(path, 'r') as r:
+        all_res = json.load(r)
+        
+    res = {}
+    for det in cmap:
+        if cmap[det].system == "geds":
+            try:
+                res[det] = all_res[f"ch{cmap[det].daq.fcid:03}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+            except:
+                res[det] = 0 
+    
+    data_array, x_labels, y_labels, annotations = build_counts_map(cmap, res)
+    fig = plt.figure(figsize=(10, 6), dpi=1000, facecolor="w", edgecolor="k")
+    sns.set(font_scale=1)
+
+    stat_map = sns.heatmap(
+        data=data_array,
+        yticklabels=y_labels,
+        xticklabels=x_labels,
+        cmap="Blues",
+        fmt='.0f',
+        cbar=False,
+        vmin=1000, 
+        vmax=3000,
+        annot=annotations,
+        annot_kws={"fontsize":5, 'color':'white'}
+    )
+
+    plt.title("FEP Counts")
+    plt.tight_layout()
+    plt.close()
+    return fig
+    
+    
 
 def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
     
@@ -488,22 +650,18 @@ def plot_bls(plot_dict,chan_dict, channels,
         colours = Turbo256[len(channels)]
     else:
         colours = Category20[len(channels)]
-    with shelve.open(plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-        for i,channel in enumerate(channels):
-            try:
+    for i,channel in enumerate(channels):
+        try:
+            plot_dict_chan = plot_dict[f"ch{channel:03}"]
 
-                plot_dict_chan = shelf[f"ch{channel:03}"]
-
-                p.step(plot_dict_chan["baseline"]["bins"], 
-                         plot_dict_chan["baseline"]["bl_array"],
-                           legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
-                          mode="after", line_width=2, line_color = colours[i])
-            except:
-                pass
-
-            plot_dict_chan=None
+            p.step(plot_dict_chan["baseline_spectrum"]["bins"], 
+                     plot_dict_chan["baseline_spectrum"]["bl_array"],
+                       legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                      mode="after", line_width=2, line_color = colours[i])
+        except:
+            pass
         
-    p.add_layout(Title(text="Baseline Mean (ADC)", align="center"), "below")
+    p.add_layout(Title(text="Wf Baseline Mean - FC Baseline", align="center"), "below")
     p.add_layout(Title(text="Counts", align="center"), "left")
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
@@ -554,18 +712,16 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
     else:
         colours = Category20[len(channels)]
     
-    with shelve.open(plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-        for i,channel in enumerate(channels):
-            try:
+    for i,channel in enumerate(channels):
+        try:
 
-                plot_dict_chan = shelf[f"ch{channel:03}"]
-                p.step((plot_dict_chan[energy_param]["spectrum"]["bins"][1:]+\
-                          plot_dict_chan[energy_param]["spectrum"]["bins"][:-1])/2, 
-                         plot_dict_chan[energy_param]["spectrum"]["counts"], 
-                         legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
-                          mode="after", line_width=2, line_color = colours[i])
-            except:
-                pass
+            plot_dict_chan = plot_dict[f"ch{channel:03}"]
+            p.step(plot_dict_chan[energy_param]["spectrum"]["bins"][1:], 
+                     plot_dict_chan[energy_param]["spectrum"]["counts"], 
+                     legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                      mode="after", line_width=2, line_color = colours[i])
+        except:
+            pass
     
     p.add_layout(Title(text=f"Energy (keV)", align="center"), "below")
     p.add_layout(Title(text="Counts", align="center"), "left")
@@ -573,3 +729,89 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
     p.legend.click_policy="hide"
     
     return p
+
+
+
+def plot_baseline_stability(plot_dict, chan_dict, channels, string,  
+                        key="String"):
+    
+    p = figure(width=700, height=600, x_axis_type='datetime')
+    p.title.text = string
+    p.title.align = "center"
+    p.title.text_font_size = "15px"
+    if len(channels) > 19:
+        colours = Turbo256[len(channels)]
+    else:
+        colours = Category20[len(channels)]
+    
+    times=None
+    for i,channel in enumerate(channels):
+        try:
+            bl = plot_dict[f'ch{channel:03}']["baseline_stability"]["baseline"]
+            bl_spread = plot_dict[f'ch{channel:03}']["baseline_stability"]["spread"]
+            mean = np.nanmean(bl[~np.isnan(bl)][:10])
+            bl_mean = 100*(bl-mean)/mean
+            bl_shift =  100*bl_spread/bl_mean
+            
+            p.step([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]], 
+                     bl_mean, 
+                     legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                    line_width=2, line_color = colours[i])
+            if times is None:
+                    times = [datetime.fromtimestamp(t) for t in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]]      
+        except:
+            pass
+    
+    p.add_layout(Title(text=f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}", align="center"), "below")
+    p.add_layout(Title(text="Shift (%)", align="center"), "left")
+    p.legend.location = "top_left"
+    p.legend.click_policy="hide"
+    return p
+
+def plot_stability(plot_dict, chan_dict, channels, string, parameter,
+                                  key="String", energy_param = "cuspEmax_ctc"):
+    times = None
+    p = figure(width=700, height=600, x_axis_type='datetime')
+    p.title.text = string
+    p.title.align = "center"
+    p.title.text_font_size = "15px"
+    if len(channels) > 19:
+        colours = Turbo256[len(channels)]
+    else:
+        colours = Category20[len(channels)]
+    for i,channel in enumerate(channels):
+        try:
+            plot_dict_chan = plot_dict[f"ch{channel:03}"]
+            
+            en = plot_dict_chan[energy_param][parameter]["energy"]
+            en_spread = plot_dict_chan[energy_param][parameter]["spread"]
+            mean = np.nanmean(en[~np.isnan(en)][:10])
+            en_mean = 100*(en-mean)/mean
+            en_shift =  100*en_spread/en_mean
+            
+            p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param][parameter]["time"]], 
+                     en_mean, 
+                     legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                      line_width=2, line_color = colours[i])
+            if times is None:
+                times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param][parameter]["time"]]      
+        except:
+            pass
+
+    p.add_layout(Title(text=f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}", align="center"), "below")
+    p.add_layout(Title(text="Energy Shift (%)", align="center"), "left")
+    p.legend.location = "top_left"
+    p.legend.click_policy="hide"
+    return p
+
+def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, string, 
+                                  key="String", energy_param = "cuspEmax_ctc"):
+    
+    return plot_stability(plot_dict, chan_dict, channels, string, "2614_stability",
+                                  key="String", energy_param = "cuspEmax_ctc")
+    
+
+def plot_pulser_stability_channels2d(plot_dict, chan_dict, channels, string, 
+                                  key="String", energy_param = "cuspEmax_ctc"):
+    return plot_stability(plot_dict, chan_dict, channels, string, "pulser_stability",
+                                  key="String", energy_param = "cuspEmax_ctc")
