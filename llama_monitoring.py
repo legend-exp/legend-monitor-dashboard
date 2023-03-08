@@ -41,7 +41,7 @@ class llama_monitoring(param.Parameterized):
 
         lightyield_plot = hv.Scatter(llama_data, ["Timestamp", "Light Yield"], label="Light Yield")
         lightyield_plot_error = hv.ErrorBars(llama_data, vdims=['Light Yield', 'Error Light Yield'], kdims=['Timestamp'], label="Light Yield Error")
-        lightyield_plot.opts(xlabel="Time", ylabel="Light yield", tools=['hover'], line_width=1.5, color='orange', width=llama_width, height=llama_height, show_grid=True)
+        lightyield_plot.opts(xlabel="Time", ylabel="Light yield (a.u.)", tools=['hover'], line_width=1.5, color='orange', width=llama_width, height=llama_height, show_grid=True)
         lightyield_plot_error.opts(line_width=0.2, width=llama_width, height=llama_height)
 
         layout = triplet_plot * triplet_plot_error + lightyield_plot * lightyield_plot_error
