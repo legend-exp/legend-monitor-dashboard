@@ -23,7 +23,7 @@ def gen_run_dict(path):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     
-    par_file = os.path.join(prod_config["paths"]["par"], 'key_resolve.jsonl')
+    par_file = os.path.join(prod_config["paths"]["par"], 'validity.jsonl')
     run_dict = {}
     with open(par_file, 'r') as file:
         for json_str in file:
