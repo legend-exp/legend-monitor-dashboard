@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import panel as pn
 import param
 import pickle as pkl
@@ -32,26 +33,43 @@ class monitoring(param.Parameterized):
     plt.rcParams['figure.figsize'] = (16, 6)
     plt.rcParams['figure.dpi'] = 100
     
-    cal_plots = ['cal_stability', 'peak_fits', 'cal_fit', 'fwhm_fit', 'spectrum_plot', 'survival_frac', "spectrum", "logged_spectrum"]
+    cal_plots = ['2614_timemap',
+                 'peak_fits',
+                 'cal_fit',
+                 'fwhm_fit',
+                 'cut_spectrum',
+                 'survival_frac',
+                 "spectrum",
+                 "logged_spectrum",
+                "peak_track"]
     
     aoe_plots = ['dt_deps', 'compt_bands_nocorr', 'band_fits', 'mean_fit', 'sigma_fit', 'compt_bands_corr', 'surv_fracs', 'PSD_spectrum', 'psd_sf']
+
+    baseline_plots= ["baseline_timemap" ]
     
     tau_plots =["slope", "waveforms"]
     
     optimisation_plots = ["trap_kernel", "zac_kernel", "cusp_kernel", "trap_acq", "zac_acq", "cusp_acq"]
     
     _options = {'cuspEmax_ctc': cal_plots , 'zacEmax_ctc': cal_plots,
-            'trapEmax_ctc': cal_plots , 'trapTmax': cal_plots,
+            'trapEmax_ctc': cal_plots , 'trapTmax': cal_plots, "Baseline": baseline_plots,
             "A/E": aoe_plots, "Tau": tau_plots, "Optimisation": optimisation_plots}
         
-    plot_types_summary_dict = {"FWHM Qbb": plot_energy_resolutions_Qbb, 
+    plot_types_summary_dict = {
+                        "Detector_Status": plot_status, 
+                        "FEP_Counts": plot_counts, 
+                        "FWHM Qbb": plot_energy_resolutions_Qbb, 
                         "FWHM FEP": plot_energy_resolutions_2614,
                         "A/E":get_aoe_results, 
                        "Tau":plot_pz_consts, "Alpha": plot_alpha, 
                        "Valid. E": plot_no_fitted_energy_peaks, 
                        "Valid. A/E": plot_no_fitted_aoe_slices,
-                       "FEP Stability": plot_fep_stability_channels2d,
-                      "Baseline": plot_bls, "Spectra": plot_energy_spectra}
+                       "Baseline_Spectrum": plot_bls, "Energy_Spectra": plot_energy_spectra,
+                      "Baseline_Stability": plot_baseline_stability,
+                       "2614_Stability":plot_fep_stability_channels2d,
+                       "Pulser_Stability":plot_pulser_stability_channels2d
+                      }
+                      
     
     plot_types_tracking_dict = {"Energy Calib. Const.": plot_energy,"FWHM Qbb": plot_energy_res_Qbb, 
                                 "FWHM FEP": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
@@ -191,43 +209,23 @@ class monitoring(param.Parameterized):
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None
+        mpl.rcParams.update(mpl.rcParamsDefault)
+        plt.rcParams['font.size'] = 10
+        plt.rcParams['figure.figsize'] = (16, 6)
+        plt.rcParams['figure.dpi'] = 100
         if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E", "Tau", 
-                                      "Alpha", "Valid. E", "Valid. A/E"]:
+                                      "Alpha", "Valid. E", "Valid. A/E", "Detector_Status", "FEP_Counts"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
                                             self.path, key=self.sort_by)
             
             
-        elif self.plot_type_summary in ["Baseline", "Spectra"]:
-            try:
-                figure = self.cached_plots[self.plot_type_summary][self.sort_by][self.string]
-            except KeyError:
-                figure = self.plot_types_summary_dict[self.plot_type_summary](self.plot_dict, self.channel_map, 
-                                self.strings_dict[self.string],
-                                self.string, key=self.sort_by)
-                if self.plot_type_summary in self.cached_plots:
-                    if self.sort_by in self.cached_plots[self.plot_type_summary]:
-                        self.cached_plots[self.plot_type_summary][self.sort_by][self.string]=figure
-                    else:
-                        self.cached_plots[self.plot_type_summary][self.sort_by]={self.string:figure}
-                else:
-                    self.cached_plots[self.plot_type_summary]={self.sort_by:{self.string:figure}}
-            
-        elif self.plot_type_summary == "FEP Stability":
-            try:
-                figure = self.cached_plots[self.plot_type_summary][self.string]
-            except KeyError:
-                figure = plot_fep_stability_channels2d(self.plot_dict, self.channel_map, 
-                                                    self.strings_dict[self.string],
-                                                    [2612,2616], self.string,
-                                                    key=self.sort_by)
-                if self.plot_type_summary in self.cached_plots:
-                    if self.sort_by in self.cached_plots[self.plot_type_summary]:
-                        self.cached_plots[self.plot_type_summary][self.sort_by][self.string]=figure
-                    else:
-                        self.cached_plots[self.plot_type_summary][self.sort_by]={self.string:figure}
-                else:
-                    self.cached_plots[self.plot_type_summary]={self.sort_by:{self.string:figure}}
+        elif self.plot_type_summary in ["Baseline_Spectrum", "Energy_Spectra", "Baseline_Stability", 
+                                        "2614_Stability", "Pulser_Stability"]:
+            figure = self.plot_types_summary_dict[self.plot_type_summary](self.common_dict, self.channel_map, 
+                            self.strings_dict[self.string],
+                            self.string, key=self.sort_by)
+
         else:
             figure = plt.figure()
             plt.close()
@@ -261,7 +259,10 @@ class monitoring(param.Parameterized):
     
         with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             channels = list(shelf.keys()) 
-            
+
+        with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
+            self.common_dict = shelf["common"]
+        channels.remove("common")
         self.strings_dict, self.chan_dict, self.channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], "String")
         channel_list = []
         for channel in channels:
@@ -271,7 +272,14 @@ class monitoring(param.Parameterized):
         self.channel = channel_list[0]
         
         self.update_strings()
-        self.cached_plots ={}
+        self.update_channel_plot_dict()
+
+    @param.depends("channel", watch=True)
+    def update_channel_plot_dict(self):
+        with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
+            self.plot_dict_ch = shelf[self.channel[:5]]
+        with shelve.open(self.plot_dict.replace("hit","dsp"), 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
+            self.dsp_dict = shelf[self.channel[:5]]
     
     
     @param.depends("parameter", watch=True)
@@ -282,42 +290,36 @@ class monitoring(param.Parameterized):
 
     @param.depends("run", "channel", "parameter", "plot_type_details")
     def view_details(self):
-        with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-            plot_dict_ch = shelf[self.channel[:5]]
-        with shelve.open(self.plot_dict.replace("hit","dsp"), 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-            dsp_dict = shelf[self.channel[:5]]
-        if self.parameter == "A/E":
-            fig = plot_dict_ch[self.plot_type_details]
+        if self.parameter in ["A/E", "Baseline"]:
+            fig = self.plot_dict_ch[self.plot_type_details]
             dummy = plt.figure()
             new_manager = dummy.canvas.manager
             new_manager.canvas.figure = fig
             fig.set_canvas(new_manager.canvas)
         elif self.parameter == "Tau":
-            fig = dsp_dict[self.plot_type_details]
+            fig = self.dsp_dict[self.plot_type_details]
             dummy = plt.figure()
             new_manager = dummy.canvas.manager
             new_manager.canvas.figure = fig
             fig.set_canvas(new_manager.canvas)
         elif self.parameter == "Optimisation":
-            fig = dsp_dict[f"{self.plot_type_details.split('_')[0]}_optimisation"][f"{self.plot_type_details.split('_')[1]}_space"]
+            fig = self.dsp_dict[f"{self.plot_type_details.split('_')[0]}_optimisation"][f"{self.plot_type_details.split('_')[1]}_space"]
             dummy = plt.figure()
             new_manager = dummy.canvas.manager
             new_manager.canvas.figure = fig
             fig.set_canvas(new_manager.canvas)
         else:
             if self.plot_type_details == "spectrum" or self.plot_type_details == "logged_spectrum":
-                fig = plt.figure()
-                
-                plt.step((plot_dict_ch[self.parameter]["spectrum"]["bins"][1:]+\
-                        plot_dict_ch[self.parameter]["spectrum"]["bins"][:-1])/2, 
-                        plot_dict_ch[self.parameter]["spectrum"]["counts"], 
-                        where='post')
-                plt.xlabel("Energy (keV)")
-                plt.ylabel("Counts")
-                if self.plot_type_details =="logged_spectrum":
-                    plt.yscale("log")
+                fig = plot_spectrum(self.plot_dict_ch[self.parameter]["spectrum"], self.channel,
+                                    log=False if self.plot_type_details == "spectrum" else True)
+            elif self.plot_type_details == "survival_frac":
+                fig = plot_survival_frac(self.plot_dict_ch[self.parameter]["survival_frac"])
+            elif self.plot_type_details == "cut_spectrum":
+                fig = plot_cut_spectra(self.plot_dict_ch[self.parameter]["spectrum"])
+            elif self.plot_type_details == "peak_track":
+                fig = track_peaks(self.plot_dict_ch[self.parameter])
             else:
-                fig = plot_dict_ch[self.parameter][self.plot_type_details]
+                fig = self.plot_dict_ch[self.parameter][self.plot_type_details]
                 dummy = plt.figure()
                 new_manager = dummy.canvas.manager
                 new_manager.canvas.figure = fig
