@@ -253,7 +253,7 @@ def plot_tracking(run_dict, path, plot_func, string, key="String"):
         string_dets[stri] = dets
         
     p = figure(width=700, height=600, x_axis_type="datetime")
-    p.title.text = f"String No: {string}"
+    p.title.text = f"{string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
 
@@ -281,7 +281,7 @@ def plot_tracking(run_dict, path, plot_func, string, key="String"):
     p.add_layout(Title(text="Time", align="center"), "below")
     
     if plot_func == plot_energy:
-        p.add_layout(Title(text="% Shift in keV", align="center"), "left")
+        p.add_layout(Title(text="% Shift of keV conversion of 20kADC", align="center"), "left")
     elif plot_func == plot_energy_res_Qbb:
         p.add_layout(Title(text="FWHM at Qbb", align="center"), "left")
     elif plot_func == plot_energy_res_2614:

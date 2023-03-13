@@ -52,8 +52,8 @@ class monitoring(param.Parameterized):
                        "FEP Stability": plot_fep_stability_channels2d,
                       "Baseline": plot_bls, "Spectra": plot_energy_spectra}
     
-    plot_types_tracking_dict = {"Energy": plot_energy,"Energy Res Qbb": plot_energy_res_Qbb, 
-                                "Energy Res 2.6": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
+    plot_types_tracking_dict = {"Energy Calib. Const.": plot_energy,"FWHM Qbb": plot_energy_res_Qbb, 
+                                "FWHM FEP": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
                                 "A/E Sigma": plot_aoe_sig, "Tau": plot_tau,  "Alpha": plot_ctc_const}
     
     channel = param.Selector(default = 0, objects = [0])
