@@ -15,6 +15,8 @@ from  datetime import datetime
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
+from legend_data_monitor import plot_styles, plotting
+
 from bokeh.models.widgets.tables import NumberFormatter, BooleanFormatter
 
 from src.util import *
@@ -24,6 +26,7 @@ from src.detailed_plots import *
 
 class monitoring(param.Parameterized):
     
+    # calibration plots 
     plt.rcParams['font.size'] = 10
     plt.rcParams['figure.figsize'] = (16, 6)
     plt.rcParams['figure.dpi'] = 100
@@ -53,8 +56,8 @@ class monitoring(param.Parameterized):
                                 "Energy Res 2.6": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
                                 "A/E Sigma": plot_aoe_sig, "Tau": plot_tau,  "Alpha": plot_ctc_const}
     
+    channel = param.Selector(default = 0, objects = [0])
     plot_type_tracking = param.ObjectSelector(default = list(plot_types_tracking_dict)[0], objects= list(plot_types_tracking_dict))
-    sort_by = param.ObjectSelector(default = list(sort_dict)[0], objects= list(sort_dict))
     parameter = param.ObjectSelector(default = list(_options)[0], objects = list(_options))
     plot_type_details = param.ObjectSelector(default = cal_plots[0], objects= cal_plots)#, labels=cal_plots_labels)
     plot_type_summary = param.ObjectSelector(default = list(plot_types_summary_dict)[0], objects= list(plot_types_summary_dict))
@@ -62,13 +65,27 @@ class monitoring(param.Parameterized):
                                         datetime.now()+dtt.timedelta(minutes = 10)) , 
                                  bounds=(datetime.now()-dtt.timedelta(minutes = 110),
                                         datetime.now()+dtt.timedelta(minutes = 110)))
+    
+    # general selectors
+    sort_by = param.ObjectSelector(default = list(sort_dict)[0], objects= list(sort_dict))
     string = param.ObjectSelector(default = 0, objects = [0])
     run = param.Selector(default = 0, objects = [0])
-    channel = param.Selector(default = 0, objects = [0])
     
-    def __init__(self, path, name=None):
+    # physics plots 
+    phy_plots_vals          = ['baseline', 'cuspEmax', 'cuspEmax_ctc_cal', 'bl_std']
+    phy_plot_structure_vals = ['per channel', 'per string']
+    phy_plot_style_vals     = ['vs time', 'histogram']
+    phy_resampled_vals      = ['yes', 'no', 'only']
+    
+    phy_plots           = param.ObjectSelector(default=phy_plots_vals[0], objects=phy_plots_vals)
+    phy_plot_structure  = param.ObjectSelector(default=phy_plot_structure_vals[0], objects=phy_plot_structure_vals)
+    phy_plot_style      = param.ObjectSelector(default=phy_plot_style_vals[0], objects=phy_plot_style_vals)
+    phy_resampled       = param.ObjectSelector(default=phy_resampled_vals[0], objects=phy_resampled_vals)
+    
+    def __init__(self, cal_path, phy_path, name=None):
         super().__init__(name=name)
-        self.path=path
+        self.path=cal_path
+        self.phy_path=phy_path
         self.cached_plots ={}
         prod_config = os.path.join(self.path, "config.json")
         self.prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
@@ -84,8 +101,8 @@ class monitoring(param.Parameterized):
             else:
                 self.periods[self.run_dict[run]['period']].append(run)
 
-        start_period = self.periods[list(self.periods)[0]]        
-        
+        start_period = self.periods[list(self.periods)[0]]
+
         self.param["date_range"].bounds = (datetime.strptime(self.run_dict[sorted(start_period)[0]]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
                                  datetime.strptime(self.run_dict[sorted(start_period)[-1]]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
         self.date_range = (datetime.strptime(self.run_dict[sorted(start_period)[0]]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
@@ -96,6 +113,28 @@ class monitoring(param.Parameterized):
         self.update_plot_type_details()
         self.update_strings()
     
+    @param.depends("run", "string")
+    def view_phy(self):
+        data_file = os.path.join(self.phy_path, f'/generated/plt/phy/p02/r0{self.run}/l200-p02-r0{self.run}-phy')
+        if not os.path.exists(os.path.join(data_file, '.dat')):
+            return pn.pane.Markdown(f'## No data for run {self.run}')
+        
+        with shelve.open(data_file) as file:
+
+            # take df with parameter you want
+            data = file['monitoring']['pulser'][parameter]['df_geds']
+            
+            # take a random plot_info, it should be enough to save only one per time
+            plot_info = file['monitoring']['pulser'][parameter]['plot_info']
+            
+        # set plotting options
+        plot_info['plot_style'] = plot_style
+        plot_info['resampled'] = resampled
+
+        if plot_structure == "per channel": output = plotting.plot_per_ch(data[data['location'] == string], plot_info, "")
+        elif plot_structure == "per string": output = plotting.plot_per_string(data[data['location'] == string], plot_info, "")
+                
+        
     @param.depends("date_range", watch=True)
     def _get_run_dict(self):
         valid_from = [datetime.timestamp(datetime.strptime(self.run_dict[entry]["timestamp"], '%Y%m%dT%H%M%SZ')) for entry in self.run_dict]
