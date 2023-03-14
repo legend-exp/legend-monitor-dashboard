@@ -15,7 +15,7 @@ from  datetime import datetime
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
-from legend_data_monitor import plot_styles, plotting
+import legend_data_monitor as ldm
 
 from bokeh.models.widgets.tables import NumberFormatter, BooleanFormatter
 
@@ -23,6 +23,7 @@ from src.util import *
 from src.summary_plots import *
 from src.tracking_plots import *
 from src.detailed_plots import *
+from src.phy_monitoring import *
 
 class monitoring(param.Parameterized):
     
@@ -73,14 +74,12 @@ class monitoring(param.Parameterized):
     
     # physics plots 
     phy_plots_vals          = ['baseline', 'cuspEmax', 'cuspEmax_ctc_cal', 'bl_std']
-    phy_plot_structure_vals = ['per channel', 'per string']
-    phy_plot_style_vals     = ['vs time', 'histogram']
+    phy_plot_style_dict     = {'Time': phy_plot_vsTime, 'Histogram': phy_plot_histogram}
     phy_resampled_vals      = ['yes', 'no', 'only']
     
-    phy_plots           = param.ObjectSelector(default=phy_plots_vals[0], objects=phy_plots_vals)
-    phy_plot_structure  = param.ObjectSelector(default=phy_plot_structure_vals[0], objects=phy_plot_structure_vals)
-    phy_plot_style      = param.ObjectSelector(default=phy_plot_style_vals[0], objects=phy_plot_style_vals)
-    phy_resampled       = param.ObjectSelector(default=phy_resampled_vals[0], objects=phy_resampled_vals)
+    phy_plots           = param.ObjectSelector(default=phy_plots_vals[0], objects=phy_plots_vals, label="Value")
+    phy_plot_style      = param.ObjectSelector(default=list(phy_plot_style_dict)[0], objects=list(phy_plot_style_dict), label="Plot Style")
+    phy_resampled       = param.ObjectSelector(default=phy_resampled_vals[1], objects=phy_resampled_vals, label="Resampled")
     
     def __init__(self, cal_path, phy_path, name=None):
         super().__init__(name=name)
@@ -108,32 +107,37 @@ class monitoring(param.Parameterized):
         self.date_range = (datetime.strptime(self.run_dict[sorted(start_period)[0]]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
                             datetime.strptime(self.run_dict[sorted(start_period)[-1]]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
         
-        
+    
         self.update_plot_dict()
         self.update_plot_type_details()
         self.update_strings()
-    
-    @param.depends("run", "string")
-    def view_phy(self):
-        data_file = os.path.join(self.phy_path, f'/generated/plt/phy/p02/r0{self.run}/l200-p02-r0{self.run}-phy')
-        if not os.path.exists(os.path.join(data_file, '.dat')):
-            return pn.pane.Markdown(f'## No data for run {self.run}')
         
-        with shelve.open(data_file) as file:
+        
+        self.phy_data_df = pd.DataFrame()
+        self.phy_plot_info = {}
+        
+        self._get_phy_data()
+        
+        self.run = "r010"
+        
+    
+    @param.depends("run", "phy_plots", watch=True)
+    def _get_phy_data(self):
+        data_file = self.phy_path + f'/generated/plt/phy/p02/{self.run}/l200-p02-{self.run}-phy'
+        if not os.path.exists(data_file +'.dat'):
+            self.phy_data_df = pd.DataFrame()
+        else:
+            with shelve.open(data_file) as file:
 
-            # take df with parameter you want
-            data = file['monitoring']['pulser'][parameter]['df_geds']
-            
-            # take a random plot_info, it should be enough to save only one per time
-            plot_info = file['monitoring']['pulser'][parameter]['plot_info']
-            
-        # set plotting options
-        plot_info['plot_style'] = plot_style
-        plot_info['resampled'] = resampled
-
-        if plot_structure == "per channel": output = plotting.plot_per_ch(data[data['location'] == string], plot_info, "")
-        elif plot_structure == "per string": output = plotting.plot_per_string(data[data['location'] == string], plot_info, "")
+                # take df with parameter you want
+                self.phy_data_df = file['monitoring']['pulser'][self.phy_plots]['df_geds']
                 
+                # take a random plot_info, it should be enough to save only one per time
+                self.phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
+                    
+                # set plotting options
+                self.phy_plot_info['plot_style'] = self.phy_plot_style
+                self.phy_plot_info['resampled'] = self.phy_resampled
         
     @param.depends("date_range", watch=True)
     def _get_run_dict(self):
@@ -210,6 +214,25 @@ class monitoring(param.Parameterized):
         
         return figure
     
+    @param.depends("run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled")
+    def view_phy(self):
+        # update plot dict with resampled value
+        self.phy_plot_info['resampled'] = self.phy_resampled
+        
+        # return empty plot if no data exists for run
+        if self.phy_data_df.empty:
+            p = figure(width=1000, height=600)
+            p.title.text = title=f"No data for run {self.run}"
+            p.title.align = "center"
+            p.title.text_font_size = "25px"
+            return p
+        
+        else:
+            # get all data from selected string
+            data_string = self.phy_data_df[self.phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
+            # plot data
+            return self.phy_plot_style_dict[self.phy_plot_style](data_string, self.phy_plot_info, self.string)
+
     @param.depends("run", watch=True)
     def update_plot_dict(self):
         self.plot_dict = os.path.join(self.prod_config["paths"]["plt"],
