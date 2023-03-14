@@ -1,0 +1,142 @@
+from bokeh.models import Span, Label, Title, Range1d, HoverTool
+from bokeh.palettes import Category10, Category20, Turbo256
+from bokeh.plotting import figure, show
+import shelve
+import matplotlib
+from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
+
+import legend_data_monitor as ldm
+
+def phy_plot_vsTime(data_string, plot_info, string):
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = string + " " + plot_info['label']
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.hover.formatters = {'$x': 'datetime'}
+    p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
+                        ( plot_info['label'],  '$y' ), 
+                        ( 'Channel', '$name'),
+                        ('Position', '@position'),
+                        ('CC4', '@cc4_id')]
+    p.hover.mode = 'vline'
+    
+    len_colours = data_string['position'].max()
+    if len_colours > 19:
+        colours = Turbo256[len_colours]
+    else:
+        colours = Category20[len_colours]
+    
+    if plot_info["resampled"] == "only":
+        for position, data_channel in data_string.groupby("position"):
+            # resample in given time window, as start pick the first timestamp in table
+            data_channel_resampled = data_channel.set_index("datetime").resample(plot_info["time_window"], origin="start").mean(numeric_only=True).dropna()
+            # convert index to int
+            data_channel_resampled = data_channel_resampled.astype({"index": int})
+            # get back CC4 and position information for hover tool
+            data_channel_resampled = data_channel_resampled.reset_index().merge(data_channel[['cc4_id', 'position', 'name', 'index']], on="index", how="left").dropna()
+            # the timestamps in the resampled table will start from the first timestamp, and go with sampling intervals
+            # I want to shift them by half sampling window, so that the resampled value is plotted in the middle time window in which it was calculated
+            data_channel_resampled["datetime"] = (data_channel_resampled["datetime"] + pd.Timedelta(plot_info["time_window"]) / 2)
+            # plot    
+            p.line("datetime", plot_info["parameter"], source=data_channel_resampled, color=colours[position-1], 
+                legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
+                line_width=2.5)
+            # break
+    
+    if plot_info["resampled"] == "yes":
+        line_alpha = 0.2
+        hover_names = []
+        window = plot_info["time_window"]
+        for position, data_channel in data_string.groupby("position"):
+            p.line("datetime", plot_info["parameter"], source=data_channel, color=colours[position-1], 
+                legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
+                line_alpha=line_alpha)
+            # resample in given time window, as start pick the first timestamp in table
+            data_channel_resampled = data_channel.set_index("datetime").resample(plot_info["time_window"], origin="start").mean(numeric_only=True).dropna()
+            # convert index to int
+            data_channel_resampled = data_channel_resampled.astype({"index": int})
+            # get back CC4 and position information for hover tool
+            data_channel_resampled = data_channel_resampled.reset_index().merge(data_channel[['cc4_id', 'position', 'name', 'index']], on="index", how="left").dropna()
+            # the timestamps in the resampled table will start from the first timestamp, and go with sampling intervals
+            # I want to shift them by half sampling window, so that the resampled value is plotted in the middle time window in which it was calculated
+            data_channel_resampled["datetime"] = (data_channel_resampled["datetime"] + pd.Timedelta(plot_info["time_window"]) / 2)
+            # plot    
+            p.line("datetime", plot_info["parameter"], source=data_channel_resampled, color=colours[position-1], 
+                legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}"+ f" (resampled {window})",
+                line_width=2.5)
+            hover_names.append(f"ch {data_channel['channel'].unique()[0]}" + f" (resampled {window})")
+        p.hover.names = hover_names
+            
+    if plot_info["resampled"] == "no":
+        for position, data_channel in data_string.groupby("position"):
+            p.line("datetime", plot_info["parameter"], source=data_channel, color=colours[position-1], 
+                legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}")
+            
+
+    p.legend.location = "bottom_left"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = f"Time (UTC), starting: {data_channel.reset_index()['datetime'][0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = plot_info['label']
+    p.yaxis.axis_label_text_font_size = "20px"
+    
+    return p
+
+
+
+def phy_plot_histogram(data_string, plot_info, string):
+    p = figure(width=1000, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = string + " " + plot_info['label']
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.hover.formatters = {'$x': 'datetime'}
+    p.hover.tooltips = [( f"{plot_info['label']} [{plot_info['unit_label']}]", '$x'),
+                        ( 'Counts',  '$y'), 
+                        ( 'Channel', '$name'),
+                        ('Position', '@position'),
+                        ('CC4', '@cc4_id')]
+    p.hover.mode = 'vline'
+    
+    len_colours = data_string['position'].max()
+    if len_colours > 19:
+        colours = Turbo256[len_colours]
+    else:
+        colours = Category20[len_colours]
+    
+    for position, data_channel in data_string.groupby("position"):
+        # generate histogram
+        # needed for cuspEmax because with geant outliers not possible to view normal histo
+        hrange = {"keV": [0, 2500]}
+        # take full range if not specified
+        x_min = (hrange[plot_info["unit"]][0] if plot_info["unit"] in hrange else data_channel[plot_info["parameter"]].min())
+        x_max = (hrange[plot_info["unit"]][1] if plot_info["unit"] in hrange else data_channel[plot_info["parameter"]].max())
+
+        # --- bin width
+        bwidth = {"keV": 1.0}  # what to do with binning???
+        bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else None
+        no_bins = int((x_max - x_min) / bin_width) if bin_width else 100
+        counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=no_bins, range=(x_min, x_max))
+        bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
+        # create plot histo
+        histo_df = pd.DataFrame({"counts": counts_ch, "bins": bins_ch, "position": position, "cc4_id": data_channel['cc4_id'].unique()[0]})
+        # print(histo_df)
+        # plot    
+        p.line("bins", "counts", source=histo_df, color=colours[position-1], 
+            legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
+            line_width=2)#, mode="after")
+        p.hover.names.append(f"ch {data_channel['channel'].unique()[0]}")
+        # break
+    
+
+            
+
+    p.legend.location = "bottom_left"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = f"{plot_info['label']} [{plot_info['unit_label']}]"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Counts"
+    p.yaxis.axis_label_text_font_size = "20px"
+    
+    return p
