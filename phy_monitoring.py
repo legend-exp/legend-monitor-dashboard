@@ -14,12 +14,13 @@ def phy_plot_vsTime(data_string, plot_info, string):
     p.title.text = string + " " + plot_info['label']
     p.title.align = "center"
     p.title.text_font_size = "25px"
-    p.hover.formatters = {'$x': 'datetime'}
+    p.hover.formatters = {'$x': 'datetime', '@baseline_mean': 'printf'}
     p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
                         ( plot_info['label'],  '$y' ), 
                         ( 'Channel', '$name'),
                         ('Position', '@position'),
-                        ('CC4', '@cc4_id')]
+                        ('CC4', '@cc4_id'),
+                        ('Mean Value', '@baseline_mean {}'.format(plot_info["unit"]))]
     p.hover.mode = 'vline'
     
     len_colours = data_string['position'].max()
@@ -35,13 +36,16 @@ def phy_plot_vsTime(data_string, plot_info, string):
             # convert index to int
             data_channel_resampled = data_channel_resampled.astype({"index": int})
             # get back CC4 and position information for hover tool
-            data_channel_resampled = data_channel_resampled.reset_index().merge(data_channel[['cc4_id', 'position', 'name', 'index']], on="index", how="left").dropna()
+            for info_key in ['cc4_id', 'position', 'name', 'index']:
+                data_channel_resampled[info_key] = data_channel.reset_index()[info_key][0]
+            # reset index
+            data_channel_resampled = data_channel_resampled.reset_index()
             # the timestamps in the resampled table will start from the first timestamp, and go with sampling intervals
             # I want to shift them by half sampling window, so that the resampled value is plotted in the middle time window in which it was calculated
             data_channel_resampled["datetime"] = (data_channel_resampled["datetime"] + pd.Timedelta(plot_info["time_window"]) / 2)
             # plot    
             p.line("datetime", plot_info["parameter"], source=data_channel_resampled, color=colours[position-1], 
-                legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
+                legend_label=f"{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
                 line_width=2.5)
             # break
     
@@ -51,20 +55,23 @@ def phy_plot_vsTime(data_string, plot_info, string):
         window = plot_info["time_window"]
         for position, data_channel in data_string.groupby("position"):
             p.line("datetime", plot_info["parameter"], source=data_channel, color=colours[position-1], 
-                legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
+                legend_label=f"{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
                 line_alpha=line_alpha)
             # resample in given time window, as start pick the first timestamp in table
             data_channel_resampled = data_channel.set_index("datetime").resample(plot_info["time_window"], origin="start").mean(numeric_only=True).dropna()
             # convert index to int
             data_channel_resampled = data_channel_resampled.astype({"index": int})
             # get back CC4 and position information for hover tool
-            data_channel_resampled = data_channel_resampled.reset_index().merge(data_channel[['cc4_id', 'position', 'name', 'index']], on="index", how="left").dropna()
+            for info_key in ['cc4_id', 'position', 'name', 'index']:
+                data_channel_resampled[info_key] = data_channel.reset_index()[info_key][0]
+            # reset index
+            data_channel_resampled = data_channel_resampled.reset_index()
             # the timestamps in the resampled table will start from the first timestamp, and go with sampling intervals
             # I want to shift them by half sampling window, so that the resampled value is plotted in the middle time window in which it was calculated
             data_channel_resampled["datetime"] = (data_channel_resampled["datetime"] + pd.Timedelta(plot_info["time_window"]) / 2)
             # plot    
             p.line("datetime", plot_info["parameter"], source=data_channel_resampled, color=colours[position-1], 
-                legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}"+ f" (resampled {window})",
+                legend_label=f"{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}"+ f" (resampled {window})",
                 line_width=2.5)
             hover_names.append(f"ch {data_channel['channel'].unique()[0]}" + f" (resampled {window})")
         p.hover.names = hover_names
@@ -72,14 +79,14 @@ def phy_plot_vsTime(data_string, plot_info, string):
     if plot_info["resampled"] == "no":
         for position, data_channel in data_string.groupby("position"):
             p.line("datetime", plot_info["parameter"], source=data_channel, color=colours[position-1], 
-                legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}")
+                legend_label=f"{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}")
             
 
     p.legend.location = "bottom_left"
     p.legend.click_policy="hide"
     p.xaxis.axis_label = f"Time (UTC), starting: {data_channel.reset_index()['datetime'][0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = plot_info['label']
+    p.yaxis.axis_label = f"{plot_info['label']} [{plot_info['unit_label']}]"
     p.yaxis.axis_label_text_font_size = "20px"
     
     return p
@@ -114,9 +121,9 @@ def phy_plot_histogram(data_string, plot_info, string):
         x_max = (hrange[plot_info["unit"]][1] if plot_info["unit"] in hrange else data_channel[plot_info["parameter"]].max())
 
         # --- bin width
-        bwidth = {"keV": 1.0}  # what to do with binning???
+        bwidth = {"keV": 2.5}  # what to do with binning???
         bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else None
-        no_bins = int((x_max - x_min) / bin_width) if bin_width else 100
+        no_bins = int((x_max - x_min) / bin_width) if bin_width else 50
         counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=no_bins, range=(x_min, x_max))
         bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
         # create plot histo
@@ -124,7 +131,7 @@ def phy_plot_histogram(data_string, plot_info, string):
         # print(histo_df)
         # plot    
         p.line("bins", "counts", source=histo_df, color=colours[position-1], 
-            legend_label=f"CH{data_channel['channel'].unique()[0]:>03d}-{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
+            legend_label=f"{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
             line_width=2)#, mode="after")
         p.hover.names.append(f"ch {data_channel['channel'].unique()[0]}")
         # break
