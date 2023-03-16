@@ -118,8 +118,8 @@ class monitoring(param.Parameterized):
         
         self._get_phy_data()
         
-        self.run = "r010"
-        
+        self.meta_df = pd.DataFrame()
+        self._get_metadata()
     
     @param.depends("run", "phy_plots", watch=True)
     def _get_phy_data(self):
@@ -152,7 +152,27 @@ class monitoring(param.Parameterized):
         valid_keys = np.array(list(self.run_dict))[valid_idxs]
         out_dict = {key:self.run_dict[key] for key in valid_keys}
         return out_dict
-        
+    
+    @param.depends("run")
+    def _get_metadata(self):
+        chan_dict, channel_map = self.chan_dict, self.channel_map
+        df_chan_dict = pd.DataFrame.from_dict(chan_dict).T
+        df_chan_dict["Channel"] = df_chan_dict.index
+        df_chan_dict.index = df_chan_dict.index.map(lambda x: int(x[2:5]))
+        df_channel_map = pd.DataFrame.from_dict(channel_map).T
+        df_channel_map["Channel"] = df_channel_map.index.map(lambda x: "ch{:>03d}".format(int(x)))
+        df_out = pd.merge(df_channel_map, df_chan_dict, left_on='Channel', right_on='Channel')
+        df_out.columns
+        df_out = df_out.reset_index().set_index('Channel')[['name', 'hardware_status', 'software_status', 'daq', 'location', 'voltage', 'electronics']]
+        df_out['daq'] = df_out['daq'].map(lambda x: "Crate: {}, Card: {}".format(x['crate'], x['card']['id']))
+        df_out['location'] = df_out['location'].map(lambda x: "String: {:>02d}, Pos.: {:>02d}".format(x['string'], x['position']))
+        df_out['voltage'] = df_out['voltage'].map(lambda x: "Card: {:>02d}, Ch.: {:>02d}".format(x['card']['id'], x['channel']))
+        df_out['electronics'] = df_out['electronics'].map(lambda x: "CC4: {}, Ch.: {:>02d}".format(x['cc4']['id'], x['cc4']['channel']))
+        df_out['software_status'] =  df_out['software_status'].map(lambda x: True if x == 'On' else False)
+        df_out['hardware_status'] =  df_out['hardware_status'].map(lambda x: True if x == 'Fully_biased' else False)
+        df_out = df_out.rename({'name': 'Det. Name', 'hardware_status': 'HV Status', 'software_status': 'Software status', 'daq': 'FC card',
+            'location': 'Det. Location', 'voltage': 'HV', 'electronics': 'Electronics'}, axis=1)
+        self.meta_df = df_out
 
     @param.depends("date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
@@ -311,23 +331,4 @@ class monitoring(param.Parameterized):
     
     @param.depends("run")
     def view_meta(self):
-        _, chan_dict, channel_map = sorter(self.path,
-                                                self.run_dict[self.run]["timestamp"],
-                                                "String")
-        df_chan_dict = pd.DataFrame.from_dict(chan_dict).T
-        df_chan_dict["Channel"] = df_chan_dict.index
-        df_chan_dict.index = df_chan_dict.index.map(lambda x: int(x[2:5]))
-        df_channel_map = pd.DataFrame.from_dict(channel_map).T
-        df_channel_map["Channel"] = df_channel_map.index.map(lambda x: "ch{:>03d}".format(int(x)))
-        df_out = pd.merge(df_channel_map, df_chan_dict, left_on='Channel', right_on='Channel')
-        df_out.columns
-        df_out = df_out.reset_index().set_index('Channel')[['name', 'hardware_status', 'software_status', 'daq', 'location', 'voltage', 'electronics']]
-        df_out['daq'] = df_out['daq'].map(lambda x: "Crate: {}, Card: {}".format(x['crate'], x['card']['id']))
-        df_out['location'] = df_out['location'].map(lambda x: "String: {:>02d}, Pos.: {:>02d}".format(x['string'], x['position']))
-        df_out['voltage'] = df_out['voltage'].map(lambda x: "Card: {:>02d}, Ch.: {:>02d}".format(x['card']['id'], x['channel']))
-        df_out['electronics'] = df_out['electronics'].map(lambda x: "CC4: {}, Ch.: {:>02d}".format(x['cc4']['id'], x['cc4']['channel']))
-        df_out['software_status'] =  df_out['software_status'].map(lambda x: True if x == 'On' else False)
-        df_out['hardware_status'] =  df_out['hardware_status'].map(lambda x: True if x == 'Fully_biased' else False)
-        df_out = df_out.rename({'name': 'Det. Name', 'hardware_status': 'HV Status', 'software_status': 'Software status', 'daq': 'FC card',
-            'location': 'Det. Location', 'voltage': 'HV', 'electronics': 'Electronics'}, axis=1)
-        return pn.widgets.Tabulator(df_out, formatters={'Software status': BooleanFormatter(), 'HV Status': BooleanFormatter()})
+        return pn.widgets.Tabulator(self.meta_df, formatters={'Software status': BooleanFormatter(), 'HV Status': BooleanFormatter()})
