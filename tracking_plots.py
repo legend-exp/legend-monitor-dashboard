@@ -31,7 +31,7 @@ def plot_energy(path, run_dict, det, plot, colour):
     for run in run_dict:
 
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.fcid
+        channel = chmap[det].daq.rawid
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict[run]["period"]}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
@@ -40,8 +40,8 @@ def plot_energy(path, run_dict, det, plot, colour):
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            cals.append(hit_pars_dict[f"ch{channel:03}"]["operations"]["cuspEmax_ctc_cal"]["parameters"]["a"]*20000 +\
-                       hit_pars_dict[f"ch{channel:03}"]["operations"]["cuspEmax_ctc_cal"]["parameters"]["b"])
+            cals.append(hit_pars_dict[f"ch{channel:07}"]["operations"]["cuspEmax_ctc_cal"]["parameters"]["a"]*20000 +\
+                       hit_pars_dict[f"ch{channel:07}"]["operations"]["cuspEmax_ctc_cal"]["parameters"]["b"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -67,7 +67,7 @@ def plot_energy_res(path, run_dict, det, plot, colour, at="Qbb"):
     times = []
     for run in run_dict:
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.fcid
+        channel = chmap[det].daq.rawid
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict[run]["period"]}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
@@ -76,7 +76,7 @@ def plot_energy_res(path, run_dict, det, plot, colour, at="Qbb"):
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            reses.append(hit_pars_dict[f"ch{channel:03}"]["ecal"]["cuspEmax_ctc_cal"][f"{at}_fwhm"])
+            reses.append(hit_pars_dict[f"ch{channel:07}"]["ecal"]["cuspEmax_ctc_cal"][f"{at}_fwhm"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -110,7 +110,7 @@ def plot_aoe_mean(path, run_dict, det, plot, colour):
     for run in run_dict:
 
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.fcid
+        channel = chmap[det].daq.rawid
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict[run]["period"]}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
@@ -119,8 +119,8 @@ def plot_aoe_mean(path, run_dict, det, plot, colour):
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            cals.append(hit_pars_dict[f"ch{channel:03}"]["operations"]["AoE_Corrected"]["parameters"]["a"]*20000 +\
-                       hit_pars_dict[f"ch{channel:03}"]["operations"]["AoE_Corrected"]["parameters"]["b"])
+            cals.append(hit_pars_dict[f"ch{channel:07}"]["operations"]["AoE_Corrected"]["parameters"]["a"]*20000 +\
+                       hit_pars_dict[f"ch{channel:07}"]["operations"]["AoE_Corrected"]["parameters"]["b"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -146,7 +146,7 @@ def plot_aoe_sig(path, run_dict, det, plot, colour):
     for run in run_dict:
 
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.fcid
+        channel = chmap[det].daq.rawid
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict[run]["period"]}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
@@ -155,8 +155,8 @@ def plot_aoe_sig(path, run_dict, det, plot, colour):
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            cals.append(hit_pars_dict[f"ch{channel:03}"]["operations"]["AoE_Classifier"]["parameters"]["c"]*20000 +\
-                       hit_pars_dict[f"ch{channel:03}"]["operations"]["AoE_Classifier"]["parameters"]["d"])
+            cals.append(hit_pars_dict[f"ch{channel:07}"]["operations"]["AoE_Classifier"]["parameters"]["c"]*20000 +\
+                       hit_pars_dict[f"ch{channel:07}"]["operations"]["AoE_Classifier"]["parameters"]["d"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -182,7 +182,7 @@ def plot_tau(path, run_dict, det, plot, colour):
     for run in run_dict:
 
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.fcid
+        channel = chmap[det].daq.rawid
 
         dsp_pars_file_path = os.path.join(prod_config["paths"]["par_dsp"],f'cal/{run_dict[run]["period"]}/{run}')
         dsp_pars_path = os.path.join(dsp_pars_file_path, 
@@ -191,7 +191,7 @@ def plot_tau(path, run_dict, det, plot, colour):
         with open(dsp_pars_path,"r")as r:
             dsp_pars_path = json.load(r)
         try:
-            values.append(float(dsp_pars_path[f"ch{channel:03}"]["pz"]["tau"][:-3]))
+            values.append(float(dsp_pars_path[f"ch{channel:07}"]["pz"]["tau"][:-3]))
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -217,7 +217,7 @@ def plot_ctc_const(path, run_dict, det, plot, colour):
     for run in run_dict:
 
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.fcid
+        channel = chmap[det].daq.rawid
 
         dsp_pars_file_path = os.path.join(prod_config["paths"]["par_dsp"],f'cal/{run_dict[run]["period"]}/{run}')
         dsp_pars_path = os.path.join(dsp_pars_file_path, 
@@ -226,7 +226,7 @@ def plot_ctc_const(path, run_dict, det, plot, colour):
         with open(dsp_pars_path,"r")as r:
             dsp_pars_path = json.load(r)
         try:
-            values.append(dsp_pars_path[f"ch{channel:03}"]["ctc_params"]["cuspEmax_ctc"]["parameters"]["a"])
+            values.append(dsp_pars_path[f"ch{channel:07}"]["ctc_params"]["cuspEmax_ctc"]["parameters"]["a"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
