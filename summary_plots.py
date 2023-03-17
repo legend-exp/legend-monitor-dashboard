@@ -153,7 +153,7 @@ def plot_counts(run, run_dict, path, key =None):
     for det in cmap:
         if cmap[det].system == "geds":
             try:
-                res[det] = all_res[f"ch{cmap[det].daq.fcid:03}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+                res[det] = all_res[f"ch{cmap[det].daq.rawid:07}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
             except:
                 res[det] = 0 
     
@@ -189,10 +189,10 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     cfg_file = prod_config["paths"]["chan_map"]
     configs = LegendMetadata(path = cfg_file)
-    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.fcid")
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
     channels = [field for field in chmap if chmap[field]["system"]=="geds"]
     
-    off_dets = [chmap[int(field[2:])]["name"] for field in soft_dict if soft_dict[field]["software_status"]=="Off"]
+    off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
     
     file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict["period"]}/{run}')
     path = os.path.join(file_path, 
@@ -282,10 +282,10 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     cfg_file = prod_config["paths"]["chan_map"]
     configs = LegendMetadata(path = cfg_file)
-    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.fcid")
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
     channels = [field for field in chmap if chmap[field]["system"]=="geds"]
     
-    off_dets = [field for field in soft_dict if soft_dict[field]["software_status"]=="Off"]
+    off_dets = [chmap.map("name")[field].daq.rawid for field in soft_dict if soft_dict[field]["processable"]is False]
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                              f'cal/{run_dict["period"]}/{run}', 
@@ -306,7 +306,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
     for i,channel in enumerate(channels):
         idxs = []
         try:
-            fitted_peaks = res[f"ch{channel:03}"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
+            fitted_peaks = res[f"ch{channel:07}"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
             if not isinstance(fitted_peaks,list):
                 fitted_peaks = [fitted_peaks]
             for j,peak in enumerate(peaks):
@@ -330,7 +330,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
 
     plt.xticks(ticks = np.arange(0,len(channels),1), labels = [f"{chmap[channel]['name']}" for channel in channels], rotation = 90)
     for off_det in off_dets:
-        loc = np.where(np.array(channels)==int(off_det[2:]))[0][0]
+        loc = np.where(np.array(channels)==int(off_det))[0][0]
         plt.gca().get_xticklabels()[loc].set_color("red")
     plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Fits")
     plt.tight_layout()
@@ -345,10 +345,10 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     cfg_file = prod_config["paths"]["chan_map"]
     configs = LegendMetadata(path = cfg_file)
-    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.fcid")
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
     channels = [field for field in chmap if chmap[field]["system"]=="geds"]
     
-    off_dets = [chmap[int(field[2:])]["name"] for field in soft_dict if soft_dict[field]["software_status"]=="Off"]
+    off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
     
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
@@ -365,7 +365,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                nfits[detector] =res[f"ch{channel:03}"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
+                nfits[detector] =res[f"ch{channel:07}"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
             except:
                 nfits[detector] =np.nan
         
@@ -391,10 +391,10 @@ def get_aoe_results(run, run_dict, path, key="String"):
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     cfg_file = prod_config["paths"]["chan_map"]
     configs = LegendMetadata(path = cfg_file)
-    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.fcid")
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
     channels = [field for field in chmap if chmap[field]["system"]=="geds"]
     
-    off_dets = [chmap[int(field[2:])]["name"] for field in soft_dict if soft_dict[field]["software_status"]=="Off"]
+    off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                              f'cal/{run_dict["period"]}/{run}', 
@@ -443,7 +443,7 @@ def get_aoe_results(run, run_dict, path, key="String"):
             detector = channel_map[channel]["name"]
 
             try:  
-                aoe_res[detector] =all_res[f"ch{channel:03}"]["aoe"]
+                aoe_res[detector] =all_res[f"ch{channel:07}"]["aoe"]
             except:
                 aoe_res[detector] = default
 
@@ -530,10 +530,10 @@ def plot_pz_consts(run, run_dict, path, key="String"):
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     cfg_file = prod_config["paths"]["chan_map"]
     configs = LegendMetadata(path = cfg_file)
-    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.fcid")
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
     channels = [field for field in chmap if chmap[field]["system"]=="geds"]
     
-    off_dets = [chmap[int(field[2:])]["name"] for field in soft_dict if soft_dict[field]["software_status"]=="Off"]
+    off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
     
     cal_dict_path = os.path.join(prod_config["paths"]["par_dsp"], 
                              f'cal/{run_dict["period"]}/{run}', 
@@ -551,7 +551,7 @@ def plot_pz_consts(run, run_dict, path, key="String"):
         for channel in strings[stri]:
             det = channel_map[channel]["name"]
             try:
-                taus[det] = float(cal_dict[f"ch{channel:03}"]["pz"]["tau"][:-3])/1000
+                taus[det] = float(cal_dict[f"ch{channel:07}"]["pz"]["tau"][:-3])/1000
             except:
                 taus[det] =np.nan
     
@@ -582,10 +582,10 @@ def plot_alpha(run, run_dict, path, key="String"):
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     cfg_file = prod_config["paths"]["chan_map"]
     configs = LegendMetadata(path = cfg_file)
-    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.fcid")
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
     channels = [field for field in chmap if chmap[field]["system"]=="geds"]
     
-    off_dets = [chmap[int(field[2:])]["name"] for field in soft_dict if soft_dict[field]["software_status"]=="Off"]
+    off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
     
     
     cal_dict_path = os.path.join(prod_config["paths"]["par_dsp"], 
@@ -607,9 +607,9 @@ def plot_alpha(run, run_dict, path, key="String"):
         for channel in strings[stri]:
             det = channel_map[channel]["name"]
             try:
-                trap_alpha[det]=(float(cal_dict[f"ch{channel:03}"]["ctc_params"]["trapEmax_ctc"]["parameters"]["a"]))
-                cusp_alpha[det]=(float(cal_dict[f"ch{channel:03}"]["ctc_params"]["cuspEmax_ctc"]["parameters"]["a"]))
-                zac_alpha[det]=(float(cal_dict[f"ch{channel:03}"]["ctc_params"]["zacEmax_ctc"]["parameters"]["a"]))
+                trap_alpha[det]=(float(cal_dict[f"ch{channel:07}"]["ctc_params"]["trapEmax_ctc"]["parameters"]["a"]))
+                cusp_alpha[det]=(float(cal_dict[f"ch{channel:07}"]["ctc_params"]["cuspEmax_ctc"]["parameters"]["a"]))
+                zac_alpha[det]=(float(cal_dict[f"ch{channel:07}"]["ctc_params"]["zacEmax_ctc"]["parameters"]["a"]))
             except:
                 trap_alpha[det]=np.nan
                 cusp_alpha[det]=np.nan
@@ -652,7 +652,7 @@ def plot_bls(plot_dict,chan_dict, channels,
         colours = Category20[len(channels)]
     for i,channel in enumerate(channels):
         try:
-            plot_dict_chan = plot_dict[f"ch{channel:03}"]
+            plot_dict_chan = plot_dict[f"ch{channel:07}"]
 
             p.step(plot_dict_chan["baseline_spectrum"]["bins"], 
                      plot_dict_chan["baseline_spectrum"]["bl_array"],
@@ -683,10 +683,10 @@ def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string
         for i,channel in enumerate(channels):
             try:
 
-                plot_dict_chan = shelf[f"ch{channel:03}"]
+                plot_dict_chan = shelf[f"ch{channel:07}"]
                 p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param]["mean_stability"]["time"]], 
                          plot_dict_chan[energy_param]["mean_stability"]["energy"], 
-                         legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                         legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
                           line_width=2, line_color = colours[i])
                 if times is None:
                     times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param]["mean_stability"]["time"]]      
@@ -715,10 +715,10 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
     for i,channel in enumerate(channels):
         try:
 
-            plot_dict_chan = plot_dict[f"ch{channel:03}"]
+            plot_dict_chan = plot_dict[f"ch{channel:07}"]
             p.step(plot_dict_chan[energy_param]["spectrum"]["bins"][1:], 
                      plot_dict_chan[energy_param]["spectrum"]["counts"], 
-                     legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                     legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
                       mode="after", line_width=2, line_color = colours[i])
         except:
             pass
@@ -747,15 +747,15 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string,
     times=None
     for i,channel in enumerate(channels):
         try:
-            bl = plot_dict[f'ch{channel:03}']["baseline_stability"]["baseline"]
-            bl_spread = plot_dict[f'ch{channel:03}']["baseline_stability"]["spread"]
+            bl = plot_dict[f'ch{channel:07}']["baseline_stability"]["baseline"]
+            bl_spread = plot_dict[f'ch{channel:07}']["baseline_stability"]["spread"]
             mean = np.nanmean(bl[~np.isnan(bl)][:10])
             bl_mean = 100*(bl-mean)/mean
             bl_shift =  100*bl_spread/bl_mean
             
-            p.step([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]], 
+            p.step([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
                      bl_mean, 
-                     legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                     legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
                     line_width=2, line_color = colours[i])
             if times is None:
                     times = [datetime.fromtimestamp(t) for t in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]]      
@@ -781,7 +781,7 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter,
         colours = Category20[len(channels)]
     for i,channel in enumerate(channels):
         try:
-            plot_dict_chan = plot_dict[f"ch{channel:03}"]
+            plot_dict_chan = plot_dict[f"ch{channel:07}"]
             
             en = plot_dict_chan[energy_param][parameter]["energy"]
             en_spread = plot_dict_chan[energy_param][parameter]["spread"]
@@ -789,9 +789,9 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter,
             en_mean = 100*(en-mean)/mean
             en_shift =  100*en_spread/en_mean
             
-            p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param][parameter]["time"]], 
+            p.step([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param][parameter]["time"]], 
                      en_mean, 
-                     legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                     legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
                       line_width=2, line_color = colours[i])
             if times is None:
                 times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param][parameter]["time"]]      

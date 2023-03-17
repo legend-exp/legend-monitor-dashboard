@@ -277,9 +277,9 @@ class monitoring(param.Parameterized):
     @param.depends("channel", watch=True)
     def update_channel_plot_dict(self):
         with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-            self.plot_dict_ch = shelf[self.channel[:5]]
+            self.plot_dict_ch = shelf[self.channel[:9]]
         with shelve.open(self.plot_dict.replace("hit","dsp"), 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-            self.dsp_dict = shelf[self.channel[:5]]
+            self.dsp_dict = shelf[self.channel[:9]]
     
     
     @param.depends("parameter", watch=True)
