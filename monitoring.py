@@ -34,13 +34,13 @@ class monitoring(param.Parameterized):
     plt.rcParams['figure.dpi'] = 100
     
     cal_plots = ['2614_timemap',
-                 'peak_fits',
-                 'cal_fit',
-                 'fwhm_fit',
-                 'cut_spectrum',
-                 'survival_frac',
-                 "spectrum",
-                 "logged_spectrum",
+                'peak_fits',
+                'cal_fit',
+                'fwhm_fit',
+                'cut_spectrum',
+                'survival_frac',
+                "spectrum",
+                "logged_spectrum",
                 "peak_track"]
     
     aoe_plots = ['dt_deps', 'compt_bands_nocorr', 'band_fits', 'mean_fit', 'sigma_fit', 'compt_bands_corr', 'surv_fracs', 'PSD_spectrum', 'psd_sf']
@@ -56,20 +56,19 @@ class monitoring(param.Parameterized):
             "A/E": aoe_plots, "Tau": tau_plots, "Optimisation": optimisation_plots}
         
     plot_types_summary_dict = {
-                        "Detector_Status": plot_status, 
-                        "FEP_Counts": plot_counts, 
+                        "Detector Status": plot_status, 
+                        "FEP Counts": plot_counts, 
                         "FWHM Qbb": plot_energy_resolutions_Qbb, 
                         "FWHM FEP": plot_energy_resolutions_2614,
                         "A/E":get_aoe_results, 
-                       "Tau":plot_pz_consts, "Alpha": plot_alpha, 
-                       "Valid. E": plot_no_fitted_energy_peaks, 
-                       "Valid. A/E": plot_no_fitted_aoe_slices,
-                       "Baseline_Spectrum": plot_bls, "Energy_Spectra": plot_energy_spectra,
-                      "Baseline_Stability": plot_baseline_stability,
-                       "2614_Stability":plot_fep_stability_channels2d,
-                       "Pulser_Stability":plot_pulser_stability_channels2d
-                      }
-                      
+                        "Tau":plot_pz_consts, "Alpha": plot_alpha, 
+                        "Valid. E": plot_no_fitted_energy_peaks, 
+                        "Valid. A/E": plot_no_fitted_aoe_slices,
+                        "Baseline Spectrum": plot_bls, "Energy Spectra": plot_energy_spectra,
+                        "Baseline Stability": plot_baseline_stability,
+                        "FEP Stability":plot_fep_stability_channels2d,
+                        "Pulser Stability":plot_pulser_stability_channels2d
+                        }
     
     plot_types_tracking_dict = {"Energy Calib. Const.": plot_energy,"FWHM Qbb": plot_energy_res_Qbb, 
                                 "FWHM FEP": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
@@ -82,7 +81,7 @@ class monitoring(param.Parameterized):
     plot_type_summary = param.ObjectSelector(default = list(plot_types_summary_dict)[0], objects= list(plot_types_summary_dict))
     date_range = param.DateRange(default = (datetime.now()-dtt.timedelta(minutes = 10),
                                         datetime.now()+dtt.timedelta(minutes = 10)) , 
-                                 bounds=(datetime.now()-dtt.timedelta(minutes = 110),
+                                bounds=(datetime.now()-dtt.timedelta(minutes = 110),
                                         datetime.now()+dtt.timedelta(minutes = 110)))
     
     # general selectors
@@ -99,10 +98,11 @@ class monitoring(param.Parameterized):
     phy_plot_style      = param.ObjectSelector(default=list(phy_plot_style_dict)[0], objects=list(phy_plot_style_dict), label="Plot Style")
     phy_resampled       = param.ObjectSelector(default=phy_resampled_vals[1], objects=phy_resampled_vals, label="Resampled")
     
-    def __init__(self, cal_path, phy_path, name=None):
+    def __init__(self, cal_path, phy_path, period, name=None):
         super().__init__(name=name)
         self.path=cal_path
         self.phy_path=phy_path
+        self.period = period
         self.cached_plots ={}
         prod_config = os.path.join(self.path, "config.json")
         self.prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
@@ -141,7 +141,7 @@ class monitoring(param.Parameterized):
     
     @param.depends("run", "phy_plots", watch=True)
     def _get_phy_data(self):
-        data_file = self.phy_path + f'/generated/plt/phy/p02/{self.run}/l200-p02-{self.run}-phy'
+        data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy'
         if not os.path.exists(data_file +'.dat'):
             self.phy_data_df = pd.DataFrame()
         else:
@@ -174,22 +174,34 @@ class monitoring(param.Parameterized):
     @param.depends("run")
     def _get_metadata(self):
         chan_dict, channel_map = self.chan_dict, self.channel_map
+        
         df_chan_dict = pd.DataFrame.from_dict(chan_dict).T
-        df_chan_dict["Channel"] = df_chan_dict.index
-        df_chan_dict.index = df_chan_dict.index.map(lambda x: int(x[2:5]))
+        df_chan_dict.index.name = 'name'
+        df_chan_dict = df_chan_dict.reset_index()
+        
         df_channel_map = pd.DataFrame.from_dict(channel_map).T
-        df_channel_map["Channel"] = df_channel_map.index.map(lambda x: "ch{:>03d}".format(int(x)))
-        df_out = pd.merge(df_channel_map, df_chan_dict, left_on='Channel', right_on='Channel')
-        df_out.columns
-        df_out = df_out.reset_index().set_index('Channel')[['name', 'hardware_status', 'software_status', 'daq', 'location', 'voltage', 'electronics']]
+        df_channel_map = df_channel_map[df_channel_map['system'] == 'geds']
+        
+        df_out = pd.merge(df_channel_map, df_chan_dict, left_on='name', right_on='name')
+        df_out = df_out.reset_index().set_index('name')[['processable', 'usability', 'daq', 'location', 'voltage', 'electronics', 'characterization', 'production', 'type']]
         df_out['daq'] = df_out['daq'].map(lambda x: "Crate: {}, Card: {}".format(x['crate'], x['card']['id']))
         df_out['location'] = df_out['location'].map(lambda x: "String: {:>02d}, Pos.: {:>02d}".format(x['string'], x['position']))
         df_out['voltage'] = df_out['voltage'].map(lambda x: "Card: {:>02d}, Ch.: {:>02d}".format(x['card']['id'], x['channel']))
         df_out['electronics'] = df_out['electronics'].map(lambda x: "CC4: {}, Ch.: {:>02d}".format(x['cc4']['id'], x['cc4']['channel']))
-        df_out['software_status'] =  df_out['software_status'].map(lambda x: True if x == 'On' else False)
-        df_out['hardware_status'] =  df_out['hardware_status'].map(lambda x: True if x == 'Fully_biased' else False)
-        df_out = df_out.rename({'name': 'Det. Name', 'hardware_status': 'HV Status', 'software_status': 'Software status', 'daq': 'FC card',
-            'location': 'Det. Location', 'voltage': 'HV', 'electronics': 'Electronics'}, axis=1)
+        df_out['usability'] =  df_out['usability'].map(lambda x: True if x == 'On' else False)
+        df_out['processable'] =  df_out['processable'].map(lambda x: True if x == 'true' else False)
+        df_out['Depl. Vol. (kV)'] = df_out['characterization'].map(lambda x: get_characterization(x, 'depletion_voltage_in_V'))/1000
+        df_out['Oper. Vol. (kV)'] = df_out['characterization'].map(lambda x: get_characterization(x, 'recommended_voltage_in_V'))/1000
+        df_out['Manufacturer'] = df_out['production'].map(lambda x: get_production(x, 'manufacturer'))
+        df_out['Mass (kg)'] = df_out['production'].map(lambda x: get_production(x, 'mass_in_g'))/1000
+        df_out['Order'] = df_out['production'].map(lambda x: get_production(x, 'order'))
+        df_out['Crystal'] = df_out['production'].map(lambda x: get_production(x, 'crystal'))
+        df_out['Slice'] = df_out['production'].map(lambda x: get_production(x, 'slice'))
+        df_out['Enrichment (%)'] = df_out['production'].map(lambda x: get_production(x, 'enrichment')) * 100
+        df_out['Delivery'] = df_out['production'].map(lambda x: get_production(x, 'delivered'))
+        df_out = df_out.reset_index().rename({'name': 'Det. Name', 'processable': 'Proc.', 'usability': 'Usabl.', 'daq': 'FC card',
+            'location': 'Det. Location', 'voltage': 'HV', 'electronics': 'Electronics', 'type': 'Type'}, axis=1).set_index('Det. Name')
+        df_out = df_out.drop(['characterization', 'production'], axis=1)
         self.meta_df = df_out
 
     @param.depends("date_range", "plot_type_tracking", "string", "sort_by")

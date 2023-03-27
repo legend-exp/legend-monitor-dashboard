@@ -1,6 +1,7 @@
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 import os, json
+import numpy as np
 
 sort_dict = {"String":{"out_key":"{key}:{k:02}",
                                "primary_key":"location.string", 
@@ -65,3 +66,16 @@ def sorter(path, timestamp, key="String", datatype="cal"):
     
     out_dict = {entry:out_dict[entry] for entry in list(out_dict) if len(out_dict[entry])>0}
     return out_dict, software_config, chmap
+
+
+def get_characterization(x, key):
+    try:
+        return x['manufacturer'][key]
+    except:
+        return np.nan
+
+def get_production(x, key):
+    try:
+        return x[key]
+    except:
+        return np.nan
