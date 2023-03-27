@@ -334,7 +334,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
         plt.gca().get_xticklabels()[loc].set_color("red")
     plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Fits")
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     return fig
 
 def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
@@ -716,7 +716,7 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
         try:
 
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
-            p.step(plot_dict_chan[energy_param]["spectrum"]["bins"][1:], 
+            p.step(plot_dict_chan[energy_param]["spectrum"]["bins"], 
                      plot_dict_chan[energy_param]["spectrum"]["counts"], 
                      legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
                       mode="after", line_width=2, line_color = colours[i])

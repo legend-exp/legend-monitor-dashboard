@@ -188,8 +188,8 @@ class monitoring(param.Parameterized):
         df_out['location'] = df_out['location'].map(lambda x: "String: {:>02d}, Pos.: {:>02d}".format(x['string'], x['position']))
         df_out['voltage'] = df_out['voltage'].map(lambda x: "Card: {:>02d}, Ch.: {:>02d}".format(x['card']['id'], x['channel']))
         df_out['electronics'] = df_out['electronics'].map(lambda x: "CC4: {}, Ch.: {:>02d}".format(x['cc4']['id'], x['cc4']['channel']))
-        df_out['usability'] =  df_out['usability'].map(lambda x: True if x == 'On' else False)
-        df_out['processable'] =  df_out['processable'].map(lambda x: True if x == 'true' else False)
+        df_out['usability'] =  df_out['usability'].map(lambda x: True if x == 'on' else False)
+        # df_out['processable'] =  df_out['processable'].map(lambda x: True if x == 'True' else False)
         df_out['Depl. Vol. (kV)'] = df_out['characterization'].map(lambda x: get_characterization(x, 'depletion_voltage_in_V'))/1000
         df_out['Oper. Vol. (kV)'] = df_out['characterization'].map(lambda x: get_characterization(x, 'recommended_voltage_in_V'))/1000
         df_out['Manufacturer'] = df_out['production'].map(lambda x: get_production(x, 'manufacturer'))
@@ -202,6 +202,7 @@ class monitoring(param.Parameterized):
         df_out = df_out.reset_index().rename({'name': 'Det. Name', 'processable': 'Proc.', 'usability': 'Usabl.', 'daq': 'FC card',
             'location': 'Det. Location', 'voltage': 'HV', 'electronics': 'Electronics', 'type': 'Type'}, axis=1).set_index('Det. Name')
         df_out = df_out.drop(['characterization', 'production'], axis=1)
+        df_out = df_out.astype({'Proc.': 'bool', 'Usabl.': 'bool'})
         self.meta_df = df_out
 
     @param.depends("date_range", "plot_type_tracking", "string", "sort_by")
@@ -226,14 +227,14 @@ class monitoring(param.Parameterized):
         plt.rcParams['figure.figsize'] = (16, 6)
         plt.rcParams['figure.dpi'] = 100
         if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E", "Tau", 
-                                      "Alpha", "Valid. E", "Valid. A/E", "Detector_Status", "FEP_Counts"]:
+                                      "Alpha", "Valid. E", "Valid. A/E", "Detector Status", "FEP Counts"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
                                             self.path, key=self.sort_by)
             
             
-        elif self.plot_type_summary in ["Baseline_Spectrum", "Energy_Spectra", "Baseline_Stability", 
-                                        "2614_Stability", "Pulser_Stability"]:
+        elif self.plot_type_summary in ["Baseline Spectrum", "Energy Spectra", "Baseline Stability", 
+                                        "FEP Stability", "Pulser Stability"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.common_dict, self.channel_map, 
                             self.strings_dict[self.string],
                             self.string, key=self.sort_by)
@@ -345,4 +346,4 @@ class monitoring(param.Parameterized):
     
     @param.depends("run")
     def view_meta(self):
-        return pn.widgets.Tabulator(self.meta_df, formatters={'Software status': BooleanFormatter(), 'HV Status': BooleanFormatter()})
+        return pn.widgets.Tabulator(self.meta_df, formatters={'Proc.': BooleanFormatter(), 'Usabl.': BooleanFormatter()})
