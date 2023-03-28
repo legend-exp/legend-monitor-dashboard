@@ -12,6 +12,9 @@ import matplotlib
 from bokeh.models import Span, Label, Title, Range1d
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
+from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, FuncTickFormatter, Legend, LegendItem, PrintfTickFormatter
+from bokeh.palettes import *
+
 import datetime as dtt
 from  datetime import datetime
 
@@ -19,6 +22,7 @@ from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
 from src.util import *
+from src.string_visulization import *
 
 def build_string_array(chan_map):
     dets = []
@@ -73,7 +77,7 @@ def build_status_map(chan_map, data):
             
     return data_array, x_axes, y_axes, annot_array
 
-def plot_status(run, run_dict, path, key =None):
+def plot_status(run, run_dict, path, source, xlabels, key =None):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     chmap = LegendMetadata(path = prod_config["paths"]["metadata"])
@@ -84,26 +88,41 @@ def plot_status(run, run_dict, path, key =None):
     
     status_map = config["analysis"]
     
-    data_array, x_labels, y_labels, annotations = build_status_map(cmap, status_map)
-    fig = plt.figure(figsize=(10, 6), dpi=1000, facecolor="w", edgecolor="k")
-    sns.set(font_scale=1)
+    dets, strings, positions = build_string_array(cmap)
+    
+    display_dict = {cmap[i]['daq']['rawid'] : 1 if status_map[i]["processable"] == True and status_map[i]["usability"] == 'on' else 0
+        for i in dets}
+    palette = ('red', 'green')
+    ctitle = 'Working Detectors'
+    ticker = FixedTicker(ticks=[0.25,0.75], tags = ['Non-Working', 'Working'])
+    formatter = FuncTickFormatter(code="""
+        var mapping = {0.25: "Non-Working", 0.75: "Working"};
+        return mapping[tick];
+    """)
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter)
 
-    stat_map = sns.heatmap(
-        data=data_array,
-        yticklabels=y_labels,
-        xticklabels=x_labels,
-        cmap="Set1",
-        fmt='s',
-        cbar=False,
+    
+    
+    # data_array, x_labels, y_labels, annotations = build_status_map(cmap, status_map)
+    # fig = plt.figure(figsize=(10, 6), dpi=1000, facecolor="w", edgecolor="k")
+    # sns.set(font_scale=1)
 
-        annot=annotations,
-        annot_kws={"fontsize":5, 'color':'white'}
-    )
+    # stat_map = sns.heatmap(
+    #     data=data_array,
+    #     yticklabels=y_labels,
+    #     xticklabels=x_labels,
+    #     cmap="Set1",
+    #     fmt='s',
+    #     cbar=False,
 
-    plt.title("Working Detectors")
-    plt.tight_layout()
-    plt.close()
-    return fig
+    #     annot=annotations,
+    #     annot_kws={"fontsize":5, 'color':'white'}
+    # )
+
+    # plt.title("Working Detectors")
+    # plt.tight_layout()
+    # plt.close()
+    # return fig
 
 def build_counts_map(chan_map, data):
     dets, strings, positions = build_string_array(chan_map)
@@ -133,7 +152,7 @@ def build_counts_map(chan_map, data):
             
     return data_array, x_axes, y_axes, annot_array
 
-def plot_counts(run, run_dict, path, key =None):
+def plot_counts(run, run_dict, path, source, xlabels, key =None):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     chmap = LegendMetadata(path = prod_config["paths"]["metadata"])
@@ -153,31 +172,38 @@ def plot_counts(run, run_dict, path, key =None):
     for det in cmap:
         if cmap[det].system == "geds":
             try:
-                res[det] = all_res[f"ch{cmap[det].daq.rawid:07}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+                res[cmap[det]['daq']['rawid']] = all_res[f"ch{cmap[det].daq.rawid:07}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
             except:
-                res[det] = 0 
+                res[cmap[det]['daq']['rawid']] = 0 
     
-    data_array, x_labels, y_labels, annotations = build_counts_map(cmap, res)
-    fig = plt.figure(figsize=(10, 6), dpi=1000, facecolor="w", edgecolor="k")
-    sns.set(font_scale=1)
+    display_dict = res
+    ctitle = 'FEP Counts'
+    palette = cividis(256)
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette)
 
-    stat_map = sns.heatmap(
-        data=data_array,
-        yticklabels=y_labels,
-        xticklabels=x_labels,
-        cmap="Blues",
-        fmt='.0f',
-        cbar=False,
-        vmin=1000, 
-        vmax=3000,
-        annot=annotations,
-        annot_kws={"fontsize":5, 'color':'white'}
-    )
+    
+    
+    # data_array, x_labels, y_labels, annotations = build_counts_map(cmap, res)
+    # fig = plt.figure(figsize=(10, 6), dpi=1000, facecolor="w", edgecolor="k")
+    # sns.set(font_scale=1)
 
-    plt.title("FEP Counts")
-    plt.tight_layout()
-    plt.close()
-    return fig
+    # stat_map = sns.heatmap(
+    #     data=data_array,
+    #     yticklabels=y_labels,
+    #     xticklabels=x_labels,
+    #     cmap="Blues",
+    #     fmt='.0f',
+    #     cbar=False,
+    #     vmin=1000, 
+    #     vmax=3000,
+    #     annot=annotations,
+    #     annot_kws={"fontsize":5, 'color':'white'}
+    # )
+
+    # plt.title("FEP Counts")
+    # plt.tight_layout()
+    # plt.close()
+    # return fig
     
     
 

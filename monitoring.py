@@ -20,11 +20,16 @@ import legend_data_monitor as ldm
 
 from bokeh.models.widgets.tables import NumberFormatter, BooleanFormatter
 
+from bokeh.plotting import figure, show
+from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, FuncTickFormatter
+from bokeh.palettes import *
+
 from src.util import *
 from src.summary_plots import *
 from src.tracking_plots import *
 from src.detailed_plots import *
 from src.phy_monitoring import *
+from src.string_visulization import *
 
 class monitoring(param.Parameterized):
     
@@ -98,6 +103,13 @@ class monitoring(param.Parameterized):
     phy_plot_style      = param.ObjectSelector(default=list(phy_plot_style_dict)[0], objects=list(phy_plot_style_dict), label="Plot Style")
     phy_resampled       = param.ObjectSelector(default=phy_resampled_vals[1], objects=phy_resampled_vals, label="Resampled")
     
+    # visualization
+    meta_visu_plots_dict = {"Usability": plot_visu_usability, "Processable": plot_visu_processable, "Processable": plot_visu_processable,
+                            "Mass": plot_visu_mass, "Depl. Voltage": plot_visu_depletion, "Oper. Voltage": plot_visu_operation,
+                            "Enrichment": plot_visu_enrichment}
+    
+    meta_visu_plots = param.ObjectSelector(default=list(meta_visu_plots_dict)[0], objects=list(meta_visu_plots_dict))
+    
     def __init__(self, cal_path, phy_path, period, name=None):
         super().__init__(name=name)
         self.path=cal_path
@@ -121,7 +133,7 @@ class monitoring(param.Parameterized):
         start_period = self.periods[list(self.periods)[0]]
 
         self.param["date_range"].bounds = (datetime.strptime(self.run_dict[sorted(start_period)[0]]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
-                                 datetime.strptime(self.run_dict[sorted(start_period)[-1]]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+                                datetime.strptime(self.run_dict[sorted(start_period)[-1]]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
         self.date_range = (datetime.strptime(self.run_dict[sorted(start_period)[0]]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
                             datetime.strptime(self.run_dict[sorted(start_period)[-1]]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
         
@@ -137,7 +149,12 @@ class monitoring(param.Parameterized):
         self._get_phy_data()
         
         self.meta_df = pd.DataFrame()
+        self.meta_visu_source      = ColumnDataSource({})
+        self.meta_visu_xlabels     = {}
+        self.meta_visu_chan_dict   = {}
+        self.meta_visu_channel_map = {}
         self._get_metadata()
+        
     
     @param.depends("run", "phy_plots", watch=True)
     def _get_phy_data(self):
@@ -204,6 +221,11 @@ class monitoring(param.Parameterized):
         df_out = df_out.drop(['characterization', 'production'], axis=1)
         df_out = df_out.astype({'Proc.': 'bool', 'Usabl.': 'bool'})
         self.meta_df = df_out
+        
+        # get metadata visu plot data
+        strings_dict, chan_dict, channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
+        self.meta_visu_source, self.meta_visu_xlabels = get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict)
+        self.meta_visu_chan_dict, self.meta_visu_channel_map = chan_dict, channel_map
 
     @param.depends("date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
@@ -222,23 +244,22 @@ class monitoring(param.Parameterized):
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None
-        mpl.rcParams.update(mpl.rcParamsDefault)
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['figure.figsize'] = (16, 6)
-        plt.rcParams['figure.dpi'] = 100
         if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E", "Tau", 
-                                      "Alpha", "Valid. E", "Valid. A/E", "Detector Status", "FEP Counts"]:
+                                        "Alpha", "Valid. E", "Valid. A/E"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
                                             self.path, key=self.sort_by)
             
-            
+        elif self.plot_type_summary in ["Detector Status", "FEP Counts"]:
+        # elif self.plot_type_summary in ["Detector Status"]:
+            figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
+                                            self.run_dict[self.run], 
+                                            self.path, self.meta_visu_source, self.meta_visu_xlabels, key=self.sort_by)
         elif self.plot_type_summary in ["Baseline Spectrum", "Energy Spectra", "Baseline Stability", 
                                         "FEP Stability", "Pulser Stability"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.common_dict, self.channel_map, 
                             self.strings_dict[self.string],
                             self.string, key=self.sort_by)
-
         else:
             figure = plt.figure()
             plt.close()
@@ -347,3 +368,7 @@ class monitoring(param.Parameterized):
     @param.depends("run")
     def view_meta(self):
         return pn.widgets.Tabulator(self.meta_df, formatters={'Proc.': BooleanFormatter(), 'Usabl.': BooleanFormatter()})
+    
+    @param.depends("run", "meta_visu_plots")
+    def view_meta_visu(self):
+        return self.meta_visu_plots_dict[self.meta_visu_plots](self.meta_visu_source, self.meta_visu_chan_dict, self.meta_visu_channel_map, self.meta_visu_xlabels)
