@@ -258,7 +258,6 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
         df_plot["err_ys_{}".format(filter_type.split('_')[0])]     = err_ys
 
 
-    # df_plot = ColumnDataSource(df_plot)
     for filter_type, filter_name, filter_plot_color in zip(["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"], ["Cusp", "ZAC", "Trap"], ["blue", "green", "red"]):
 
         if filter_name == "Cusp":
@@ -271,10 +270,6 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
                 legend_label = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV', 
                 name = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV'
                 )
-        # p.circle(x="x_{}".format(filter_type.split('_')[0]), y="y_{}".format(filter_type.split('_')[0]), source=df_plot, color=filter_plot_color, size=7, line_alpha=0,
-        #         legend_label = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV', 
-        #         name = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV'
-        #         )
         p.multi_line(xs="err_xs_{}".format(filter_type.split('_')[0]), ys="err_ys_{}".format(filter_type.split('_')[0]), source=df_plot, color=filter_plot_color,
                 legend_label = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV', 
                 name = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV'
@@ -313,42 +308,6 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
     p.hover.renderers = [hover_renderer]
     
     return p
-    
-    # fig = plt.figure() #
-    # plt.errorbar(list(res), [res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
-    #             yerr=[res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], 
-    #              marker='o',linestyle = ' ', color='deepskyblue', 
-    #              label = f'Cusp Average: {np.nanmean([res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
-    # plt.errorbar(list(res), [res[det]["zacEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
-    #             yerr=[res[det]["zacEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], 
-    #              marker='o',linestyle = ' ', color='green',
-    #             label = f'Zac Average: {np.nanmean([res[det]["zacEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
-    # plt.errorbar(list(res), [res[det]["trapEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
-    #             yerr=[res[det]["trapEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], marker='o',linestyle = ' ', color='orangered',
-    #             label = f'Trap Average: {np.nanmean([res[det]["trapEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
-    # for stri in strings:
-    #     loc=np.where(np.array(list(res))==stri)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("blue")
-    #     plt.axvline(stri, color='black')
-    # plt.tick_params(axis='x', labelrotation=90)
-    
-    # for off_det in off_dets:
-    #     loc=np.where(np.array(list(res))==off_det)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("red")
-
-    # plt.yticks(np.arange(0,11,1))
-    # plt.xlabel('Detector')
-    # if at == "Qbb":
-    #     plt.ylabel('FWHM at Qbb (keV)')
-    # else:
-    #     plt.ylabel('FWHM of 2.6 MeV peak (keV)')
-    # plt.grid(linestyle='dashed', linewidth=0.5,which="both", axis='both')
-    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Resolutions")
-    # plt.legend(loc='upper right')
-    # plt.ylim([1,5])
-    # plt.tight_layout()
-    # plt.close()
-    # return fig
 
 def plot_energy_resolutions_Qbb(run, run_dict, path, key="String"):
     return plot_energy_resolutions(run, run_dict, path, key=key, at="Qbb")
@@ -425,22 +384,6 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
     p.yaxis.major_label_overrides = {i: f'{peaks[i]}' for i in range(0, len(peaks), 1)}
     
     return p
-    # fig=plt.figure()
-    # plt.imshow(grid, cmap = "brg")
-    # plt.ylabel("peaks")
-    # plt.xlabel("channel")
-
-    # yticks, ylabels = plt.yticks()
-    # plt.yticks(ticks = yticks[1:-1], labels = [f"{peak:.1f}" for peak in peaks])
-
-    # plt.xticks(ticks = np.arange(0,len(channels),1), labels = [f"{chmap[channel]['name']}" for channel in channels], rotation = 90)
-    # for off_det in off_dets:
-    #     loc = np.where(np.array(channels)==int(off_det))[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("red")
-    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Fits")
-    # plt.tight_layout()
-    # # plt.show()
-    # return fig
 
 def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     
@@ -457,8 +400,8 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
-                             f'cal/{run_dict["period"]}/{run}', 
-                             f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'cal/{run_dict["period"]}/{run}', 
+                            f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -492,7 +435,6 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     filter_plot_colors = ["blue"]
 
 
-    # df_plot = ColumnDataSource(df_plot)
     for filter_type, filter_name, filter_plot_color in zip(filter_types, filter_names, filter_plot_colors):
 
         if filter_name == "Valid. A/E fits":
@@ -534,20 +476,6 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     p.hover.renderers = [hover_renderer]
     
     return p
-    
-    # fig=plt.figure()
-    # plt.scatter(list(nfits), [nfits[channel] for channel in nfits])
-    # plt.tick_params(axis='x', labelrotation=90)
-    # for off_det in off_dets:
-    #     loc = np.where(np.array(list(nfits))==off_det)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("red")
-    # plt.xlabel('Channel')
-    # plt.ylabel('# of A/E fits')
-    # plt.grid(linestyle='dashed', linewidth=0.5,which="both", axis='both')
-    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E fits")
-    # plt.tight_layout()
-    # plt.close()
-    # return fig
 
 def get_aoe_results(run, run_dict, path, key="String"):
 
@@ -675,7 +603,6 @@ def get_aoe_results(run, run_dict, path, key="String"):
         df_plot["err_ys_{}".format(peak_type.split('.')[0])]     = err_ys
 
 
-    # df_plot = ColumnDataSource(df_plot)
     for peak_type, peak_name, peak_color in zip(peak_types, peak_names, peak_colors):
 
         if peak_type == "1592.5":
@@ -728,51 +655,6 @@ def get_aoe_results(run, run_dict, path, key="String"):
     p.hover.renderers = [hover_renderer]
     
     return p
-                
-    # fig = plt.figure()
-    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["1592.5"]["sf"]) for det in aoe_res],
-    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["1592.5"]["sf_err"]) for det in aoe_res], 
-    #              marker='o',linestyle = ' ', 
-    #              label = 'Tl DEP')
-
-    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["1620.5"]["sf"]) for det in aoe_res],
-    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["1620.5"]["sf_err"]) for det in aoe_res], 
-    #              marker='o',linestyle = ' ',  
-    #              label = f'Bi FEP')
-    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2039"]["sf"]) for det in aoe_res],
-    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["2039"]["sf_err"]) for det in aoe_res], 
-    #              marker='o',linestyle = ' ',  
-    #              label = r'CC @ $Q_{\beta \beta}$')
-    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2103.53"]["sf"]) for det in aoe_res],
-    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["2103.53"]["sf_err"]) for det in aoe_res], 
-    #              marker='o',linestyle = ' ',  
-    #              label = f'Tl SEP')
-    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2614.5"]["sf"]) for det in aoe_res],
-    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["2614.5"]["sf_err"]) for det in aoe_res], 
-    #              marker='o',linestyle = ' ',  
-    #              label = f'Tl FEP')
-
-    # for stri in strings:
-    #     loc=np.where(np.array(list(aoe_res))==stri)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("blue")
-    #     plt.axvline(stri, color='black')
-    # plt.tick_params(axis='x', labelrotation=90)
-    # for off_det in off_dets:
-    #     loc = np.where(np.array(list(aoe_res))==off_det)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("red")
-    # plt.yticks(np.arange(0,110,10))
-    # plt.xlabel('Detector')
-    # plt.ylabel('Survival fraction')
-    # plt.grid(linestyle='dashed', linewidth=0.5)
-    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E Survival Fractions")
-    # plt.legend(loc='upper right')
-    # plt.ylim([0,100])
-    # plt.tight_layout()
-    # #plt.savefig("/data1/users/marshall/prod-ref/optim_test/aoe.png")
-    # plt.close()
-
-    
-    # return fig
 
 
 def plot_pz_consts(run, run_dict, path, key="String"):
@@ -890,24 +772,7 @@ def plot_pz_consts(run, run_dict, path, key="String"):
     p.hover.renderers = [hover_renderer]
 
     return p
-    # fig = plt.figure()
-    # plt.errorbar(list(taus),[taus[det] for det in taus] ,yerr=10,
-    #              marker='o', color='deepskyblue', linestyle = '')
-    # for stri in strings:
-    #     loc=np.where(np.array(list(taus))==stri)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("blue")
-    #     plt.axvline(stri, color='black')
-    # plt.tick_params(axis='x', labelrotation=90)
-    # for off_det in off_dets:
-    #     loc = np.where(np.array(list(taus))==off_det)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("red")
-    # plt.xlabel('Detector')
-    # plt.ylabel(f'Pz constant ($\mu s$)')
-    # plt.grid(linestyle='dashed', linewidth=0.5)
-    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Pole Zero Constants")
-    # plt.tight_layout()
-    # plt.close()
-    # return fig
+
 
 def plot_alpha(run, run_dict, path, key="String"):
     
@@ -1016,32 +881,10 @@ def plot_alpha(run, run_dict, path, key="String"):
     p.hover.renderers = [hover_renderer]
     
     return p
-    # fig = plt.figure()
-    # plt.scatter(list(trap_alpha), [trap_alpha[det] for det in trap_alpha],
-    #              marker='o', color='deepskyblue', label='Trap')
-    # plt.scatter(list(cusp_alpha), [cusp_alpha[det] for det in cusp_alpha],
-    #              marker='o', color='orangered', label='Cusp')
-    # plt.scatter(list(zac_alpha), [zac_alpha[det] for det in zac_alpha],
-    #              marker='o', color='green', label='Zac')
-    # for stri in strings:
-    #     loc=np.where(np.array(list(trap_alpha))==stri)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("blue")
-    #     plt.axvline(stri, color='black')
-    # plt.tick_params(axis='x', labelrotation=90)
-    # for off_det in off_dets:
-    #     loc = np.where(np.array(list(trap_alpha))==off_det)[0][0]
-    #     plt.gca().get_xticklabels()[loc].set_color("red")
-    # plt.xlabel('Detector')
-    # plt.ylabel(f'Alpha Value (1/ns)')
-    # plt.grid(linestyle='dashed', linewidth=0.5)
-    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Charge Trapping Constants")
-    # plt.legend(loc="upper right")
-    # plt.tight_layout()
-    # plt.close()
-    # return fig
+
 
 def plot_bls(plot_dict,chan_dict, channels, 
-             string, key="String"):
+            string, key="String"):
 
     p = figure(width=700, height=600, y_axis_type="log")
     p.title.text = string
@@ -1069,7 +912,7 @@ def plot_bls(plot_dict,chan_dict, channels,
     return p
     
 def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string, 
-                                  key="String", energy_param = "cuspEmax_ctc"):
+                                    key="String", energy_param = "cuspEmax_ctc"):
     
     times = None
     p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime')
@@ -1086,9 +929,9 @@ def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string
 
                 plot_dict_chan = shelf[f"ch{channel:07}"]
                 p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param]["mean_stability"]["time"]], 
-                         plot_dict_chan[energy_param]["mean_stability"]["energy"], 
-                         legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
-                          line_width=2, line_color = colours[i])
+                        plot_dict_chan[energy_param]["mean_stability"]["energy"], 
+                        legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
+                        line_width=2, line_color = colours[i])
                 if times is None:
                     times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param]["mean_stability"]["time"]]      
             except:
@@ -1118,9 +961,9 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
 
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
             p.step(plot_dict_chan[energy_param]["spectrum"]["bins"], 
-                     plot_dict_chan[energy_param]["spectrum"]["counts"], 
-                     legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
-                      mode="after", line_width=2, line_color = colours[i])
+                    plot_dict_chan[energy_param]["spectrum"]["counts"], 
+                    legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
+                    mode="after", line_width=2, line_color = colours[i])
         except:
             pass
     
@@ -1155,8 +998,8 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string,
             bl_shift =  100*bl_spread/bl_mean
             
             p.step([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
-                     bl_mean, 
-                     legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
+                    bl_mean, 
+                    legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
                     line_width=2, line_color = colours[i])
             if times is None:
                     times = [datetime.fromtimestamp(t) for t in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]]      
@@ -1170,7 +1013,7 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string,
     return p
 
 def plot_stability(plot_dict, chan_dict, channels, string, parameter,
-                                  key="String", energy_param = "cuspEmax_ctc"):
+                                key="String", energy_param = "cuspEmax_ctc"):
     times = None
     p = figure(width=700, height=600, x_axis_type='datetime')
     p.title.text = string
@@ -1191,9 +1034,9 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter,
             en_shift =  100*en_spread/en_mean
             
             p.step([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param][parameter]["time"]], 
-                     en_mean, 
-                     legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
-                      line_width=2, line_color = colours[i])
+                    en_mean, 
+                    legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
+                    line_width=2, line_color = colours[i])
             if times is None:
                 times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param][parameter]["time"]]      
         except:
@@ -1206,13 +1049,13 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter,
     return p
 
 def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, string, 
-                                  key="String", energy_param = "cuspEmax_ctc"):
+                                    key="String", energy_param = "cuspEmax_ctc"):
     
     return plot_stability(plot_dict, chan_dict, channels, string, "2614_stability",
-                                  key="String", energy_param = "cuspEmax_ctc")
+                                    key="String", energy_param = "cuspEmax_ctc")
     
 
 def plot_pulser_stability_channels2d(plot_dict, chan_dict, channels, string, 
-                                  key="String", energy_param = "cuspEmax_ctc"):
+                                    key="String", energy_param = "cuspEmax_ctc"):
     return plot_stability(plot_dict, chan_dict, channels, string, "pulser_stability",
-                                  key="String", energy_param = "cuspEmax_ctc")
+                                    key="String", energy_param = "cuspEmax_ctc")
