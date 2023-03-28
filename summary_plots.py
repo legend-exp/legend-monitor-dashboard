@@ -202,23 +202,23 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
         all_res = json.load(r)
         
     default = {'cuspEmax_ctc_cal': {'Qbb_fwhm': np.nan, 
-                                                  'Qbb_fwhm_err': np.nan, 
-                                                  '2.6_fwhm': np.nan, 
-                                                  '2.6_fwhm_err': np.nan, 
-                                                  'm0': np.nan, 
-                                                  'm1': np.nan}, 
-                             'zacEmax_ctc_cal': {'Qbb_fwhm': np.nan, 
-                                                 'Qbb_fwhm_err': np.nan, 
-                                                 '2.6_fwhm': np.nan, 
-                                                 '2.6_fwhm_err': np.nan, 
-                                                 'm0': np.nan, 
-                                                 'm1': np.nan}, 
-                             'trapEmax_ctc_cal': {'Qbb_fwhm': np.nan, 
-                                                  'Qbb_fwhm_err': np.nan, 
-                                                  '2.6_fwhm': np.nan, 
-                                                  '2.6_fwhm_err': np.nan, 
-                                                  'm0': np.nan, 
-                                                  'm1': np.nan}}
+                                                'Qbb_fwhm_err': np.nan, 
+                                                '2.6_fwhm': np.nan, 
+                                                '2.6_fwhm_err': np.nan, 
+                                                'm0': np.nan, 
+                                                'm1': np.nan}, 
+                            'zacEmax_ctc_cal': {'Qbb_fwhm': np.nan, 
+                                                'Qbb_fwhm_err': np.nan, 
+                                                '2.6_fwhm': np.nan, 
+                                                '2.6_fwhm_err': np.nan, 
+                                                'm0': np.nan, 
+                                                'm1': np.nan}, 
+                            'trapEmax_ctc_cal': {'Qbb_fwhm': np.nan, 
+                                                'Qbb_fwhm_err': np.nan, 
+                                                '2.6_fwhm': np.nan, 
+                                                '2.6_fwhm_err': np.nan, 
+                                                'm0': np.nan, 
+                                                'm1': np.nan}}
     res = {}
     for stri in strings:
         res[stri]=default
@@ -229,44 +229,126 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
             except:
                 res[detector] = default
     
-    
-            
-                
-    fig = plt.figure() #
-    plt.errorbar(list(res), [res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
-                yerr=[res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], 
-                 marker='o',linestyle = ' ', color='deepskyblue', 
-                 label = f'Cusp Average: {np.nanmean([res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
-    plt.errorbar(list(res), [res[det]["zacEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
-                yerr=[res[det]["zacEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], 
-                 marker='o',linestyle = ' ', color='green',
-                label = f'Zac Average: {np.nanmean([res[det]["zacEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
-    plt.errorbar(list(res), [res[det]["trapEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
-                yerr=[res[det]["trapEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], marker='o',linestyle = ' ', color='orangered',
-                label = f'Trap Average: {np.nanmean([res[det]["trapEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
+    p = figure(width=1400, height=600, y_range=(1, 5), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Resolutions"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+
+    label_res = [r if 'String' not in r else "" for r in list(res)]
+
+    df_plot = pd.DataFrame()
+    df_plot["label_res"]  = label_res
+
+    for filter_type in ["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"]:
+
+        x_plot, y_plot, y_plot_err = np.arange(1, len(list(res))+1, 1), [res[det][filter_type][f"{at}_fwhm"] for det in res], [res[det][filter_type][f"{at}_fwhm_err"] for det in res]
+
+        err_xs = []
+        err_ys = []
+
+        for x, y, yerr in zip(x_plot, y_plot, y_plot_err):
+            err_xs.append((x, x))
+            err_ys.append((np.nan_to_num(y - yerr), np.nan_to_num(y + yerr)))
+
+
+        df_plot["x_{}".format(filter_type.split('_')[0])]          = np.nan_to_num(x_plot)
+        df_plot["y_{}".format(filter_type.split('_')[0])]          = np.nan_to_num(y_plot)
+        df_plot["y_{}_err".format(filter_type.split('_')[0])]      = np.nan_to_num(y_plot_err)
+        df_plot["err_xs_{}".format(filter_type.split('_')[0])]     = err_xs
+        df_plot["err_ys_{}".format(filter_type.split('_')[0])]     = err_ys
+
+
+    # df_plot = ColumnDataSource(df_plot)
+    for filter_type, filter_name, filter_plot_color in zip(["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"], ["Cusp", "ZAC", "Trap"], ["blue", "green", "red"]):
+
+        if filter_name == "Cusp":
+            hover_renderer = p.circle(x="x_{}".format(filter_type.split('_')[0]), y="y_{}".format(filter_type.split('_')[0]), source=df_plot, color=filter_plot_color, size=7, line_alpha=0,
+                legend_label = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV', 
+                name = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV'
+                )
+        else:
+            p.circle(x="x_{}".format(filter_type.split('_')[0]), y="y_{}".format(filter_type.split('_')[0]), source=df_plot, color=filter_plot_color, size=7, line_alpha=0,
+                legend_label = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV', 
+                name = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV'
+                )
+        # p.circle(x="x_{}".format(filter_type.split('_')[0]), y="y_{}".format(filter_type.split('_')[0]), source=df_plot, color=filter_plot_color, size=7, line_alpha=0,
+        #         legend_label = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV', 
+        #         name = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV'
+        #         )
+        p.multi_line(xs="err_xs_{}".format(filter_type.split('_')[0]), ys="err_ys_{}".format(filter_type.split('_')[0]), source=df_plot, color=filter_plot_color,
+                legend_label = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV', 
+                name = f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV'
+                )
+
+
+    p.legend.location = "top_right"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = "Detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    if at == "Qbb":
+        p.yaxis.axis_label = 'FWHM at Qbb (keV)'
+    else:
+        p.yaxis.axis_label = 'FWHM of 2.6 MeV peak (keV)'
+    p.yaxis.axis_label_text_font_size = "20px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = np.arange(1, len(list(res)), 1)
+    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_text_font_style = "bold"
+
     for stri in strings:
         loc=np.where(np.array(list(res))==stri)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("blue")
-        plt.axvline(stri, color='black')
-    plt.tick_params(axis='x', labelrotation=90)
+        string_span = Span(location=loc+1, dimension='height',
+                    line_color='black', line_width=3)
+        string_span_label = Label(x=loc+1.5, y=1.1, text=stri, text_font_size='10pt', text_color='blue')
+        p.add_layout(string_span_label)
+        p.add_layout(string_span)
+        
+    p.hover.tooltips = [( 'Detector',   '@label_res'),
+                        ( 'FWHM Cusp',  '@y_cuspEmax{0.00} +- @y_cuspEmax_err{0.00} keV'),
+                        ( 'FWHM ZAC ',  '@y_zacEmax{0.00} +- @y_zacEmax_err{0.00} keV'),
+                        ( 'FWHM Trap',  '@y_trapEmax{0.00} +- @y_trapEmax_err{0.00} keV')
+                        ]
+    p.hover.mode = 'vline'
+    p.hover.renderers = [hover_renderer]
     
-    for off_det in off_dets:
-        loc=np.where(np.array(list(res))==off_det)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("red")
+    return p
+    
+    # fig = plt.figure() #
+    # plt.errorbar(list(res), [res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
+    #             yerr=[res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], 
+    #              marker='o',linestyle = ' ', color='deepskyblue', 
+    #              label = f'Cusp Average: {np.nanmean([res[det]["cuspEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
+    # plt.errorbar(list(res), [res[det]["zacEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
+    #             yerr=[res[det]["zacEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], 
+    #              marker='o',linestyle = ' ', color='green',
+    #             label = f'Zac Average: {np.nanmean([res[det]["zacEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
+    # plt.errorbar(list(res), [res[det]["trapEmax_ctc_cal"][f"{at}_fwhm"] for det in res],
+    #             yerr=[res[det]["trapEmax_ctc_cal"][f"{at}_fwhm_err"] for det in res], marker='o',linestyle = ' ', color='orangered',
+    #             label = f'Trap Average: {np.nanmean([res[det]["trapEmax_ctc_cal"][f"{at}_fwhm"] for det in res]):.2f}keV')
+    # for stri in strings:
+    #     loc=np.where(np.array(list(res))==stri)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("blue")
+    #     plt.axvline(stri, color='black')
+    # plt.tick_params(axis='x', labelrotation=90)
+    
+    # for off_det in off_dets:
+    #     loc=np.where(np.array(list(res))==off_det)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("red")
 
-    plt.yticks(np.arange(0,11,1))
-    plt.xlabel('Detector')
-    if at == "Qbb":
-        plt.ylabel('FWHM at Qbb (keV)')
-    else:
-        plt.ylabel('FWHM of 2.6 MeV peak (keV)')
-    plt.grid(linestyle='dashed', linewidth=0.5,which="both", axis='both')
-    plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Resolutions")
-    plt.legend(loc='upper right')
-    plt.ylim([1,5])
-    plt.tight_layout()
-    plt.close()
-    return fig
+    # plt.yticks(np.arange(0,11,1))
+    # plt.xlabel('Detector')
+    # if at == "Qbb":
+    #     plt.ylabel('FWHM at Qbb (keV)')
+    # else:
+    #     plt.ylabel('FWHM of 2.6 MeV peak (keV)')
+    # plt.grid(linestyle='dashed', linewidth=0.5,which="both", axis='both')
+    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Resolutions")
+    # plt.legend(loc='upper right')
+    # plt.ylim([1,5])
+    # plt.tight_layout()
+    # plt.close()
+    # return fig
 
 def plot_energy_resolutions_Qbb(run, run_dict, path, key="String"):
     return plot_energy_resolutions(run, run_dict, path, key=key, at="Qbb")
@@ -319,23 +401,46 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
             if chmap[channel] in off_dets:
                 grid[:,i]=1
             pass
-        
-    fig=plt.figure()
-    plt.imshow(grid, cmap = "brg")
-    plt.ylabel("peaks")
-    plt.xlabel("channel")
+    
+    
+    p = figure(width=1400, height=300, y_range=(0.5, 7.5), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy fits"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
 
-    yticks, ylabels = plt.yticks()
-    plt.yticks(ticks = yticks[1:-1], labels = [f"{peak:.1f}" for peak in peaks])
+    label_res = [f"{chmap[channel]['name']}" for channel in channels]
+    p.image(image=[grid], x=0, y=0.5, dw=len(channels), dh=len(peaks), palette=["red", "green"], alpha=0.7)
 
-    plt.xticks(ticks = np.arange(0,len(channels),1), labels = [f"{chmap[channel]['name']}" for channel in channels], rotation = 90)
-    for off_det in off_dets:
-        loc = np.where(np.array(channels)==int(off_det))[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("red")
-    plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Fits")
-    plt.tight_layout()
-    # plt.show()
-    return fig
+    p.xaxis.axis_label = "Detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Peaks"
+    p.yaxis.axis_label_text_font_size = "20px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = np.arange(1, len(list(channels)), 1)
+    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_text_font_style = "bold"
+
+    p.yaxis.ticker = np.arange(1, len(peaks), 1)
+    p.yaxis.major_label_overrides = {i: f'{peaks[i]}' for i in range(0, len(peaks), 1)}
+    
+    return p
+    # fig=plt.figure()
+    # plt.imshow(grid, cmap = "brg")
+    # plt.ylabel("peaks")
+    # plt.xlabel("channel")
+
+    # yticks, ylabels = plt.yticks()
+    # plt.yticks(ticks = yticks[1:-1], labels = [f"{peak:.1f}" for peak in peaks])
+
+    # plt.xticks(ticks = np.arange(0,len(channels),1), labels = [f"{chmap[channel]['name']}" for channel in channels], rotation = 90)
+    # for off_det in off_dets:
+    #     loc = np.where(np.array(channels)==int(off_det))[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("red")
+    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Fits")
+    # plt.tight_layout()
+    # # plt.show()
+    # return fig
 
 def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     
@@ -361,27 +466,88 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
 
     nfits = {}
     for stri in strings:
-        res[stri]=np.nan
+        nfits[stri]=np.nan
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
                 nfits[detector] =res[f"ch{channel:07}"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
             except:
                 nfits[detector] =np.nan
+    
+    p = figure(width=1400, height=600, y_range=(-3, 50), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E fits"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+
+    label_res = [r if 'String' not in r else "" for r in list(nfits)]
+
+    df_plot = pd.DataFrame()
+    df_plot["label_res"]  = label_res
+
+    df_plot["x_nfits"] = np.arange(1, len(list(nfits))+1, 1)
+    df_plot["nfits"] = np.nan_to_num(list(nfits.values()))
+
+    filter_types = ["nfits"]
+    filter_names = ["Valid. A/E fits"]
+    filter_plot_colors = ["blue"]
+
+
+    # df_plot = ColumnDataSource(df_plot)
+    for filter_type, filter_name, filter_plot_color in zip(filter_types, filter_names, filter_plot_colors):
+
+        if filter_name == "Valid. A/E fits":
+            hover_renderer = p.circle(x=f"x_{filter_type}", y=filter_type, source=df_plot, color=filter_plot_color, size=7, line_alpha=0,
+                legend_label = filter_name,
+                name = filter_name
+                )
+        else:
+            p.circle(x=f"x_{filter_type}", y=filter_type, source=df_plot, color=filter_plot_color, size=7, line_alpha=0,
+                legend_label = filter_name,
+                name = filter_name
+                )
+
+
+    p.legend.location = "top_right"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = "Detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "# of A/E Fits"
+    p.yaxis.axis_label_text_font_size = "20px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = np.arange(1, len(list(nfits)), 1)
+    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_text_font_style = "bold"
+
+    for stri in strings:
+        loc=np.where(np.array(list(nfits))==stri)[0][0]
+        string_span = Span(location=loc+1, dimension='height',
+                    line_color='black', line_width=3)
+        string_span_label = Label(x=loc+1.5, y=-2.5, text=stri, text_font_size='10pt', text_color='blue')
+        p.add_layout(string_span_label)
+        p.add_layout(string_span)
         
-    fig=plt.figure()
-    plt.scatter(list(nfits), [nfits[channel] for channel in nfits])
-    plt.tick_params(axis='x', labelrotation=90)
-    for off_det in off_dets:
-        loc = np.where(np.array(list(nfits))==off_det)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("red")
-    plt.xlabel('Channel')
-    plt.ylabel('# of A/E fits')
-    plt.grid(linestyle='dashed', linewidth=0.5,which="both", axis='both')
-    plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E fits")
-    plt.tight_layout()
-    plt.close()
-    return fig
+    p.hover.tooltips = [( 'Detector',   '@label_res'),
+                        ( 'Valid. A/E fits',  '@nfits')
+                        ]
+    p.hover.mode = 'vline'
+    p.hover.renderers = [hover_renderer]
+    
+    return p
+    
+    # fig=plt.figure()
+    # plt.scatter(list(nfits), [nfits[channel] for channel in nfits])
+    # plt.tick_params(axis='x', labelrotation=90)
+    # for off_det in off_dets:
+    #     loc = np.where(np.array(list(nfits))==off_det)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("red")
+    # plt.xlabel('Channel')
+    # plt.ylabel('# of A/E fits')
+    # plt.grid(linestyle='dashed', linewidth=0.5,which="both", axis='both')
+    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E fits")
+    # plt.tight_layout()
+    # plt.close()
+    # return fig
 
 def get_aoe_results(run, run_dict, path, key="String"):
 
@@ -405,34 +571,34 @@ def get_aoe_results(run, run_dict, path, key="String"):
         all_res = json.load(r)
     
     default = {'A/E_Energy_param': 'cuspEmax', 
-                                 'Cal_energy_param': 'cuspEmax_ctc', 
-                                 'dt_param': 'dt_eff', 
-                                 'rt_correction': False, 
-                                 'Mean_pars': [np.nan, np.nan], 
-                                 'Sigma_pars': [np.nan, np.nan], 
-                                 'Low_cut': np.nan, 'High_cut': np.nan, 
-                                 'Low_side_sfs': {
-                                     '1592.5': {
-                                         'sf': np.nan, 
-                                         'sf_err': np.nan}, 
-                                     '1620.5': {'sf': np.nan, 
+                                'Cal_energy_param': 'cuspEmax_ctc', 
+                                'dt_param': 'dt_eff', 
+                                'rt_correction': False, 
+                                'Mean_pars': [np.nan, np.nan], 
+                                'Sigma_pars': [np.nan, np.nan], 
+                                'Low_cut': np.nan, 'High_cut': np.nan, 
+                                'Low_side_sfs': {
+                                    '1592.5': {
+                                        'sf': np.nan, 
+                                        'sf_err': np.nan}, 
+                                    '1620.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                     '2039': {'sf': np.nan, 
-                                              'sf_err': np.nan}, 
-                                     '2103.53': {'sf': np.nan, 
-                                                 'sf_err': np.nan}, 
-                                     '2614.5': {'sf': np.nan, 
+                                    '2039': {'sf': np.nan, 
+                                            'sf_err': np.nan}, 
+                                    '2103.53': {'sf': np.nan, 
+                                                'sf_err': np.nan}, 
+                                    '2614.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}}, 
-                                 '2_side_sfs': {
-                                     '1592.5': {'sf': np.nan, 
+                                '2_side_sfs': {
+                                    '1592.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                     '1620.5': {'sf': np.nan, 
+                                    '1620.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                     '2039': {'sf': np.nan, 
-                                              'sf_err': np.nan}, 
-                                     '2103.53': {'sf': np.nan, 
-                                                 'sf_err': np.nan}, 
-                                     '2614.5': {'sf': np.nan, 
+                                    '2039': {'sf': np.nan, 
+                                            'sf_err': np.nan}, 
+                                    '2103.53': {'sf': np.nan, 
+                                                'sf_err': np.nan}, 
+                                    '2614.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}}}
             
         
@@ -449,77 +615,164 @@ def get_aoe_results(run, run_dict, path, key="String"):
 
             if len(list(aoe_res[detector])) ==10:
                 aoe_res[detector].update({
-                                 'Low_side_sfs': {
-                                     '1592.5': {
-                                         'sf': np.nan, 
-                                         'sf_err': np.nan}, 
-                                     '1620.5': {'sf': np.nan, 
+                                'Low_side_sfs': {
+                                    '1592.5': {
+                                        'sf': np.nan, 
+                                        'sf_err': np.nan}, 
+                                    '1620.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                     '2039': {'sf': np.nan, 
-                                              'sf_err': np.nan}, 
-                                     '2103.53': {'sf': np.nan, 
-                                                 'sf_err': np.nan}, 
-                                     '2614.5': {'sf': np.nan, 
+                                    '2039': {'sf': np.nan, 
+                                            'sf_err': np.nan}, 
+                                    '2103.53': {'sf': np.nan, 
+                                                'sf_err': np.nan}, 
+                                    '2614.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}}, 
-                                 '2_side_sfs': {
-                                     '1592.5': {'sf': np.nan, 
+                                '2_side_sfs': {
+                                    '1592.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                     '1620.5': {'sf': np.nan, 
+                                    '1620.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                     '2039': {'sf': np.nan, 
-                                              'sf_err': np.nan}, 
-                                     '2103.53': {'sf': np.nan, 
-                                                 'sf_err': np.nan}, 
-                                     '2614.5': {'sf': np.nan, 
+                                    '2039': {'sf': np.nan, 
+                                            'sf_err': np.nan}, 
+                                    '2103.53': {'sf': np.nan, 
+                                                'sf_err': np.nan}, 
+                                    '2614.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}}})  
 
             elif len(list(aoe_res[detector])) <10:
                 aoe_res[detector] = default
-                
-    fig = plt.figure()
-    plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["1592.5"]["sf"]) for det in aoe_res],
-                yerr=[float(aoe_res[det]["Low_side_sfs"]["1592.5"]["sf_err"]) for det in aoe_res], 
-                 marker='o',linestyle = ' ', 
-                 label = 'Tl DEP')
+    
+    p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E Survival Fractions"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
 
-    plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["1620.5"]["sf"]) for det in aoe_res],
-                yerr=[float(aoe_res[det]["Low_side_sfs"]["1620.5"]["sf_err"]) for det in aoe_res], 
-                 marker='o',linestyle = ' ',  
-                 label = f'Bi FEP')
-    plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2039"]["sf"]) for det in aoe_res],
-                yerr=[float(aoe_res[det]["Low_side_sfs"]["2039"]["sf_err"]) for det in aoe_res], 
-                 marker='o',linestyle = ' ',  
-                 label = r'CC @ $Q_{\beta \beta}$')
-    plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2103.53"]["sf"]) for det in aoe_res],
-                yerr=[float(aoe_res[det]["Low_side_sfs"]["2103.53"]["sf_err"]) for det in aoe_res], 
-                 marker='o',linestyle = ' ',  
-                 label = f'Tl SEP')
-    plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2614.5"]["sf"]) for det in aoe_res],
-                yerr=[float(aoe_res[det]["Low_side_sfs"]["2614.5"]["sf_err"]) for det in aoe_res], 
-                 marker='o',linestyle = ' ',  
-                 label = f'Tl FEP')
+    label_res = [r if 'String' not in r else "" for r in list(aoe_res)]
+
+    df_plot = pd.DataFrame()
+    df_plot["label_res"]  = label_res
+
+    peak_types = ["1592.5", "1620.5", "2039", "2103.53", "2614.5"]
+    peak_names = ['Tl DEP', 'Bi FEP', "CC @ Qbb", 'Tl SEP', 'Tl FEP']
+    peak_colors = ["blue", "orange", "green", "red", "purple"]
+
+    for peak_type in peak_types:
+
+        x_plot, y_plot, y_plot_err = np.arange(1, len(list(aoe_res))+1, 1), [float(aoe_res[det]["Low_side_sfs"][peak_type]["sf"]) for det in aoe_res], [float(aoe_res[det]["Low_side_sfs"][peak_type]["sf_err"]) for det in aoe_res]
+
+        err_xs = []
+        err_ys = []
+
+        for x, y, yerr in zip(x_plot, y_plot, y_plot_err):
+            err_xs.append((x, x))
+            err_ys.append((np.nan_to_num(y - yerr), np.nan_to_num(y + yerr)))
+
+
+        df_plot["x_{}".format(peak_type.split('.')[0])]          = np.nan_to_num(x_plot)
+        df_plot["y_{}".format(peak_type.split('.')[0])]          = np.nan_to_num(y_plot)
+        df_plot["y_{}_err".format(peak_type.split('.')[0])]      = np.nan_to_num(y_plot_err)
+        df_plot["err_xs_{}".format(peak_type.split('.')[0])]     = err_xs
+        df_plot["err_ys_{}".format(peak_type.split('.')[0])]     = err_ys
+
+
+    # df_plot = ColumnDataSource(df_plot)
+    for peak_type, peak_name, peak_color in zip(peak_types, peak_names, peak_colors):
+
+        if peak_type == "1592.5":
+            hover_renderer = p.circle(x="x_{}".format(peak_type.split('.')[0]), y="y_{}".format(peak_type.split('.')[0]), source=df_plot, 
+                color=peak_color, size=7, line_alpha=0,
+                legend_label = peak_name, 
+                name = peak_name
+                )
+        else:
+            p.circle(x="x_{}".format(peak_type.split('.')[0]), y="y_{}".format(peak_type.split('.')[0]), source=df_plot, 
+                color=peak_color, size=7, line_alpha=0,
+                legend_label = peak_name, 
+                name = peak_name
+                )
+        p.multi_line(xs="err_xs_{}".format(peak_type.split('.')[0]), ys="err_ys_{}".format(peak_type.split('.')[0]), source=df_plot,
+                color=peak_color,
+                legend_label = peak_name, 
+                name = peak_name
+                )
+
+
+    p.legend.location = "top_right"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = "Detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = 'Survival fraction (%)'
+    p.yaxis.axis_label_text_font_size = "20px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = np.arange(1, len(list(aoe_res)), 1)
+    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_text_font_style = "bold"
 
     for stri in strings:
         loc=np.where(np.array(list(aoe_res))==stri)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("blue")
-        plt.axvline(stri, color='black')
-    plt.tick_params(axis='x', labelrotation=90)
-    for off_det in off_dets:
-        loc = np.where(np.array(list(aoe_res))==off_det)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("red")
-    plt.yticks(np.arange(0,110,10))
-    plt.xlabel('Detector')
-    plt.ylabel('Survival fraction')
-    plt.grid(linestyle='dashed', linewidth=0.5)
-    plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E Survival Fractions")
-    plt.legend(loc='upper right')
-    plt.ylim([0,100])
-    plt.tight_layout()
-    #plt.savefig("/data1/users/marshall/prod-ref/optim_test/aoe.png")
-    plt.close()
+        string_span = Span(location=loc+1, dimension='height',
+                    line_color='black', line_width=3)
+        string_span_label = Label(x=loc+1.5, y=-5, text=stri, text_font_size='10pt', text_color='blue')
+        p.add_layout(string_span_label)
+        p.add_layout(string_span)
+        
+    p.hover.tooltips = [( 'Detector',   '@label_res'),
+                        ( 'SF CC @Qbb',  '@y_2039{0.0} +- @y_2039_err{0.0} %'),
+                        ( 'SF Tl DEP',  '@y_1592{0.0} +- @y_1592_err{0.0} %'),
+                        ( 'SF Bi FEP',  '@y_1620{0.0} +- @y_1620_err{0.0} %'),
+                        ( 'SF Tl SEP',  '@y_2103{0.0} +- @y_2103_err{0.0} %'),
+                        ( 'SF Tl FEP',  '@y_2614{0.0} +- @y_2614_err{0.0} %'),
+                        ]
+    p.hover.mode = 'vline'
+    p.hover.renderers = [hover_renderer]
+    
+    return p
+                
+    # fig = plt.figure()
+    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["1592.5"]["sf"]) for det in aoe_res],
+    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["1592.5"]["sf_err"]) for det in aoe_res], 
+    #              marker='o',linestyle = ' ', 
+    #              label = 'Tl DEP')
+
+    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["1620.5"]["sf"]) for det in aoe_res],
+    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["1620.5"]["sf_err"]) for det in aoe_res], 
+    #              marker='o',linestyle = ' ',  
+    #              label = f'Bi FEP')
+    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2039"]["sf"]) for det in aoe_res],
+    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["2039"]["sf_err"]) for det in aoe_res], 
+    #              marker='o',linestyle = ' ',  
+    #              label = r'CC @ $Q_{\beta \beta}$')
+    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2103.53"]["sf"]) for det in aoe_res],
+    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["2103.53"]["sf_err"]) for det in aoe_res], 
+    #              marker='o',linestyle = ' ',  
+    #              label = f'Tl SEP')
+    # plt.errorbar(list(aoe_res), [float(aoe_res[det]["Low_side_sfs"]["2614.5"]["sf"]) for det in aoe_res],
+    #             yerr=[float(aoe_res[det]["Low_side_sfs"]["2614.5"]["sf_err"]) for det in aoe_res], 
+    #              marker='o',linestyle = ' ',  
+    #              label = f'Tl FEP')
+
+    # for stri in strings:
+    #     loc=np.where(np.array(list(aoe_res))==stri)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("blue")
+    #     plt.axvline(stri, color='black')
+    # plt.tick_params(axis='x', labelrotation=90)
+    # for off_det in off_dets:
+    #     loc = np.where(np.array(list(aoe_res))==off_det)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("red")
+    # plt.yticks(np.arange(0,110,10))
+    # plt.xlabel('Detector')
+    # plt.ylabel('Survival fraction')
+    # plt.grid(linestyle='dashed', linewidth=0.5)
+    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E Survival Fractions")
+    # plt.legend(loc='upper right')
+    # plt.ylim([0,100])
+    # plt.tight_layout()
+    # #plt.savefig("/data1/users/marshall/prod-ref/optim_test/aoe.png")
+    # plt.close()
 
     
-    return fig
+    # return fig
 
 
 def plot_pz_consts(run, run_dict, path, key="String"):
@@ -555,24 +808,106 @@ def plot_pz_consts(run, run_dict, path, key="String"):
             except:
                 taus[det] =np.nan
     
-    fig = plt.figure()
-    plt.errorbar(list(taus),[taus[det] for det in taus] ,yerr=10,
-                 marker='o', color='deepskyblue', linestyle = '')
+    p = figure(width=1400, height=600, y_range=(350, 800), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} Pole Zero Constants"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+
+    label_res = [r if 'String' not in r else "" for r in list(taus)]
+
+    df_plot = pd.DataFrame()
+    df_plot["label_res"]  = label_res
+
+    pz_types = ["pz_constant"]
+    pz_names = ["PZ constant"]
+    pz_colors = ["blue"]
+
+    for pz_type in pz_types:
+
+        x_plot, y_plot, y_plot_err = np.arange(1, len(list(taus))+1, 1), [taus[det] for det in taus], [10]*len(taus)
+
+        err_xs = []
+        err_ys = []
+
+        for x, y, yerr in zip(x_plot, y_plot, y_plot_err):
+            err_xs.append((x, x))
+            err_ys.append((np.nan_to_num(y - yerr), np.nan_to_num(y + yerr)))
+
+
+        df_plot["x_{}".format(pz_type.split('_')[0])]          = np.nan_to_num(x_plot)
+        df_plot["y_{}".format(pz_type.split('_')[0])]          = np.nan_to_num(y_plot)
+        df_plot["y_{}_err".format(pz_type.split('_')[0])]      = np.nan_to_num(y_plot_err)
+        df_plot["err_xs_{}".format(pz_type.split('_')[0])]     = err_xs
+        df_plot["err_ys_{}".format(pz_type.split('_')[0])]     = err_ys
+
+
+    # df_plot = ColumnDataSource(df_plot)
+    for pz_type, pz_name, pz_color in zip(pz_types, pz_names, pz_colors):
+
+        if pz_type == "pz_constant":
+            hover_renderer = p.circle(x="x_{}".format(pz_type.split('_')[0]), y="y_{}".format(pz_type.split('_')[0]), source=df_plot, 
+                color=pz_color, size=7, line_alpha=0,
+                legend_label = pz_name, 
+                name = pz_name
+                )
+        else:
+            p.circle(x="x_{}".format(pz_type.split('_')[0]), y="y_{}".format(pz_type.split('_')[0]), source=df_plot, 
+                color=pz_color, size=7, line_alpha=0,
+                legend_label = pz_name, 
+                name = pz_name
+                )
+        p.multi_line(xs="err_xs_{}".format(pz_type.split('_')[0]), ys="err_ys_{}".format(pz_type.split('_')[0]), source=df_plot,
+                color=pz_color,
+                legend_label = pz_name, 
+                name = pz_name
+                )
+
+
+    p.legend.location = "top_right"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = "Detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = 'PZ constant (µs)'
+    p.yaxis.axis_label_text_font_size = "20px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = np.arange(1, len(list(taus)), 1)
+    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_text_font_style = "bold"
+
     for stri in strings:
         loc=np.where(np.array(list(taus))==stri)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("blue")
-        plt.axvline(stri, color='black')
-    plt.tick_params(axis='x', labelrotation=90)
-    for off_det in off_dets:
-        loc = np.where(np.array(list(taus))==off_det)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("red")
-    plt.xlabel('Detector')
-    plt.ylabel(f'Pz constant ($\mu s$)')
-    plt.grid(linestyle='dashed', linewidth=0.5)
-    plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Pole Zero Constants")
-    plt.tight_layout()
-    plt.close()
-    return fig
+        string_span = Span(location=loc+1, dimension='height',
+                    line_color='black', line_width=3)
+        string_span_label = Label(x=loc+1.5, y=350, text=stri, text_font_size='10pt', text_color='blue')
+        p.add_layout(string_span_label)
+        p.add_layout(string_span)
+        
+    p.hover.tooltips = [( 'Detector',   '@label_res'),
+                        ( 'PZ const.',  '@y_pz{0.0} +- @y_pz_err{0.0} µs')
+                        ]
+    p.hover.mode = 'vline'
+    p.hover.renderers = [hover_renderer]
+
+    return p
+    # fig = plt.figure()
+    # plt.errorbar(list(taus),[taus[det] for det in taus] ,yerr=10,
+    #              marker='o', color='deepskyblue', linestyle = '')
+    # for stri in strings:
+    #     loc=np.where(np.array(list(taus))==stri)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("blue")
+    #     plt.axvline(stri, color='black')
+    # plt.tick_params(axis='x', labelrotation=90)
+    # for off_det in off_dets:
+    #     loc = np.where(np.array(list(taus))==off_det)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("red")
+    # plt.xlabel('Detector')
+    # plt.ylabel(f'Pz constant ($\mu s$)')
+    # plt.grid(linestyle='dashed', linewidth=0.5)
+    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Pole Zero Constants")
+    # plt.tight_layout()
+    # plt.close()
+    # return fig
 
 def plot_alpha(run, run_dict, path, key="String"):
     
@@ -615,29 +950,95 @@ def plot_alpha(run, run_dict, path, key="String"):
                 cusp_alpha[det]=np.nan
                 zac_alpha[det]=np.nan
 
-    fig = plt.figure()
-    plt.scatter(list(trap_alpha), [trap_alpha[det] for det in trap_alpha],
-                 marker='o', color='deepskyblue', label='Trap')
-    plt.scatter(list(cusp_alpha), [cusp_alpha[det] for det in cusp_alpha],
-                 marker='o', color='orangered', label='Cusp')
-    plt.scatter(list(zac_alpha), [zac_alpha[det] for det in zac_alpha],
-                 marker='o', color='green', label='Zac')
+    p = figure(width=1400, height=600, y_range=(-1, 4), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} Charge Trapping Constants"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+
+    label_res = [r if 'String' not in r else "" for r in list(cusp_alpha)]
+
+    df_plot = pd.DataFrame()
+    df_plot["label_res"]  = label_res
+
+    df_plot["x_cuspEmax_ctc_cal"] = np.arange(1, len(list(cusp_alpha))+1, 1)
+    df_plot["x_zacEmax_ctc_cal"] = np.arange(1, len(list(zac_alpha))+1, 1)
+    df_plot["x_trapEmax_ctc_cal"] = np.arange(1, len(list(trap_alpha))+1, 1)
+    df_plot["cuspEmax_ctc_cal"] = np.nan_to_num(list(cusp_alpha.values())) * 1e6
+    df_plot["zacEmax_ctc_cal"] = np.nan_to_num(list(zac_alpha.values())) * 1e6
+    df_plot["trapEmax_ctc_cal"] = np.nan_to_num(list(trap_alpha.values())) * 1e6
+
+    filter_types = ["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"]
+    filter_names = ["Cusp", "ZAC", "Trap"]
+    filter_plot_colors = ["blue", "green", "red"]
+
+
+    # df_plot = ColumnDataSource(df_plot)
+    for filter_type, filter_name, filter_plot_color in zip(filter_types, filter_names, filter_plot_colors):
+
+        if filter_name == "Cusp":
+            hover_renderer = p.circle(x=f"x_{filter_type}", y=filter_type, source=df_plot, color=filter_plot_color, size=7, line_alpha=0,
+                legend_label = filter_name,
+                name = filter_name
+                )
+        else:
+            p.circle(x=f"x_{filter_type}", y=filter_type, source=df_plot, color=filter_plot_color, size=7, line_alpha=0,
+                legend_label = filter_name,
+                name = filter_name
+                )
+
+
+    p.legend.location = "top_right"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = "Detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = r'$$\text{Alpha Value} (\frac{10^{-6}}{\text{ns}})$$'
+    p.yaxis.axis_label_text_font_size = "16px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = np.arange(1, len(list(cusp_alpha)), 1)
+    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_text_font_style = "bold"
+
     for stri in strings:
-        loc=np.where(np.array(list(trap_alpha))==stri)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("blue")
-        plt.axvline(stri, color='black')
-    plt.tick_params(axis='x', labelrotation=90)
-    for off_det in off_dets:
-        loc = np.where(np.array(list(trap_alpha))==off_det)[0][0]
-        plt.gca().get_xticklabels()[loc].set_color("red")
-    plt.xlabel('Detector')
-    plt.ylabel(f'Alpha Value (1/ns)')
-    plt.grid(linestyle='dashed', linewidth=0.5)
-    plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Charge Trapping Constants")
-    plt.legend(loc="upper right")
-    plt.tight_layout()
-    plt.close()
-    return fig
+        loc=np.where(np.array(list(cusp_alpha))==stri)[0][0]
+        string_span = Span(location=loc+1, dimension='height',
+                    line_color='black', line_width=3)
+        string_span_label = Label(x=loc+1.5, y=-0.95, text=stri, text_font_size='10pt', text_color='blue')
+        p.add_layout(string_span_label)
+        p.add_layout(string_span)
+        
+    p.hover.tooltips = [( 'Detector',   '@label_res'),
+                        ( 'Alpha Cusp',  '@cuspEmax_ctc_cal{0.00e}'),
+                        ( 'Alpha ZAC ',  '@zacEmax_ctc_cal{0.00}'),
+                        ( 'Alpha Trap',  '@trapEmax_ctc_cal{0.00}')
+                        ]
+    p.hover.mode = 'vline'
+    p.hover.renderers = [hover_renderer]
+    
+    return p
+    # fig = plt.figure()
+    # plt.scatter(list(trap_alpha), [trap_alpha[det] for det in trap_alpha],
+    #              marker='o', color='deepskyblue', label='Trap')
+    # plt.scatter(list(cusp_alpha), [cusp_alpha[det] for det in cusp_alpha],
+    #              marker='o', color='orangered', label='Cusp')
+    # plt.scatter(list(zac_alpha), [zac_alpha[det] for det in zac_alpha],
+    #              marker='o', color='green', label='Zac')
+    # for stri in strings:
+    #     loc=np.where(np.array(list(trap_alpha))==stri)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("blue")
+    #     plt.axvline(stri, color='black')
+    # plt.tick_params(axis='x', labelrotation=90)
+    # for off_det in off_dets:
+    #     loc = np.where(np.array(list(trap_alpha))==off_det)[0][0]
+    #     plt.gca().get_xticklabels()[loc].set_color("red")
+    # plt.xlabel('Detector')
+    # plt.ylabel(f'Alpha Value (1/ns)')
+    # plt.grid(linestyle='dashed', linewidth=0.5)
+    # plt.title(f"{run_dict['experiment']}-{run_dict['period']}-{run} Charge Trapping Constants")
+    # plt.legend(loc="upper right")
+    # plt.tight_layout()
+    # plt.close()
+    # return fig
 
 def plot_bls(plot_dict,chan_dict, channels, 
              string, key="String"):
