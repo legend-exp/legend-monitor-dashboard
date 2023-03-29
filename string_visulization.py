@@ -163,7 +163,8 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", palette = i
     ("String", "@st"),
     ("Usability", "@hw"),
     ("Processable", "@sw"),
-    ("Mass", "@mass")
+    ("Mass", "@mass"),
+    (f"{ctitle}", "$y")
     ]
     
     # To Do: find optimal width and height values for plotting (do not hardcode)
