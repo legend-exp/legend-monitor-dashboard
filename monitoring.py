@@ -158,7 +158,7 @@ class monitoring(param.Parameterized):
     
     @param.depends("run", "phy_plots", watch=True)
     def _get_phy_data(self):
-        data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy'
+        data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds'
         if not os.path.exists(data_file +'.dat'):
             self.phy_data_df = pd.DataFrame()
         else:
