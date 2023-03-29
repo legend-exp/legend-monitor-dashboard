@@ -7,20 +7,23 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 
+import panel as pn
+
 import legend_data_monitor as ldm
 
+# @pn.cache(max_items=50, policy='LFU', to_disk=True)
 def phy_plot_vsTime(data_string, plot_info, string):
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = string + " " + plot_info['label']
     p.title.align = "center"
     p.title.text_font_size = "25px"
-    p.hover.formatters = {'$x': 'datetime', '@baseline_mean': 'printf'}
+    p.hover.formatters = {'$x': 'datetime', '$y': 'printf'}
     p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
                         ( plot_info['label'],  '$y' ), 
                         ( 'Channel', '$name'),
                         ('Position', '@position'),
                         ('CC4', '@cc4_id'),
-                        ('Mean Value', '@baseline_mean {}'.format(plot_info["unit"]))]
+                        ('Mean Value', '$y {}'.format(plot_info["unit"]))]
     p.hover.mode = 'vline'
     
     len_colours = data_string['position'].max()

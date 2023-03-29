@@ -249,7 +249,14 @@ def plot_visu_operation(source, chan_dict, channel_map, xlabels):
 
 
 def plot_visu_enrichment(source, chan_dict, channel_map, xlabels):
-    display_dict = {i : np.nan_to_num(channel_map[i]['production']['enrichment'])*100 for i in source.data['ch']}
+    def get_enrichment(channel):
+        try:
+            ret = channel_map[channel]['production']['enrichment']*100
+        except:
+            ret = 0.0
+        return ret
+
+    display_dict = {i : get_enrichment(i) for i in source.data['ch']}
     ctitle = 'Enrichment in %'
     return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle)
 

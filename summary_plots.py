@@ -93,7 +93,7 @@ def plot_status(run, run_dict, path, source, xlabels, key =None):
     display_dict = {cmap[i]['daq']['rawid'] : 1 if status_map[i]["processable"] == True and status_map[i]["usability"] == 'on' else 0
         for i in dets}
     palette = ('red', 'green')
-    ctitle = 'Working Detectors'
+    ctitle = 'Working Detector'
     ticker = FixedTicker(ticks=[0.25,0.75], tags = ['Non-Working', 'Working'])
     formatter = FuncTickFormatter(code="""
         var mapping = {0.25: "Non-Working", 0.75: "Working"};
