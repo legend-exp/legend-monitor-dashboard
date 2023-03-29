@@ -156,7 +156,7 @@ def get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict, ΔR = 160,
 
 
 def create_detector_plot(source, display_dict, xlabels, ctitle = "", palette = inferno(256), ticker = BasicTicker(), formatter = None):
-    
+    source.data["y_label"] = list(map(lambda i: display_dict[i], source.data["ch"]))
     tooltips = [
     ("Detector Name", "@dn"),
     ("Channel", "@ch"),
@@ -164,7 +164,7 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", palette = i
     ("Usability", "@hw"),
     ("Processable", "@sw"),
     ("Mass", "@mass"),
-    (f"{ctitle}", "$y")
+    (f"{ctitle}", "@y_label")
     ]
     
     # To Do: find optimal width and height values for plotting (do not hardcode)
