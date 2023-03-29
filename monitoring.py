@@ -188,7 +188,7 @@ class monitoring(param.Parameterized):
         out_dict = {key:self.run_dict[key] for key in valid_keys}
         return out_dict
     
-    @param.depends("run")
+    @param.depends("run", watch=True)
     def _get_metadata(self):
         chan_dict, channel_map = self.chan_dict, self.channel_map
         
