@@ -266,6 +266,7 @@ class monitoring(param.Parameterized):
         
         return figure
     
+    # @pn.cache(max_items=50, policy='LFU', to_disk=True)
     @param.depends("run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled")
     def view_phy(self):
         # update plot dict with resampled value
