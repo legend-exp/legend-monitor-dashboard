@@ -9,6 +9,7 @@ import param
 import pickle as pkl
 import shelve
 import bisect
+import time
 
 import datetime as dtt
 from  datetime import datetime
@@ -95,13 +96,15 @@ class monitoring(param.Parameterized):
     run = param.Selector(default = 0, objects = [0])
     
     # physics plots 
-    phy_plots_vals          = ['baseline', 'cuspEmax', 'cuspEmax_ctc_cal', 'bl_std']
+    phy_plots_vals          = ['baseline', 'cuspEmax', 'cuspEmax_ctc_cal', 'bl_std', 'AoE_Corrected', 'AoE_Classifier']
     phy_plot_style_dict     = {'Time': phy_plot_vsTime, 'Histogram': phy_plot_histogram}
     phy_resampled_vals      = ['yes', 'no', 'only']
+    phy_unit_vals           = ['Relative', 'Absolute']
     
     phy_plots           = param.ObjectSelector(default=phy_plots_vals[0], objects=phy_plots_vals, label="Value")
     phy_plot_style      = param.ObjectSelector(default=list(phy_plot_style_dict)[0], objects=list(phy_plot_style_dict), label="Plot Style")
     phy_resampled       = param.ObjectSelector(default=phy_resampled_vals[1], objects=phy_resampled_vals, label="Resampled")
+    phy_units           = param.ObjectSelector(default=phy_unit_vals[0], objects=phy_unit_vals, label="Units")
     
     # visualization
     meta_visu_plots_dict = {"Usability": plot_visu_usability, "Processable": plot_visu_processable, "Processable": plot_visu_processable,
@@ -116,13 +119,15 @@ class monitoring(param.Parameterized):
         self.phy_path=phy_path
         self.period = period
         self.cached_plots ={}
+        # self.phy_plot_info_run_cache = {}
+        # self.phy_data_run_cache = {}
         prod_config = os.path.join(self.path, "config.json")
         self.prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
         
         self.run_dict = gen_run_dict(self.path)
+        
         self.param["run"].objects = list(self.run_dict)
         self.run = list(self.run_dict)[-1]
-
         self.periods = {}
         for run in self.run_dict: 
             if self.run_dict[run]['period'] not in self.periods:
@@ -142,10 +147,8 @@ class monitoring(param.Parameterized):
         self.update_plot_type_details()
         self.update_strings()
         
-        
         self.phy_data_df = pd.DataFrame()
         self.phy_plot_info = {}
-        
         self._get_phy_data()
         
         self.meta_df = pd.DataFrame()
@@ -160,20 +163,22 @@ class monitoring(param.Parameterized):
     def _get_phy_data(self):
         data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds'
         if not os.path.exists(data_file +'.dat'):
-            self.phy_data_df = pd.DataFrame()
+            phy_data_df = pd.DataFrame()
+            phy_plot_info = {}
         else:
-            with shelve.open(data_file) as file:
+            with shelve.open(data_file, 'r', protocol=pkl.HIGHEST_PROTOCOL) as file:
 
                 # take df with parameter you want
-                self.phy_data_df = file['monitoring']['pulser'][self.phy_plots]['df_geds']
+                phy_data_df = file['monitoring']['pulser'][self.phy_plots]['df_geds']
                 
                 # take a random plot_info, it should be enough to save only one per time
-                self.phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
+                phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
                     
                 # set plotting options
-                self.phy_plot_info['plot_style'] = self.phy_plot_style
-                self.phy_plot_info['resampled'] = self.phy_resampled
-        
+                phy_plot_info['plot_style'] = self.phy_plot_style
+                phy_plot_info['resampled'] = self.phy_resampled
+        self.phy_data_df, self.phy_plot_info = phy_data_df, phy_plot_info
+            
     @param.depends("date_range", watch=True)
     def _get_run_dict(self):
         valid_from = [datetime.timestamp(datetime.strptime(self.run_dict[entry]["timestamp"], '%Y%m%dT%H%M%SZ')) for entry in self.run_dict]
@@ -190,42 +195,45 @@ class monitoring(param.Parameterized):
     
     @param.depends("run", watch=True)
     def _get_metadata(self):
-        chan_dict, channel_map = self.chan_dict, self.channel_map
-        
-        df_chan_dict = pd.DataFrame.from_dict(chan_dict).T
-        df_chan_dict.index.name = 'name'
-        df_chan_dict = df_chan_dict.reset_index()
-        
-        df_channel_map = pd.DataFrame.from_dict(channel_map).T
-        df_channel_map = df_channel_map[df_channel_map['system'] == 'geds']
-        
-        df_out = pd.merge(df_channel_map, df_chan_dict, left_on='name', right_on='name')
-        df_out = df_out.reset_index().set_index('name')[['processable', 'usability', 'daq', 'location', 'voltage', 'electronics', 'characterization', 'production', 'type']]
-        df_out['daq'] = df_out['daq'].map(lambda x: "Crate: {}, Card: {}".format(x['crate'], x['card']['id']))
-        df_out['location'] = df_out['location'].map(lambda x: "String: {:>02d}, Pos.: {:>02d}".format(x['string'], x['position']))
-        df_out['voltage'] = df_out['voltage'].map(lambda x: "Card: {:>02d}, Ch.: {:>02d}".format(x['card']['id'], x['channel']))
-        df_out['electronics'] = df_out['electronics'].map(lambda x: "CC4: {}, Ch.: {:>02d}".format(x['cc4']['id'], x['cc4']['channel']))
-        df_out['usability'] =  df_out['usability'].map(lambda x: True if x == 'on' else False)
-        # df_out['processable'] =  df_out['processable'].map(lambda x: True if x == 'True' else False)
-        df_out['Depl. Vol. (kV)'] = df_out['characterization'].map(lambda x: get_characterization(x, 'depletion_voltage_in_V'))/1000
-        df_out['Oper. Vol. (kV)'] = df_out['characterization'].map(lambda x: get_characterization(x, 'recommended_voltage_in_V'))/1000
-        df_out['Manufacturer'] = df_out['production'].map(lambda x: get_production(x, 'manufacturer'))
-        df_out['Mass (kg)'] = df_out['production'].map(lambda x: get_production(x, 'mass_in_g'))/1000
-        df_out['Order'] = df_out['production'].map(lambda x: get_production(x, 'order'))
-        df_out['Crystal'] = df_out['production'].map(lambda x: get_production(x, 'crystal'))
-        df_out['Slice'] = df_out['production'].map(lambda x: get_production(x, 'slice'))
-        df_out['Enrichment (%)'] = df_out['production'].map(lambda x: get_production(x, 'enrichment')) * 100
-        df_out['Delivery'] = df_out['production'].map(lambda x: get_production(x, 'delivered'))
-        df_out = df_out.reset_index().rename({'name': 'Det. Name', 'processable': 'Proc.', 'usability': 'Usabl.', 'daq': 'FC card',
-            'location': 'Det. Location', 'voltage': 'HV', 'electronics': 'Electronics', 'type': 'Type'}, axis=1).set_index('Det. Name')
-        df_out = df_out.drop(['characterization', 'production'], axis=1)
-        df_out = df_out.astype({'Proc.': 'bool', 'Usabl.': 'bool'})
-        self.meta_df = df_out
-        
-        # get metadata visu plot data
-        strings_dict, chan_dict, channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
-        self.meta_visu_source, self.meta_visu_xlabels = get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict)
-        self.meta_visu_chan_dict, self.meta_visu_channel_map = chan_dict, channel_map
+        try:
+            chan_dict, channel_map = self.chan_dict, self.channel_map
+            
+            df_chan_dict = pd.DataFrame.from_dict(chan_dict).T
+            df_chan_dict.index.name = 'name'
+            df_chan_dict = df_chan_dict.reset_index()
+            
+            df_channel_map = pd.DataFrame.from_dict(channel_map).T
+            df_channel_map = df_channel_map[df_channel_map['system'] == 'geds']
+            
+            df_out = pd.merge(df_channel_map, df_chan_dict, left_on='name', right_on='name')
+            df_out = df_out.reset_index().set_index('name')[['processable', 'usability', 'daq', 'location', 'voltage', 'electronics', 'characterization', 'production', 'type']]
+            df_out['daq'] = df_out['daq'].map(lambda x: "Crate: {}, Card: {}".format(x['crate'], x['card']['id']))
+            df_out['location'] = df_out['location'].map(lambda x: "String: {:>02d}, Pos.: {:>02d}".format(x['string'], x['position']))
+            df_out['voltage'] = df_out['voltage'].map(lambda x: "Card: {:>02d}, Ch.: {:>02d}".format(x['card']['id'], x['channel']))
+            df_out['electronics'] = df_out['electronics'].map(lambda x: "CC4: {}, Ch.: {:>02d}".format(x['cc4']['id'], x['cc4']['channel']))
+            df_out['usability'] =  df_out['usability'].map(lambda x: True if x == 'on' else False)
+            # df_out['processable'] =  df_out['processable'].map(lambda x: True if x == 'True' else False)
+            df_out['Depl. Vol. (kV)'] = df_out['characterization'].map(lambda x: get_characterization(x, 'depletion_voltage_in_V'))/1000
+            df_out['Oper. Vol. (kV)'] = df_out['characterization'].map(lambda x: get_characterization(x, 'recommended_voltage_in_V'))/1000
+            df_out['Manufacturer'] = df_out['production'].map(lambda x: get_production(x, 'manufacturer'))
+            df_out['Mass (kg)'] = df_out['production'].map(lambda x: get_production(x, 'mass_in_g'))/1000
+            df_out['Order'] = df_out['production'].map(lambda x: get_production(x, 'order'))
+            df_out['Crystal'] = df_out['production'].map(lambda x: get_production(x, 'crystal'))
+            df_out['Slice'] = df_out['production'].map(lambda x: get_production(x, 'slice'))
+            df_out['Enrichment (%)'] = df_out['production'].map(lambda x: get_production(x, 'enrichment')) * 100
+            df_out['Delivery'] = df_out['production'].map(lambda x: get_production(x, 'delivered'))
+            df_out = df_out.reset_index().rename({'name': 'Det. Name', 'processable': 'Proc.', 'usability': 'Usabl.', 'daq': 'FC card',
+                'location': 'Det. Location', 'voltage': 'HV', 'electronics': 'Electronics', 'type': 'Type'}, axis=1).set_index('Det. Name')
+            df_out = df_out.drop(['characterization', 'production'], axis=1)
+            df_out = df_out.astype({'Proc.': 'bool', 'Usabl.': 'bool'})
+            self.meta_df = df_out
+            
+            # get metadata visu plot data
+            strings_dict, chan_dict, channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
+            self.meta_visu_source, self.meta_visu_xlabels = get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict)
+            self.meta_visu_chan_dict, self.meta_visu_channel_map = chan_dict, channel_map
+        except:
+            pass
 
     @param.depends("date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
@@ -267,13 +275,22 @@ class monitoring(param.Parameterized):
         return figure
     
     # @pn.cache(max_items=50, policy='LFU', to_disk=True)
-    @param.depends("run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled")
+    @param.depends("run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
     def view_phy(self):
         # update plot dict with resampled value
-        self.phy_plot_info['resampled'] = self.phy_resampled
+        # set plotting options
+        phy_data_df   = self.phy_data_df
+        phy_plot_info = self.phy_plot_info
         
+        if self.phy_units == "Relative":
+            phy_plot_info["parameter"] = f"{phy_plot_info['parameter'].split('_var')[0]}_var"
+            phy_plot_info["unit_label"] = "%"
+        else:
+            phy_plot_info["parameter"] = f"{phy_plot_info['parameter'].split('_var')[0]}"
+            phy_plot_info["unit_label"] = phy_plot_info["unit"]
+            
         # return empty plot if no data exists for run
-        if self.phy_data_df.empty:
+        if phy_data_df.empty:
             p = figure(width=1000, height=600)
             p.title.text = title=f"No data for run {self.run}"
             p.title.align = "center"
@@ -282,9 +299,9 @@ class monitoring(param.Parameterized):
         
         else:
             # get all data from selected string
-            data_string = self.phy_data_df[self.phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
+            data_string = phy_data_df[phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
             # plot data
-            return self.phy_plot_style_dict[self.phy_plot_style](data_string, self.phy_plot_info, self.string)
+            return self.phy_plot_style_dict[self.phy_plot_style](data_string, phy_plot_info, self.string)
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):

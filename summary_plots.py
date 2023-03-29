@@ -99,30 +99,7 @@ def plot_status(run, run_dict, path, source, xlabels, key =None):
         var mapping = {0.25: "Non-Working", 0.75: "Working"};
         return mapping[tick];
     """)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter)
-
-    
-    
-    # data_array, x_labels, y_labels, annotations = build_status_map(cmap, status_map)
-    # fig = plt.figure(figsize=(10, 6), dpi=1000, facecolor="w", edgecolor="k")
-    # sns.set(font_scale=1)
-
-    # stat_map = sns.heatmap(
-    #     data=data_array,
-    #     yticklabels=y_labels,
-    #     xticklabels=x_labels,
-    #     cmap="Set1",
-    #     fmt='s',
-    #     cbar=False,
-
-    #     annot=annotations,
-    #     annot_kws={"fontsize":5, 'color':'white'}
-    # )
-
-    # plt.title("Working Detectors")
-    # plt.tight_layout()
-    # plt.close()
-    # return fig
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, plot_title=f"{run_dict['experiment']}-{run_dict['period']}-{run} Detector Status")
 
 def build_counts_map(chan_map, data):
     dets, strings, positions = build_string_array(chan_map)
@@ -179,33 +156,7 @@ def plot_counts(run, run_dict, path, source, xlabels, key =None):
     display_dict = res
     ctitle = 'FEP Counts'
     palette = cividis(256)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette)
-
-    
-    
-    # data_array, x_labels, y_labels, annotations = build_counts_map(cmap, res)
-    # fig = plt.figure(figsize=(10, 6), dpi=1000, facecolor="w", edgecolor="k")
-    # sns.set(font_scale=1)
-
-    # stat_map = sns.heatmap(
-    #     data=data_array,
-    #     yticklabels=y_labels,
-    #     xticklabels=x_labels,
-    #     cmap="Blues",
-    #     fmt='.0f',
-    #     cbar=False,
-    #     vmin=1000, 
-    #     vmax=3000,
-    #     annot=annotations,
-    #     annot_kws={"fontsize":5, 'color':'white'}
-    # )
-
-    # plt.title("FEP Counts")
-    # plt.tight_layout()
-    # plt.close()
-    # return fig
-    
-    
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{run_dict['period']}-{run} FEP Counts")
 
 def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
     
@@ -912,7 +863,7 @@ def plot_alpha(run, run_dict, path, key="String"):
 def plot_bls(plot_dict,chan_dict, channels, 
             string, key="String"):
 
-    p = figure(width=700, height=600, y_axis_type="log")
+    p = figure(width=700, height=600, y_axis_type="log",tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = string
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -941,7 +892,7 @@ def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string
                                     key="String", energy_param = "cuspEmax_ctc"):
     
     times = None
-    p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime')
+    p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = string
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -973,7 +924,7 @@ def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string
 def plot_energy_spectra(plot_dict, chan_dict, channels, string,  
                         key="String", energy_param = "cuspEmax_ctc"):
     
-    p = figure(width=700, height=600, y_axis_type="log")
+    p = figure(width=700, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = string
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -1005,7 +956,7 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
 def plot_baseline_stability(plot_dict, chan_dict, channels, string,  
                         key="String"):
     
-    p = figure(width=700, height=600, x_axis_type='datetime')
+    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = string
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -1041,7 +992,7 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string,
 def plot_stability(plot_dict, chan_dict, channels, string, parameter,
                                 key="String", energy_param = "cuspEmax_ctc"):
     times = None
-    p = figure(width=700, height=600, x_axis_type='datetime')
+    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = string
     p.title.align = "center"
     p.title.text_font_size = "15px"

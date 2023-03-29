@@ -155,7 +155,7 @@ def get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict, ΔR = 160,
     ), xlabels
 
 
-def create_detector_plot(source, display_dict, xlabels, ctitle = "", palette = inferno(256), ticker = BasicTicker(), formatter = None):
+def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title = "LEGEND detector monitoring", palette = inferno(256), ticker = BasicTicker(), formatter = None):
     source.data["y_label"] = list(map(lambda i: display_dict[i], source.data["ch"]))
     tooltips = [
     ("Detector Name", "@dn"),
@@ -168,7 +168,7 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", palette = i
     ]
     
     # To Do: find optimal width and height values for plotting (do not hardcode)
-    p = figure(title="LEGEND detector monitoring", width=1200, height=920,
+    p = figure(title= plot_title, width=1200, height=920,
         tools="pan,box_zoom,hover,reset,save", tooltips=tooltips, match_aspect=True)
 
     # handle colors according to display_dict
@@ -199,6 +199,8 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", palette = i
     p.yaxis.visible = False
     p.xaxis.major_label_text_font_style = "bold"
     p.xaxis.axis_label_text_font_size = "25px"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
     # return the plot
     return p
 

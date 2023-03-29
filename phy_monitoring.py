@@ -17,13 +17,15 @@ def phy_plot_vsTime(data_string, plot_info, string):
     p.title.text = string + " " + plot_info['label']
     p.title.align = "center"
     p.title.text_font_size = "25px"
-    p.hover.formatters = {'$x': 'datetime', '$y': 'printf'}
+    p.hover.formatters = {'$x': 'datetime', '$y': 'printf', '@{}_mean'.format(plot_info['parameter'].split('_var')[0]): 'printf'}
     p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
                         ( plot_info['label'],  '$y' ), 
                         ( 'Channel', '$name'),
                         ('Position', '@position'),
                         ('CC4', '@cc4_id'),
-                        ('Mean Value', '$y {}'.format(plot_info["unit"]))]
+                        (f"{plot_info['label']} ({plot_info['unit_label']})", '$y'),
+                        (f"Mean {plot_info['label']} ({plot_info['unit_label']})", '@{}_mean'.format(plot_info['parameter'].split('_var')[0]))]
+    
     p.hover.mode = 'vline'
     
     len_colours = data_string['position'].max()
@@ -124,10 +126,30 @@ def phy_plot_histogram(data_string, plot_info, string):
         x_max = (hrange[plot_info["unit"]][1] if plot_info["unit"] in hrange else data_channel[plot_info["parameter"]].max())
 
         # --- bin width
-        bwidth = {"keV": 2.5}  # what to do with binning???
-        bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else None
-        no_bins = int((x_max - x_min) / bin_width) if bin_width else 50
-        counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=no_bins, range=(x_min, x_max))
+        # bwidth = {"keV": 2.5}  # what to do with binning???
+        # bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else None
+        # no_bins = int((x_max - x_min) / bin_width) if bin_width else 50
+        # counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=no_bins, range=(x_min, x_max))
+        # bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
+        
+        # --- bin width
+        bwidth = {"keV": 2.5}
+        bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else 1
+
+        # Compute number of bins
+        if bin_width:
+            bin_no = bin_width / 5 if "AoE" not in plot_info["parameter"] else bin_width / 50
+            bin_no = bin_no / 2 if "Corrected" in plot_info["parameter"] else bin_no
+            bin_no = bin_width if "AoE" not in plot_info["parameter"] else bin_no 
+            
+            bin_edges = (
+                np.arange(x_min, x_max + bin_width, bin_no)
+                if plot_info["unit_label"] == "%"
+                else np.arange(x_min, x_max + bin_width, bin_no)
+            )
+        else:
+            bin_edges = 50 
+        counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=bin_edges, range=(x_min, x_max))
         bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
         # create plot histo
         histo_df = pd.DataFrame({"counts": counts_ch, "bins": bins_ch, "position": position, "cc4_id": data_channel['cc4_id'].unique()[0]})
