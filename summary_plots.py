@@ -158,7 +158,7 @@ def plot_counts(run, run_dict, path, source, xlabels, key =None):
     palette = cividis(256)
     return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{run_dict['period']}-{run} FEP Counts")
 
-def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
+def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb", download=False):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -234,7 +234,13 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
         df_plot["err_xs_{}".format(filter_type.split('_')[0])]     = err_xs
         df_plot["err_ys_{}".format(filter_type.split('_')[0])]     = err_ys
 
-
+    if download:
+        if at == "Qbb":
+            return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_Qbb_energy_resolutions.csv"
+        else:
+            return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_FEP_energy_resolutions.csv"
+        
+        
     for filter_type, filter_name, filter_plot_color in zip(["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"], ["Cusp", "ZAC", "Trap"], ["blue", "green", "red"]):
 
         if filter_name == "Cusp":
@@ -286,11 +292,11 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb"):
     
     return p
 
-def plot_energy_resolutions_Qbb(run, run_dict, path, key="String"):
-    return plot_energy_resolutions(run, run_dict, path, key=key, at="Qbb")
+def plot_energy_resolutions_Qbb(run, run_dict, path, key="String", download=False):
+    return plot_energy_resolutions(run, run_dict, path, key=key, at="Qbb", download=download)
 
-def plot_energy_resolutions_2614(run, run_dict, path, key="String"):
-    return plot_energy_resolutions(run, run_dict, path, key=key, at="2.6")
+def plot_energy_resolutions_2614(run, run_dict, path, key="String", download=False):
+    return plot_energy_resolutions(run, run_dict, path, key=key, at="2.6", download=download)
 
 def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
     
@@ -306,8 +312,8 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
     off_dets = [chmap.map("name")[field].daq.rawid for field in soft_dict if soft_dict[field]["processable"]is False]
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
-                             f'cal/{run_dict["period"]}/{run}', 
-                             f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'cal/{run_dict["period"]}/{run}', 
+                            f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -454,7 +460,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     
     return p
 
-def get_aoe_results(run, run_dict, path, key="String"):
+def get_aoe_results(run, run_dict, path, key="String", download=False):
 
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -579,7 +585,9 @@ def get_aoe_results(run, run_dict, path, key="String"):
         df_plot["err_xs_{}".format(peak_type.split('.')[0])]     = err_xs
         df_plot["err_ys_{}".format(peak_type.split('.')[0])]     = err_ys
 
-
+    if download:
+        return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_AoE_SurvivalFractions.csv"
+        
     for peak_type, peak_name, peak_color in zip(peak_types, peak_names, peak_colors):
 
         if peak_type == "1592.5":
@@ -634,7 +642,7 @@ def get_aoe_results(run, run_dict, path, key="String"):
     return p
 
 
-def plot_pz_consts(run, run_dict, path, key="String"):
+def plot_pz_consts(run, run_dict, path, key="String", download=False):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -699,7 +707,9 @@ def plot_pz_consts(run, run_dict, path, key="String"):
         df_plot["err_xs_{}".format(pz_type.split('_')[0])]     = err_xs
         df_plot["err_ys_{}".format(pz_type.split('_')[0])]     = err_ys
 
-
+    if download:
+        return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_PoleZero_Constants.csv"
+        
     # df_plot = ColumnDataSource(df_plot)
     for pz_type, pz_name, pz_color in zip(pz_types, pz_names, pz_colors):
 
@@ -751,7 +761,7 @@ def plot_pz_consts(run, run_dict, path, key="String"):
     return p
 
 
-def plot_alpha(run, run_dict, path, key="String"):
+def plot_alpha(run, run_dict, path, key="String", download=False):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -766,8 +776,8 @@ def plot_alpha(run, run_dict, path, key="String"):
     
     
     cal_dict_path = os.path.join(prod_config["paths"]["par_dsp"], 
-                             f'cal/{run_dict["period"]}/{run}', 
-                             f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_dsp.json')
+                            f'cal/{run_dict["period"]}/{run}', 
+                            f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_dsp.json')
     
     with open(cal_dict_path,'r') as r:
         cal_dict = json.load(r)
@@ -813,7 +823,9 @@ def plot_alpha(run, run_dict, path, key="String"):
     filter_names = ["Cusp", "ZAC", "Trap"]
     filter_plot_colors = ["blue", "green", "red"]
 
-
+    if download:
+        return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_Charge_Trapping_Constants.csv"
+        
     # df_plot = ColumnDataSource(df_plot)
     for filter_type, filter_name, filter_plot_color in zip(filter_types, filter_names, filter_plot_colors):
 
@@ -876,9 +888,9 @@ def plot_bls(plot_dict,chan_dict, channels,
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
 
             p.step(plot_dict_chan["baseline_spectrum"]["bins"], 
-                     plot_dict_chan["baseline_spectrum"]["bl_array"],
-                       legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
-                      mode="after", line_width=2, line_color = colours[i])
+                    plot_dict_chan["baseline_spectrum"]["bl_array"],
+                    legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                    mode="after", line_width=2, line_color = colours[i])
         except:
             pass
         

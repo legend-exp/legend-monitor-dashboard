@@ -113,11 +113,16 @@ class monitoring(param.Parameterized):
     
     meta_visu_plots = param.ObjectSelector(default=list(meta_visu_plots_dict)[0], objects=list(meta_visu_plots_dict))
     
-    def __init__(self, cal_path, phy_path, period, name=None):
+    # downloads
+    plot_types_download_dict = ["FWHM Qbb", "FWHM FEP", "A/E", "Tau", "Alpha"]
+    plot_types_download = param.Selector(default = plot_types_download_dict[0], objects= plot_types_download_dict)
+    
+    def __init__(self, cal_path, phy_path, period, tmp_path, name=None):
         super().__init__(name=name)
         self.path=cal_path
         self.phy_path=phy_path
         self.period = period
+        self.tmp_path = tmp_path
         self.cached_plots ={}
         # self.phy_plot_info_run_cache = {}
         # self.phy_data_run_cache = {}
@@ -173,10 +178,7 @@ class monitoring(param.Parameterized):
                 
                 # take a random plot_info, it should be enough to save only one per time
                 phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
-                    
-                # set plotting options
-                phy_plot_info['plot_style'] = self.phy_plot_style
-                phy_plot_info['resampled'] = self.phy_resampled
+                
         self.phy_data_df, self.phy_plot_info = phy_data_df, phy_plot_info
             
     @param.depends("date_range", watch=True)
@@ -249,6 +251,21 @@ class monitoring(param.Parameterized):
         self.param["string"].objects = list(self.strings_dict)
         self.string = f"{list(self.strings_dict)[0]}"
         
+    @param.depends("run", "sort_by", "plot_types_download")
+    def download_summary_files(self):
+        
+        download_file, download_filename = self.plot_types_summary_dict[self.plot_types_download](self.run, 
+                                            self.run_dict[self.run], 
+                                            self.path, key=self.sort_by, download=True)
+        if not os.path.exists(self.tmp_path + download_filename):
+            download_file.to_csv(self.tmp_path + download_filename, index=False)
+        # return pn.widgets.FileDownload(file=self.tmp_path + download_file, filename=download_filename,
+        #                         button_type='success', embed=False, name="Right-click to download using 'Save as' dialog")
+        # return self.tmp_path + download_filename
+        return pn.widgets.FileDownload(self.tmp_path + download_filename,
+                                button_type='success', embed=False, name="Click to download 'csv'", width=350)
+
+    
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None
@@ -279,6 +296,7 @@ class monitoring(param.Parameterized):
     def view_phy(self):
         # update plot dict with resampled value
         # set plotting options
+        startt = time.time()
         phy_data_df   = self.phy_data_df
         phy_plot_info = self.phy_plot_info
         
@@ -288,7 +306,10 @@ class monitoring(param.Parameterized):
         else:
             phy_plot_info["parameter"] = f"{phy_plot_info['parameter'].split('_var')[0]}"
             phy_plot_info["unit_label"] = phy_plot_info["unit"]
-            
+        
+        # set plotting options
+        phy_plot_info['plot_style'] = self.phy_plot_style
+        phy_plot_info['resampled'] = self.phy_resampled
         # return empty plot if no data exists for run
         if phy_data_df.empty:
             p = figure(width=1000, height=600)
@@ -301,6 +322,7 @@ class monitoring(param.Parameterized):
             # get all data from selected string
             data_string = phy_data_df[phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
             # plot data
+            # print("Time to plot: ", time.time()-startt, "s")
             return self.phy_plot_style_dict[self.phy_plot_style](data_string, phy_plot_info, self.string)
 
     @param.depends("run", watch=True)
