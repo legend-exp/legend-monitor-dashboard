@@ -19,6 +19,7 @@ from legendmeta.catalog import Props
 
 from bokeh.models.widgets.tables import NumberFormatter, BooleanFormatter
 import holoviews as hv
+from bokeh.plotting import figure, show
 
 hv.extension('bokeh')
 
@@ -29,10 +30,16 @@ class llama_monitoring(param.Parameterized):
         
         
     def view_llama(self):
-        llama_data = pd.read_csv(self.llama_path + 'monivalues.txt', sep='\s+', dtype={'timestamp': np.int64}, parse_dates=[1])
-        llama_data["timestamp"] = pd.to_datetime(llama_data["timestamp"], origin='unix', unit='s')
-        llama_data = llama_data.rename(columns={"#run_no": "#Run", "timestamp": "Timestamp", "triplet_val" : "Triplet Lifetime (µs)", "triplet_err": "Error Triplet Lifetime (µs)",	"ly_val": "Light Yield", "ly_err": "Error Light Yield"})
-        
+        try:
+            llama_data = pd.read_csv(self.llama_path + 'monivalues.txt', sep='\s+', dtype={'timestamp': np.int64}, parse_dates=[1])
+            llama_data["timestamp"] = pd.to_datetime(llama_data["timestamp"], origin='unix', unit='s')
+            llama_data = llama_data.rename(columns={"#run_no": "#Run", "timestamp": "Timestamp", "triplet_val" : "Triplet Lifetime (µs)", "triplet_err": "Error Triplet Lifetime (µs)",	"ly_val": "Light Yield", "ly_err": "Error Light Yield"})
+        except:
+            p = figure(width=1000, height=600)
+            p.title.text = title=f"No current Llama data available."
+            p.title.align = "center"
+            p.title.text_font_size = "25px"
+            return p
         llama_width, llama_height = 1200, 400
         triplet_plot = hv.Scatter(llama_data, ["Timestamp", "Triplet Lifetime (µs)"], label="Triplet LT")
         triplet_plot_error = hv.ErrorBars(llama_data, vdims=['Triplet Lifetime (µs)', 'Error Triplet Lifetime (µs)'], kdims=['Timestamp'], label="Triplet LT Error")
