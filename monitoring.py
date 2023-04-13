@@ -31,6 +31,7 @@ from src.tracking_plots import *
 from src.detailed_plots import *
 from src.phy_monitoring import *
 from src.string_visulization import *
+from src.sipm_monitoring import *
 
 class monitoring(param.Parameterized):
     
@@ -106,6 +107,20 @@ class monitoring(param.Parameterized):
     phy_resampled       = param.ObjectSelector(default=phy_resampled_vals[1], objects=phy_resampled_vals, label="Resampled")
     phy_units           = param.ObjectSelector(default=phy_unit_vals[0], objects=phy_unit_vals, label="Units")
     
+    # sipm plots
+    # sipm_plots_barrels    = ['InnerBarrel-Top', 'InnerBarrel-Bottom', 'OuterBarrel-Top', 'OuterBarrel-Bottom']
+    sipm_plot_style_dict  = {'Time': sipm_plot_vsTime, 'Histogram': sipm_plot_histogram}
+    sipm_resampled_vals   = ['1min', '5min', '10min', '30min', '60min']
+    
+    
+    sipm_sort_dict        = ['Barrel']
+    sipm_sort_by          = param.ObjectSelector(default = list(sipm_sort_dict)[0], objects= list(sipm_sort_dict))
+    
+    sipm_barrel          = param.ObjectSelector(default=0, objects=[0])
+    sipm_resampled       = param.ObjectSelector(default=sipm_resampled_vals[1], objects=sipm_resampled_vals, label="Resampled")
+    sipm_plot_style      = param.ObjectSelector(default=list(sipm_plot_style_dict)[0], objects=list(sipm_plot_style_dict))
+    
+    
     # visualization
     meta_visu_plots_dict = {"Usability": plot_visu_usability, "Processable": plot_visu_processable, "Processable": plot_visu_processable,
                             "Mass": plot_visu_mass, "Depl. Voltage": plot_visu_depletion, "Oper. Voltage": plot_visu_operation,
@@ -117,10 +132,11 @@ class monitoring(param.Parameterized):
     plot_types_download_dict = ["FWHM Qbb", "FWHM FEP", "A/E", "Tau", "Alpha"]
     plot_types_download = param.Selector(default = plot_types_download_dict[0], objects= plot_types_download_dict)
     
-    def __init__(self, cal_path, phy_path, period, tmp_path, name=None):
+    def __init__(self, cal_path, phy_path, sipm_path, period, tmp_path, name=None):
         super().__init__(name=name)
         self.path=cal_path
         self.phy_path=phy_path
+        self.sipm_path=sipm_path
         self.period = period
         self.tmp_path = tmp_path
         self.cached_plots ={}
@@ -156,6 +172,9 @@ class monitoring(param.Parameterized):
         self.phy_plot_info = {}
         self._get_phy_data()
         
+        self.sipm_data_df = pd.DataFrame()
+        # self._get_sipm_data()
+        
         self.meta_df = pd.DataFrame()
         self.meta_visu_source      = ColumnDataSource({})
         self.meta_visu_xlabels     = {}
@@ -180,7 +199,8 @@ class monitoring(param.Parameterized):
                 phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
                 
         self.phy_data_df, self.phy_plot_info = phy_data_df, phy_plot_info
-            
+    
+    
     @param.depends("date_range", watch=True)
     def _get_run_dict(self):
         valid_from = [datetime.timestamp(datetime.strptime(self.run_dict[entry]["timestamp"], '%Y%m%dT%H%M%SZ')) for entry in self.run_dict]
@@ -251,6 +271,26 @@ class monitoring(param.Parameterized):
         self.param["string"].objects = list(self.strings_dict)
         self.string = f"{list(self.strings_dict)[0]}"
         
+    @param.depends("sipm_sort_by", watch=True)
+    def update_barrels(self):
+        self.sipm_out_dict, self.sipm_chmap = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sipm_sort_by, spms=True)
+        
+        self.param["sipm_barrel"].objects = list(self.sipm_out_dict)
+        self.sipm_barrel = f"{list(self.sipm_out_dict)[0]}"
+        
+        
+    @param.depends("run", watch=True)
+    def _get_sipm_data(self):
+        data_file = self.sipm_path + f'{self.period}_{self.run}_spmmon.hdf'
+        if not os.path.exists(data_file):
+            self.sipm_data_df = pd.DataFrame()
+        else:
+            self.sipm_data_df = pd.read_hdf(data_file).reset_index().set_index('time').drop(['index'], axis=1)
+            self.sipm_data_df.index = pd.to_datetime(self.sipm_data_df.index, unit='s', origin='unix')
+        
+        self.sipm_out_dict, self.sipm_chmap = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sipm_sort_by, spms=True)
+        self.update_barrels()
+        
     @param.depends("run", "sort_by", "plot_types_download")
     def download_summary_files(self):
         
@@ -259,13 +299,22 @@ class monitoring(param.Parameterized):
                                             self.path, key=self.sort_by, download=True)
         if not os.path.exists(self.tmp_path + download_filename):
             download_file.to_csv(self.tmp_path + download_filename, index=False)
-        # return pn.widgets.FileDownload(file=self.tmp_path + download_file, filename=download_filename,
-        #                         button_type='success', embed=False, name="Right-click to download using 'Save as' dialog")
-        # return self.tmp_path + download_filename
         return pn.widgets.FileDownload(self.tmp_path + download_filename,
                                 button_type='success', embed=False, name="Click to download 'csv'", width=350)
-
     
+    @param.depends("run", "sipm_sort_by", "sipm_resampled", "sipm_barrel", "sipm_plot_style")
+    def view_sipm(self):
+        if self.sipm_data_df.empty:
+            p = figure(width=1000, height=600)
+            p.title.text = title=f"No data for run {self.run}"
+            p.title.align = "center"
+            p.title.text_font_size = "25px"
+            return p
+        else:
+            data_barrel = self.sipm_data_df[[f'ch{channel}' for channel in self.sipm_out_dict[self.sipm_barrel] if f'ch{channel}' in self.sipm_data_df.columns]]
+            meta_barrel = {}
+            return self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, self.sipm_resampled)
+        
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None

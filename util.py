@@ -19,6 +19,7 @@ sort_dict = {"String":{"out_key":"{key}:{k:02}",
                             "primary_key":None, 
                                "secondary_key":None}}
 
+
 def gen_run_dict(path):
     
     prod_config = os.path.join(path,"config.json")
@@ -37,7 +38,7 @@ def gen_run_dict(path):
             out_dict[run] = run_dict[run]    
     return out_dict
 
-def sorter(path, timestamp, key="String", datatype="cal"):
+def sorter(path, timestamp, key="String", datatype="cal", spms=False):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
 
@@ -50,6 +51,16 @@ def sorter(path, timestamp, key="String", datatype="cal"):
     software_config = software_config_db.on(timestamp, system=datatype).analysis
     
     out_dict={}
+    # SiPMs sorting
+    if spms:
+        chmap = chmap.map("system", unique=False)["spms"]
+        if key == "Barrel":
+            mapping = chmap.map("daq.rawid", unique=False)
+            for pos in ['top', 'bottom']:
+                for barrel in ['IB', 'OB']:
+                    out_dict[f"{barrel}-{pos}"] = [k for k, entry in sorted(mapping.items()) if barrel in entry["location"]["fiber"] and pos in entry["location"]["position"]]
+        return out_dict, chmap
+        
     #Daq needs special item as sort on tertiary key
     if key =="DAQ":
         mapping = chmap.map("daq.crate", unique=False)
