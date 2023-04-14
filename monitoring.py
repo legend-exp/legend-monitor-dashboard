@@ -345,9 +345,17 @@ class monitoring(param.Parameterized):
     def view_phy(self):
         # update plot dict with resampled value
         # set plotting options
-        startt = time.time()
+        # startt = time.time()
         phy_data_df   = self.phy_data_df
         phy_plot_info = self.phy_plot_info
+        
+        # return empty plot if no data exists for run
+        if phy_data_df.empty:
+            p = figure(width=1000, height=600)
+            p.title.text = title=f"No data for run {self.run}"
+            p.title.align = "center"
+            p.title.text_font_size = "25px"
+            return p
         
         if self.phy_units == "Relative":
             phy_plot_info["parameter"] = f"{phy_plot_info['parameter'].split('_var')[0]}_var"
@@ -359,20 +367,12 @@ class monitoring(param.Parameterized):
         # set plotting options
         phy_plot_info['plot_style'] = self.phy_plot_style
         phy_plot_info['resampled'] = self.phy_resampled
-        # return empty plot if no data exists for run
-        if phy_data_df.empty:
-            p = figure(width=1000, height=600)
-            p.title.text = title=f"No data for run {self.run}"
-            p.title.align = "center"
-            p.title.text_font_size = "25px"
-            return p
         
-        else:
-            # get all data from selected string
-            data_string = phy_data_df[phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
-            # plot data
-            # print("Time to plot: ", time.time()-startt, "s")
-            return self.phy_plot_style_dict[self.phy_plot_style](data_string, phy_plot_info, self.string)
+        # get all data from selected string
+        data_string = phy_data_df[phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
+        # plot data
+        # print("Time to plot: ", time.time()-startt, "s")
+        return self.phy_plot_style_dict[self.phy_plot_style](data_string, phy_plot_info, self.string)
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):
