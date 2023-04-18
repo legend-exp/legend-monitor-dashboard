@@ -32,6 +32,7 @@ from src.detailed_plots import *
 from src.phy_monitoring import *
 from src.string_visulization import *
 from src.sipm_monitoring import *
+from src.muon_monitoring import *
 
 class monitoring(param.Parameterized):
     
@@ -120,6 +121,16 @@ class monitoring(param.Parameterized):
     sipm_resampled       = param.ObjectSelector(default=sipm_resampled_vals[1], objects=sipm_resampled_vals, label="Resampled")
     sipm_plot_style      = param.ObjectSelector(default=list(sipm_plot_style_dict)[0], objects=list(sipm_plot_style_dict))
     
+    # muon plots
+    muon_plots_cal_dict     = {"Cal. Spectra": muon_plot_spectra, "Cal. SPP Sigma": muon_plot_spp, "Cal. SPP Shift": muon_plot_calshift}
+    muon_plots_cal          = param.ObjectSelector(default = list(muon_plots_cal_dict)[0], objects= list(muon_plots_cal_dict))
+    
+    muon_plots_mon_dict     = {"Integral Light": muon_plot_intlight, "Total Rates/H": muon_plot_totalRates_hourly, 
+                            "Total Rates/D": muon_plot_totalRates_daily, 
+                            "Pillbox Rates": muon_plot_ratesPillBox, "Floor Rates": muon_plot_ratesFloor,
+                            "Wall Rates": muon_plot_ratesWall}
+    muon_plots_mon          = param.ObjectSelector(default = list(muon_plots_mon_dict)[0], objects= list(muon_plots_mon_dict))
+    
     
     # visualization
     meta_visu_plots_dict = {"Usability": plot_visu_usability, "Processable": plot_visu_processable, "Processable": plot_visu_processable,
@@ -132,11 +143,12 @@ class monitoring(param.Parameterized):
     plot_types_download_dict = ["FWHM Qbb", "FWHM FEP", "A/E", "Tau", "Alpha"]
     plot_types_download = param.Selector(default = plot_types_download_dict[0], objects= plot_types_download_dict)
     
-    def __init__(self, cal_path, phy_path, sipm_path, period, tmp_path, name=None):
+    def __init__(self, cal_path, phy_path, sipm_path, muon_path, period, tmp_path, name=None):
         super().__init__(name=name)
         self.path=cal_path
         self.phy_path=phy_path
         self.sipm_path=sipm_path
+        self.muon_path = muon_path
         self.period = period
         self.tmp_path = tmp_path
         self.cached_plots ={}
@@ -172,6 +184,10 @@ class monitoring(param.Parameterized):
         self.phy_plot_info = {}
         self._get_phy_data()
         
+        self.muon_data_dict = {}
+        self._get_muon_data()
+        
+        
         self.sipm_data_df = pd.DataFrame()
         # self._get_sipm_data()
         
@@ -200,7 +216,22 @@ class monitoring(param.Parameterized):
                 
         self.phy_data_df, self.phy_plot_info = phy_data_df, phy_plot_info
     
-    
+    @param.depends("run", watch=True)
+    def _get_muon_data(self):
+        data_file = f"{self.muon_path}/generated/plt/phy/{self.period}/dsp/{self.run}/dashboard_period_{self.period}_run_{self.run}.shelve"
+        if not os.path.exists(data_file +'.dat'):
+            self.muon_data_dict = {}
+        else:
+            with shelve.open(data_file, 'r') as f:
+                # Create an empty dictionary
+                arrays_dict = {}
+                
+                for key in f.keys():
+                    # Add a new key-value pair to the dictionary
+                    arrays_dict[key] = np.array(f[key])
+                
+                self.muon_data_dict = arrays_dict    
+            
     @param.depends("date_range", watch=True)
     def _get_run_dict(self):
         valid_from = [datetime.timestamp(datetime.strptime(self.run_dict[entry]["timestamp"], '%Y%m%dT%H%M%SZ')) for entry in self.run_dict]
@@ -262,7 +293,41 @@ class monitoring(param.Parameterized):
 
         figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], self.string, key=self.sort_by)
         return figure
+    
+    @param.depends("run", "muon_plots_cal")
+    def view_muon_cal(self):
+        if not bool(self.muon_data_dict):
+            p = figure(width=1000, height=600)
+            p.title.text = title=f"No data for run {self.run}"
+            p.title.align = "center"
+            p.title.text_font_size = "25px"
+            return p
 
+        if self.muon_plots_cal == "Cal. SPP Shift":
+            data_file = f"{self.muon_path}/generated/plt/phy/{self.period}/dsp/{self.run}/dashboard_period_{self.period}_run_{self.run}.shelve"            
+            with shelve.open(data_file, 'r') as f:
+                # x_data_str = np.array(list(f['date'].values()))
+                x_data_str = np.array(list(f['date'].values()))
+                # y_data = np.array(list(f['mean_shift'].values()))
+                y_data = np.array(list(f['mean_shift'].values()))
+
+                # Reshape the x_data and y_data arrays
+                x_data = np.array([[dtt.datetime.strptime(date_str, '%Y_%m_%d') for date_str in row] for row in x_data_str])
+                
+                return self.muon_plots_cal_dict[self.muon_plots_cal](x_data, y_data)
+        else:
+            return self.muon_plots_cal_dict[self.muon_plots_cal](self.muon_data_dict)
+
+    @param.depends("run", "muon_plots_mon")
+    def view_muon_mon(self):
+        if not bool(self.muon_data_dict):
+            p = figure(width=1000, height=600)
+            p.title.text = title=f"No data for run {self.run}"
+            p.title.align = "center"
+            p.title.text_font_size = "25px"
+            return p
+
+        return self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run)
 
     @param.depends("sort_by", watch=True)
     def update_strings(self):

@@ -1,0 +1,396 @@
+import matplotlib.pyplot as plt
+import numpy as np
+from bokeh.plotting import figure, show, output_notebook
+from bokeh.models import ColumnDataSource
+
+import colorsys
+from bokeh.layouts import gridplot
+
+import datetime as dtt
+from bokeh.models import DatetimeTickFormatter
+from bokeh.transform import log_cmap
+from bokeh.models import LogColorMapper
+from bokeh.models.tickers import LogTicker
+from bokeh.models.axes import LogAxis
+from bokeh.models.formatters import LogTickFormatter
+from bokeh.models import LogScale
+from bokeh.palettes import Category10
+from bokeh.models import Legend, LegendItem
+from bokeh.models import Title
+import matplotlib as mpl
+
+
+PMT_ID=['101 Pillbox','704 Pillbox','102 Pillbox','705 Pillbox','708 Pillbox','104 Pillbox','709 Pillbox','105 Pillbox','710 Pillbox','707 Pillbox','201 Floor','202 Floor','203 Floor','706 Floor','206 Floor','208 Floor','701 Floor','703 Floor','301 Floor','302 Floor','303 Floor','304 Floor','305 Floor','306 Floor','307 Floor','308 Floor','309 Floor','310 Floor','311 Floor','312 Floor','401 Wall','402 Wall','403 Wall','404 Wall','409 Wall','410 Wall','501 Wall','502 Wall','503 Wall','504 Wall','507 Wall','508 Wall','509 Wall','510 Wall','602 Wall','603 Wall','605 Wall','606 Wall','607 Wall','608 Wall','609 Wall','610 Wall','702 Wall', 'none']
+num_colors = 54
+chan_num=55
+
+colors = []
+for i in range(num_colors):
+    hue = i/num_colors
+    r, g, b = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+    color = (int(r*255), int(g*255), int(b*255))
+    colors.append(color)
+
+
+def muon_plot_spectra(arrays_dict):
+    x_data = arrays_dict['histo_centers']
+    # Extract the Y data column
+    y_data = arrays_dict['histo_values']
+    
+    plots = []
+    
+    for i in range(9):
+
+        for enum, x in enumerate(range(round(((chan_num - 1) / 9),) * (i + 0), round(((chan_num - 1) / 9),) * (i + 1))):
+            p = figure(plot_width=225, plot_height=225, x_axis_label='Pulse height [LSBs]', 
+               y_axis_label='counts', y_axis_type="log", x_range=(0, 100), y_range=(1e-0, 2 * np.amax(y_data[i])),
+               title="Channel " + str(x) + " (PMT " + str(PMT_ID[x]) + ")")
+            p.title.text_font_size = '9pt'
+            p.xaxis.axis_label_text_font_size = "10pt"
+
+
+            # create a ColumnDataSource for each line
+            source = ColumnDataSource(data=dict(x=x_data[x], y=y_data[x]))
+            step = p.step('x', 'y', source=source, line_width=2, line_join="round", line_cap="round", line_dash="solid", line_color=colors[x], mode='center')
+            plots.append(p)
+
+    # create a grid plot with 9 rows and 6 columns
+    grid = gridplot([[plots[j*6 + i] for i in range(6)] for j in range(9)])
+
+    return grid
+
+
+def muon_plot_spp(arrays_dict):
+    x_data = arrays_dict['mean_LSB']
+    # Extract the Y data column
+    y_data = arrays_dict['mean_sigma']
+    dots=[]
+    # Create a figure object
+    p = figure(title="SPP gaussian", plot_width=800, plot_height=600, width=1100)
+    
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label_text_font_size = "20px"
+    
+    # Set the x and y axis labels and limits
+    p.xaxis.axis_label = 'Pulse height [LSB]'
+    p.yaxis.axis_label = 'σ of SPP'
+    
+    p.x_range.start = 0
+    p.x_range.end = 100
+    p.y_range.start = 0
+    p.y_range.end = 78
+    
+    legend_list = []
+    for channel in range(53):
+        dot = p.scatter(x_data[channel], y_data[channel], color=colors[channel], marker='circle', size=10)
+        dots.append(dot)
+        legend_list.append((PMT_ID[channel], [dot]))
+        
+        
+    legend1 = Legend(items=legend_list[:18], orientation="vertical", location=(10, 15))
+    legend2 = Legend(items=legend_list[18:36], orientation="vertical", location=(10, 15))
+    legend3 = Legend(items=legend_list[36:], orientation="vertical", location=(10, 38))
+    p.add_layout(legend1, 'right')
+    p.add_layout(legend2, 'right')
+    p.add_layout(legend3, 'right')
+    legend1.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    legend2.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    legend3.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    
+    return p
+
+
+def muon_plot_calshift(x_data, y_data):
+    p = figure(title='Calibration mean shift', x_axis_label='Date', y_axis_label='Mean Shift [LSB]',width=1100)
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label_text_font_size = "20px"
+    
+    p.xaxis.formatter = DatetimeTickFormatter(
+        hours=["%Y-%m-%d %H:%M"],
+        days=["%Y-%m-%d"],
+        months=["%Y-%m"],
+        years=["%Y"]
+    )
+    
+    lines=[]
+    legend_list = []
+    for channel in range(53):
+        dates = [dt.strftime("%Y %m %d %H:%M") for dt in x_data[channel]]
+        p.scatter(x_data[channel], y_data[channel], color=colors[channel])
+        line=p.line(x_data[channel], y_data[channel], color=colors[channel])
+        lines.append(line)
+        legend_list.append((PMT_ID[channel], [line]))
+        
+    legend1 = Legend(items=legend_list[:18], orientation="vertical", location=(10, 15))
+    legend2 = Legend(items=legend_list[18:36], orientation="vertical", location=(10, 15))
+    legend3 = Legend(items=legend_list[36:], orientation="vertical", location=(10, 38))
+    p.add_layout(legend1, 'right')
+    p.add_layout(legend2, 'right')
+    p.add_layout(legend3, 'right')
+    legend1.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    legend2.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    legend3.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+
+    return p
+
+# monitoring plots
+
+def muon_plot_intlight(arrays_dict, period, run):
+    
+    x_data = arrays_dict['multiplicity']
+    y_data = arrays_dict['int_light']
+    fig, ax = plt.subplots()
+    ax.hist2d(x_data, y_data, bins=(54, 1000), range=((0,55),(0.1, 1000)), norm=mpl.colors.LogNorm())
+    ax.set_yscale("log")
+    ax.set_xlabel("PMT Multiplicity",size=15)
+    ax.set_ylabel("Integral Light p.e.",size=15)
+    ax.set_title(f"l200-{period}-{run} Integral Light p.e. vs. Multiplicity")
+    
+    return fig
+
+
+def muon_plot_totalRates_hourly(arrays_dict, period, run):
+    x_data = arrays_dict['duration']
+    y_data = arrays_dict['red_rates']
+    
+
+    p = figure(x_axis_label="time in hours",
+               y_axis_label="Rate in Hz",
+               x_range=(0, max(x_data)/3600),
+               width=1100)
+    p.title.text = f"l200-{period}-{run} Reduced hourly rates over time for all PMTs"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label_text_font_size = "20px"
+    steps=[]
+    legend_list = []
+    for chan in range(53):
+        #print(np.array(x_data)/3600)
+        step=p.step(np.array(x_data)/3600, np.swapaxes(y_data, 0, 1)[chan], line_color=colors[chan], mode="center")
+        steps.append(step)
+        legend_list.append((PMT_ID[chan], [step]))
+        
+    legend1 = Legend(items=legend_list[:18], orientation="vertical", location=(10, 15))
+    legend2 = Legend(items=legend_list[18:36], orientation="vertical", location=(10, 15))
+    legend3 = Legend(items=legend_list[36:], orientation="vertical", location=(10, 38))
+    p.add_layout(legend1, 'right')
+    p.add_layout(legend2, 'right')
+    p.add_layout(legend3, 'right')
+    legend1.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    legend2.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    legend3.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    
+    return p
+
+def muon_plot_totalRates_daily(arrays_dict, period, run):
+    x_data = arrays_dict['times']
+    y_data = arrays_dict['red_rates']
+    
+
+    p = figure(x_axis_label="time in hours",
+               y_axis_label="Rate in Hz",
+               width=1100)
+    p.title.text = f"l200-{period}-{run} Reduced daily rates over time for all PMTs"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label_text_font_size = "20px"
+    p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
+    
+    legend_list = []
+
+    for chan in range(53):
+        daily_rates = []
+        daily_mean_rates = []
+        sum_rate = 0
+        count = 0
+        current_day = x_data[0].date()
+
+        for i in range(len(x_data)):
+            if x_data[i].date() == current_day:
+                sum_rate += np.swapaxes(y_data,0,1)[chan][i]
+                count += 1
+            else:
+                daily_rates.append(current_day)
+                daily_mean_rates.append(sum_rate/count)
+                current_day = x_data[i].date()
+                sum_rate = np.swapaxes(y_data,0,1)[chan][i]
+                count = 1
+
+        daily_rates.append(current_day)
+        daily_mean_rates.append(sum_rate/count)
+        daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
+
+        # Add a glyph renderer for the line
+        step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center")
+        legend_list.append((PMT_ID[chan], [step]))
+
+    legend1 = Legend(items=legend_list[:18], orientation="vertical", location=(10, 15))
+    legend2 = Legend(items=legend_list[18:36], orientation="vertical", location=(10, 15))
+    legend3 = Legend(items=legend_list[36:], orientation="vertical", location=(10, 38))
+    p.add_layout(legend1, 'right')
+    p.add_layout(legend2, 'right')
+    p.add_layout(legend3, 'right')
+    legend1.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    legend2.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    legend3.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+
+    return p
+
+def muon_plot_ratesPillBox(arrays_dict, period, run):
+    
+    x_data = arrays_dict['times']
+    y_data = arrays_dict['red_rates']
+
+    p = figure(x_axis_type='datetime',
+               x_axis_label="date",
+               y_axis_label="Rate in Hz",
+               width=900)
+    p.title.text = f"l200-{period}-{run} Reduced daily rates over time for Pillbox PMTs"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label_text_font_size = "20px"
+    p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
+
+    renderers = {}
+    for chan in range(0,10):
+        daily_rates = []
+        daily_mean_rates = []
+        sum_rate = 0
+        count = 0
+        current_day = x_data[0].date()
+
+        for i in range(len(x_data)):
+            if x_data[i].date() == current_day:
+                sum_rate += np.swapaxes(y_data,0,1)[chan][i]
+                count += 1
+            else:
+                daily_rates.append(current_day)
+                daily_mean_rates.append(sum_rate/count)
+                current_day = x_data[i].date()
+                sum_rate = np.swapaxes(y_data,0,1)[chan][i]
+                count = 1
+
+        daily_rates.append(current_day)
+        daily_mean_rates.append(sum_rate/count)
+        daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
+
+        # Add a glyph renderer for the line
+        step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center")#, legend_label=PMT_ID[chan])
+        renderers[PMT_ID[chan]] = step
+
+    # Create a legend with interactive checkboxes
+    legend = Legend(items=[(label, [renderer]) for label, renderer in renderers.items()], location='top_left')
+    legend.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    p.add_layout(legend, 'right')
+    
+    return p
+
+
+def muon_plot_ratesFloor(arrays_dict, period, run):
+    
+    x_data = arrays_dict['times']
+    y_data = arrays_dict['red_rates']
+
+    p = figure(x_axis_type='datetime',
+               x_axis_label="date",
+               y_axis_label="Rate in Hz",
+               width=900)
+    p.title.text = f"l200-{period}-{run} Reduced daily rates over time for Floor PMTs"
+    
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label_text_font_size = "20px"
+    p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
+
+    renderers = {}
+    for chan in range(10,30):
+        daily_rates = []
+        daily_mean_rates = []
+        sum_rate = 0
+        count = 0
+        current_day = x_data[0].date()
+
+        for i in range(len(x_data)):
+            if x_data[i].date() == current_day:
+                sum_rate += np.swapaxes(y_data,0,1)[chan][i]
+                count += 1
+            else:
+                daily_rates.append(current_day)
+                daily_mean_rates.append(sum_rate/count)
+                current_day = x_data[i].date()
+                sum_rate = np.swapaxes(y_data,0,1)[chan][i]
+                count = 1
+
+        daily_rates.append(current_day)
+        daily_mean_rates.append(sum_rate/count)
+        daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
+
+        # Add a glyph renderer for the line
+        step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center")#, legend_label=PMT_ID[chan])
+        renderers[PMT_ID[chan]] = step
+
+    # Create a legend with interactive checkboxes
+    legend = Legend(items=[(label, [renderer]) for label, renderer in renderers.items()], location='top_left')
+    legend.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    p.add_layout(legend, 'right')
+    
+    return p
+
+def muon_plot_ratesWall(arrays_dict, period, run):
+    
+    x_data = arrays_dict['times']
+    y_data = arrays_dict['red_rates']
+
+    p = figure(x_axis_type='datetime',
+               x_axis_label="date",
+               y_axis_label="Rate in Hz",
+               width=900)
+    
+    p.title.text = f"l200-{period}-{run} Reduced daily rates over time for Wall PMTs"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label_text_font_size = "20px"
+    p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
+
+    renderers = {}
+    for chan in range(30,53):
+        daily_rates = []
+        daily_mean_rates = []
+        sum_rate = 0
+        count = 0
+        current_day = x_data[0].date()
+
+        for i in range(len(x_data)):
+            if x_data[i].date() == current_day:
+                sum_rate += np.swapaxes(y_data,0,1)[chan][i]
+                count += 1
+            else:
+                daily_rates.append(current_day)
+                daily_mean_rates.append(sum_rate/count)
+                current_day = x_data[i].date()
+                sum_rate = np.swapaxes(y_data,0,1)[chan][i]
+                count = 1
+
+        daily_rates.append(current_day)
+        daily_mean_rates.append(sum_rate/count)
+        daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
+
+        # Add a glyph renderer for the line
+        step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center")#, legend_label=PMT_ID[chan])
+        renderers[PMT_ID[chan]] = step
+
+    # Create a legend with interactive checkboxes
+    legend = Legend(items=[(label, [renderer]) for label, renderer in renderers.items()], location='top_left')
+    legend.click_policy = "hide" # hide the corresponding line when the legend item is clicked
+    p.add_layout(legend, 'right')
+    
+    return p
