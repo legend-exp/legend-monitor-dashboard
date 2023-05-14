@@ -20,23 +20,42 @@ sort_dict = {"String":{"out_key":"{key}:{k:02}",
                                "secondary_key":None}}
 
 
-def gen_run_dict(path):
+# def gen_run_dict(path):
     
+#     prod_config = os.path.join(path,"config.json")
+#     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
+    
+#     par_file = os.path.join(prod_config["paths"]["par"], 'validity.jsonl')
+#     run_dict = {}
+#     with open(par_file, 'r') as file:
+#         for json_str in file:
+#             run_dict[json.loads(json_str)["apply"][0].split("-")[2]] = {"experiment":json.loads(json_str)["apply"][0].split("-")[0],
+#                                                                         "period":json.loads(json_str)["apply"][0].split("-")[1],
+#                                                                         "timestamp":json.loads(json_str)["valid_from"]}
+#     out_dict={}
+#     for run in run_dict:
+#         if os.path.isfile(os.path.join(prod_config["paths"]["par_hit"], f"cal/{run_dict[run]['period']}/{run}/{run_dict[run]['experiment']}-{run_dict[run]['period']}-{run}-cal-{run_dict[run]['timestamp']}-par_hit.json")):
+#             out_dict[run] = run_dict[run]    
+#     return out_dict
+
+def gen_run_dict(path):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
-    
     par_file = os.path.join(prod_config["paths"]["par"], 'validity.jsonl')
     run_dict = {}
     with open(par_file, 'r') as file:
         for json_str in file:
-            run_dict[json.loads(json_str)["apply"][0].split("-")[2]] = {"experiment":json.loads(json_str)["apply"][0].split("-")[0],
-                                                                        "period":json.loads(json_str)["apply"][0].split("-")[1],
-                                                                        "timestamp":json.loads(json_str)["valid_from"]}
-    out_dict={}
-    for run in run_dict:
-        if os.path.isfile(os.path.join(prod_config["paths"]["par_hit"], f"cal/{run_dict[run]['period']}/{run}/{run_dict[run]['experiment']}-{run_dict[run]['period']}-{run}-cal-{run_dict[run]['timestamp']}-par_hit.json")):
-            out_dict[run] = run_dict[run]    
-    return out_dict
+            experiment, period,  run, _,_,_  = json.loads(json_str)["apply"][0].split("-")
+            timestamp = json.loads(json_str)["valid_from"]
+            if os.path.isfile(os.path.join(prod_config["paths"]["par_hit"], f"cal/{period}/{run}/",
+                                           f"{experiment}-{period}-{run}-cal-{timestamp}-par_hit.json")):
+                if period in run_dict:
+                    run_dict[period][run] = {"experiment":experiment,
+                                            "timestamp":timestamp}
+                else:
+                    run_dict[period] = {run: {"experiment":experiment,
+                                            "timestamp":timestamp}}
+    return run_dict
 
 def sorter(path, timestamp, key="String", datatype="cal", spms=False):
     prod_config = os.path.join(path,"config.json")

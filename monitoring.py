@@ -96,6 +96,7 @@ class monitoring(param.Parameterized):
     sort_by = param.ObjectSelector(default = list(sort_dict)[0], objects= list(sort_dict))
     string = param.ObjectSelector(default = 0, objects = [0])
     run = param.Selector(default = 0, objects = [0])
+    period = param.Selector(default = 0, objects = [0])
     
     # physics plots 
     phy_plots_vals          = ['baseline', 'cuspEmax', 'cuspEmax_ctc_cal', 'bl_std', 'AoE_Corrected', 'AoE_Classifier']
@@ -143,37 +144,41 @@ class monitoring(param.Parameterized):
     plot_types_download_dict = ["FWHM Qbb", "FWHM FEP", "A/E", "Tau", "Alpha"]
     plot_types_download = param.Selector(default = plot_types_download_dict[0], objects= plot_types_download_dict)
     
-    def __init__(self, cal_path, phy_path, sipm_path, muon_path, period, tmp_path, name=None):
+    def __init__(self, cal_path, phy_path, sipm_path, muon_path, tmp_path, name=None):
         super().__init__(name=name)
         self.path=cal_path
         self.phy_path=phy_path
         self.sipm_path=sipm_path
         self.muon_path = muon_path
-        self.period = period
         self.tmp_path = tmp_path
         self.cached_plots ={}
-        # self.phy_plot_info_run_cache = {}
-        # self.phy_data_run_cache = {}
+
         prod_config = os.path.join(self.path, "config.json")
         self.prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
         
-        self.run_dict = gen_run_dict(self.path)
+        self.param["period"].objects = list(self.run_dict)
+        self.period = list(self.run_dict)[-1]
+        
+        self.run_dict = gen_run_dict(self.path)[self.period]
         
         self.param["run"].objects = list(self.run_dict)
         self.run = list(self.run_dict)[-1]
-        self.periods = {}
-        for run in self.run_dict: 
-            if self.run_dict[run]['period'] not in self.periods:
-                self.periods[self.run_dict[run]['period']] = [run]
-            else:
-                self.periods[self.run_dict[run]['period']].append(run)
+        # self.periods = {}
+        # for run in self.run_dict: 
+        #     if self.run_dict[run]['period'] not in self.periods:
+        #         self.periods[self.run_dict[run]['period']] = [run]
+        #     else:
+        #         self.periods[self.run_dict[run]['period']].append(run)
+        
+        self.periods = gen_run_dict(self.path)
+        start_period = sorted(list(self.periods))[0]        
+        start_run    = sorted(list(self.periods[start_period]))[0]
+        end_period   = sorted(list(self.periods))[-1]
+        end_run      = sorted(list(self.periods[end_period]))[-1]
 
-        start_period = self.periods[list(self.periods)[0]]
-
-        self.param["date_range"].bounds = (datetime.strptime(self.run_dict[sorted(start_period)[0]]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
-                                datetime.strptime(self.run_dict[sorted(start_period)[-1]]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
-        self.date_range = (datetime.strptime(self.run_dict[sorted(start_period)[0]]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
-                            datetime.strptime(self.run_dict[sorted(start_period)[-1]]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+        self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
+                                datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+        self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
         
     
         self.update_plot_dict()
@@ -442,9 +447,11 @@ class monitoring(param.Parameterized):
     @param.depends("run", watch=True)
     def update_plot_dict(self):
         self.plot_dict = os.path.join(self.prod_config["paths"]["plt"],
-                              f'hit/cal/{self.run_dict[self.run]["period"]}/{self.run}',
-                            f'{self.run_dict[self.run]["experiment"]}-{self.run_dict[self.run]["period"]}-{self.run}-cal-{self.run_dict[self.run]["timestamp"]}-plt_hit')  
-    
+                              f'hit/cal/{self.period}/{self.run}',
+                            f'{self.run_dict[self.run]["experiment"]}-{self.period}-{self.run}-cal-{self.run_dict[self.run]["timestamp"]}-plt_hit')
+        
+        print(self.run_dict)
+        print(self.plot_dict)
         with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             channels = list(shelf.keys()) 
 
