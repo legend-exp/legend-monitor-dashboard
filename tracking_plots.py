@@ -20,7 +20,7 @@ from legendmeta.catalog import Props
 
 from src.util import *
 
-def plot_energy(path, run_dict, det, plot, colour):
+def plot_energy(path, run_dict, det, plot, colour, period):
     
     cals= []
     times = []
@@ -33,9 +33,9 @@ def plot_energy(path, run_dict, det, plot, colour):
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
         channel = chmap[det].daq.rawid
 
-        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict[run]["period"]}/{run}')
+        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{run_dict[run]["period"]}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
@@ -57,7 +57,7 @@ def plot_energy(path, run_dict, det, plot, colour):
 
     return plot
 
-def plot_energy_res(path, run_dict, det, plot, colour, at="Qbb"):
+def plot_energy_res(path, run_dict, det, plot, colour, period, at="Qbb"):
     
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
@@ -69,9 +69,9 @@ def plot_energy_res(path, run_dict, det, plot, colour, at="Qbb"):
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
         channel = chmap[det].daq.rawid
 
-        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict[run]["period"]}/{run}')
+        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{run_dict[run]["period"]}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit_results.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit_results.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
@@ -92,13 +92,13 @@ def plot_energy_res(path, run_dict, det, plot, colour, at="Qbb"):
 
     return plot
 
-def plot_energy_res_Qbb(path, run_dict, det, plot, colour):
-    return plot_energy_res(path,run_dict, det, plot,colour, at="Qbb")
+def plot_energy_res_Qbb(path, run_dict, det, plot, colour, period):
+    return plot_energy_res(path,run_dict, det, plot, colour, period, at="Qbb")
 
-def plot_energy_res_2614(path, run_dict, det, plot, colour):
-    return plot_energy_res(path,run_dict, det, plot,colour, at="2.6")
+def plot_energy_res_2614(path, run_dict, det, plot, colour, period):
+    return plot_energy_res(path,run_dict, det, plot, colour, period, at="2.6")
 
-def plot_aoe_mean(path, run_dict, det, plot, colour):
+def plot_aoe_mean(path, run_dict, det, plot, colour, period):
 
     
     prod_config = os.path.join(path,"config.json")
@@ -112,9 +112,9 @@ def plot_aoe_mean(path, run_dict, det, plot, colour):
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
         channel = chmap[det].daq.rawid
 
-        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict[run]["period"]}/{run}')
+        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{run_dict[run]["period"]}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
@@ -135,7 +135,7 @@ def plot_aoe_mean(path, run_dict, det, plot, colour):
 
     return plot
 
-def plot_aoe_sig(path, run_dict, det, plot, colour):
+def plot_aoe_sig(path, run_dict, det, plot, colour, period):
 
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
@@ -148,9 +148,9 @@ def plot_aoe_sig(path, run_dict, det, plot, colour):
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
         channel = chmap[det].daq.rawid
 
-        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict[run]["period"]}/{run}')
+        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{run_dict[run]["period"]}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
@@ -171,7 +171,7 @@ def plot_aoe_sig(path, run_dict, det, plot, colour):
 
     return plot
 
-def plot_tau(path, run_dict, det, plot, colour):
+def plot_tau(path, run_dict, det, plot, colour, period):
 
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
@@ -184,9 +184,9 @@ def plot_tau(path, run_dict, det, plot, colour):
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
         channel = chmap[det].daq.rawid
 
-        dsp_pars_file_path = os.path.join(prod_config["paths"]["par_dsp"],f'cal/{run_dict[run]["period"]}/{run}')
+        dsp_pars_file_path = os.path.join(prod_config["paths"]["par_dsp"],f'cal/{period}/{run}')
         dsp_pars_path = os.path.join(dsp_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{run_dict[run]["period"]}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.json')
 
         with open(dsp_pars_path,"r")as r:
             dsp_pars_path = json.load(r)
@@ -206,7 +206,7 @@ def plot_tau(path, run_dict, det, plot, colour):
 
     return plot
 
-def plot_ctc_const(path, run_dict, det, plot, colour):
+def plot_ctc_const(path, run_dict, det, plot, colour, period):
 
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
@@ -219,9 +219,9 @@ def plot_ctc_const(path, run_dict, det, plot, colour):
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
         channel = chmap[det].daq.rawid
 
-        dsp_pars_file_path = os.path.join(prod_config["paths"]["par_dsp"],f'cal/{run_dict[run]["period"]}/{run}')
+        dsp_pars_file_path = os.path.join(prod_config["paths"]["par_dsp"],f'cal/{period}/{run}')
         dsp_pars_path = os.path.join(dsp_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{run_dict[run]["period"]}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.json')
 
         with open(dsp_pars_path,"r")as r:
             dsp_pars_path = json.load(r)
@@ -242,7 +242,7 @@ def plot_ctc_const(path, run_dict, det, plot, colour):
 
     return plot
 
-def plot_tracking(run_dict, path, plot_func, string, key="String"):    
+def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="String"):    
 
     strings_dict, soft_dict, chmap = sorter(path, run_dict[list(run_dict)[0]]["timestamp"], key=key)
     string_dets={}
@@ -253,7 +253,7 @@ def plot_tracking(run_dict, path, plot_func, string, key="String"):
         string_dets[stri] = dets
         
     p = figure(width=700, height=600, x_axis_type="datetime")
-    p.title.text = f"{string}"
+    p.title.text = f"{run_dict[list(run_dict)[0]]['experiment']}-{period} | Cal. Tracking | {plot_type}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
 
@@ -261,7 +261,7 @@ def plot_tracking(run_dict, path, plot_func, string, key="String"):
     
     for i, det in enumerate(string_dets[string]):
         try:
-            plot_func(path, run_dict, det, p, colours[i])
+            plot_func(path, run_dict, det, p, colours[i], period)
         except:
             pass
 
@@ -278,22 +278,24 @@ def plot_tracking(run_dict, path, plot_func, string, key="String"):
         p.add_layout(label)
 
 
-    p.add_layout(Title(text="Time", align="center"), "below")
+    p.xaxis.axis_label = "Time"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label_text_font_size = "20px"
     
     if plot_func == plot_energy:
-        p.add_layout(Title(text="% Shift of keV conversion of 20kADC", align="center"), "left")
+        p.yaxis.axis_label ="% Shift of keV conversion of 20kADC"
     elif plot_func == plot_energy_res_Qbb:
-        p.add_layout(Title(text="FWHM at Qbb", align="center"), "left")
+        p.yaxis.axis_label = "FWHM at Qbb"
     elif plot_func == plot_energy_res_2614:
-        p.add_layout(Title(text="FWHM of 2.6MeV peak", align="center"), "left")
+        p.yaxis.axis_label = "FWHM of 2.6MeV peak"
     elif plot_func == plot_aoe_mean:
-        p.add_layout(Title(text="% Shift of A/E mean", align="center"), "left")
+        p.yaxis.axis_label = "% Shift of A/E mean"
     elif plot_func == plot_aoe_sig:
-        p.add_layout(Title(text="% Shift of A/E sigma", align="center"), "left")
+        p.yaxis.axis_label = "% Shift of A/E sigma"
     elif plot_func == plot_tau:
-        p.add_layout(Title(text="% Shift PZ const", align="center"), "left")
+        p.yaxis.axis_label = "% Shift PZ const"
     elif plot_func == plot_ctc_const:
-        p.add_layout(Title(text="Shift CT constant", align="center"), "left")
+        p.yaxis.axis_label = "Shift CT constant"
         
     p.legend.location = "top_left"
     p.legend.click_policy="hide"

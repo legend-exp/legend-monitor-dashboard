@@ -77,7 +77,7 @@ def build_status_map(chan_map, data):
             
     return data_array, x_axes, y_axes, annot_array
 
-def plot_status(run, run_dict, path, source, xlabels, key =None):
+def plot_status(run, run_dict, path, source, xlabels, period, key = None):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     chmap = LegendMetadata(path = prod_config["paths"]["metadata"])
@@ -99,7 +99,7 @@ def plot_status(run, run_dict, path, source, xlabels, key =None):
         var mapping = {0.25: "Non-Working", 0.75: "Working"};
         return mapping[tick];
     """)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, plot_title=f"{run_dict['experiment']}-{run_dict['period']}-{run} Detector Status")
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | Detector Status")
 
 def build_counts_map(chan_map, data):
     dets, strings, positions = build_string_array(chan_map)
@@ -129,7 +129,7 @@ def build_counts_map(chan_map, data):
             
     return data_array, x_axes, y_axes, annot_array
 
-def plot_counts(run, run_dict, path, source, xlabels, key =None):
+def plot_counts(run, run_dict, path, source, xlabels, period, key =None):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     chmap = LegendMetadata(path = prod_config["paths"]["metadata"])
@@ -138,9 +138,9 @@ def plot_counts(run, run_dict, path, source, xlabels, key =None):
     config = cfg.on(run_dict["timestamp"], system="phy")
     cmap = chmap.channelmap(run_dict["timestamp"])
     
-    file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict["period"]}/{run}')
+    file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
     path = os.path.join(file_path, 
-                        f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                        f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
     
     with open(path, 'r') as r:
         all_res = json.load(r)
@@ -151,14 +151,14 @@ def plot_counts(run, run_dict, path, source, xlabels, key =None):
             try:
                 res[cmap[det]['daq']['rawid']] = all_res[f"ch{cmap[det].daq.rawid:07}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
             except:
-                res[cmap[det]['daq']['rawid']] = 0 
+                res[cmap[det]['daq']['rawid']] = 0
     
     display_dict = res
     ctitle = 'FEP Counts'
     palette = cividis(256)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{run_dict['period']}-{run} FEP Counts")
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts")
 
-def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb", download=False):
+def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb", download=False):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -171,9 +171,9 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb", downloa
     
     off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
     
-    file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{run_dict["period"]}/{run}')
+    file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
     path = os.path.join(file_path, 
-                            f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
     
     with open(path, 'r') as r:
         all_res = json.load(r)
@@ -207,7 +207,7 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb", downloa
                 res[detector] = default
     
     p = figure(width=1400, height=600, y_range=(1, 5), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy Resolutions"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | {at} Energy Resolution"
     p.title.align = "center"
     p.title.text_font_size = "25px"
 
@@ -236,9 +236,9 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb", downloa
 
     if download:
         if at == "Qbb":
-            return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_Qbb_energy_resolutions.csv"
+            return df_plot, f"{run_dict['experiment']}-{period}-{run}_Qbb_energy_resolutions.csv"
         else:
-            return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_FEP_energy_resolutions.csv"
+            return df_plot, f"{run_dict['experiment']}-{period}-{run}_FEP_energy_resolutions.csv"
         
         
     for filter_type, filter_name, filter_plot_color in zip(["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"], ["Cusp", "ZAC", "Trap"], ["blue", "green", "red"]):
@@ -292,13 +292,13 @@ def plot_energy_resolutions(run, run_dict, path, key="String", at="Qbb", downloa
     
     return p
 
-def plot_energy_resolutions_Qbb(run, run_dict, path, key="String", download=False):
-    return plot_energy_resolutions(run, run_dict, path, key=key, at="Qbb", download=download)
+def plot_energy_resolutions_Qbb(run, run_dict, path, period, key="String", download=False):
+    return plot_energy_resolutions(run, run_dict, path, period, key=key, at="Qbb", download=download)
 
-def plot_energy_resolutions_2614(run, run_dict, path, key="String", download=False):
-    return plot_energy_resolutions(run, run_dict, path, key=key, at="2.6", download=download)
+def plot_energy_resolutions_2614(run, run_dict, path, period, key="String", download=False):
+    return plot_energy_resolutions(run, run_dict, path, period, key=key, at="2.6", download=download)
 
-def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
+def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"])
     
@@ -312,8 +312,8 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
     off_dets = [chmap.map("name")[field].daq.rawid for field in soft_dict if soft_dict[field]["processable"]is False]
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
-                            f'cal/{run_dict["period"]}/{run}', 
-                            f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'cal/{period}/{run}', 
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -346,7 +346,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
     
     
     p = figure(width=1400, height=300, y_range=(0.5, 7.5), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} Energy fits"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"
 
@@ -368,7 +368,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, key="String"):
     
     return p
 
-def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
+def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -383,8 +383,8 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
-                            f'cal/{run_dict["period"]}/{run}', 
-                            f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'cal/{period}/{run}', 
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -401,7 +401,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
                 nfits[detector] =np.nan
     
     p = figure(width=1400, height=600, y_range=(-3, 50), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E fits"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"
 
@@ -460,7 +460,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, key="String"):
     
     return p
 
-def get_aoe_results(run, run_dict, path, key="String", download=False):
+def get_aoe_results(run, run_dict, path, period, key="String", download=False):
 
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -474,8 +474,8 @@ def get_aoe_results(run, run_dict, path, key="String", download=False):
     off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
-                             f'cal/{run_dict["period"]}/{run}', 
-                             f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                             f'cal/{period}/{run}', 
+                             f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
     
     
     with open(file_path, 'r') as r:
@@ -554,7 +554,7 @@ def get_aoe_results(run, run_dict, path, key="String", download=False):
                 aoe_res[detector] = default
     
     p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} A/E Survival Fractions"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E Survival Fractions"
     p.title.align = "center"
     p.title.text_font_size = "25px"
 
@@ -586,7 +586,7 @@ def get_aoe_results(run, run_dict, path, key="String", download=False):
         df_plot["err_ys_{}".format(peak_type.split('.')[0])]     = err_ys
 
     if download:
-        return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_AoE_SurvivalFractions.csv"
+        return df_plot, f"{run_dict['experiment']}-{period}-{run}_AoE_SurvivalFractions.csv"
         
     for peak_type, peak_name, peak_color in zip(peak_types, peak_names, peak_colors):
 
@@ -642,7 +642,7 @@ def get_aoe_results(run, run_dict, path, key="String", download=False):
     return p
 
 
-def plot_pz_consts(run, run_dict, path, key="String", download=False):
+def plot_pz_consts(run, run_dict, path, period, key="String", download=False):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -656,8 +656,8 @@ def plot_pz_consts(run, run_dict, path, key="String", download=False):
     off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
     
     cal_dict_path = os.path.join(prod_config["paths"]["par_dsp"], 
-                             f'cal/{run_dict["period"]}/{run}', 
-                             f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_dsp.json')
+                             f'cal/{period}/{run}', 
+                             f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_dsp.json')
     
     
 
@@ -676,7 +676,7 @@ def plot_pz_consts(run, run_dict, path, key="String", download=False):
                 taus[det] =np.nan
     
     p = figure(width=1400, height=600, y_range=(350, 800), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} Pole Zero Constants"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Pole Zero Constants"
     p.title.align = "center"
     p.title.text_font_size = "25px"
 
@@ -708,7 +708,7 @@ def plot_pz_consts(run, run_dict, path, key="String", download=False):
         df_plot["err_ys_{}".format(pz_type.split('_')[0])]     = err_ys
 
     if download:
-        return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_PoleZero_Constants.csv"
+        return df_plot, f"{run_dict['experiment']}-{period}-{run}_PoleZero_Constants.csv"
         
     # df_plot = ColumnDataSource(df_plot)
     for pz_type, pz_name, pz_color in zip(pz_types, pz_names, pz_colors):
@@ -761,7 +761,7 @@ def plot_pz_consts(run, run_dict, path, key="String", download=False):
     return p
 
 
-def plot_alpha(run, run_dict, path, key="String", download=False):
+def plot_alpha(run, run_dict, path, period, key="String", download=False):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
     
@@ -776,8 +776,8 @@ def plot_alpha(run, run_dict, path, key="String", download=False):
     
     
     cal_dict_path = os.path.join(prod_config["paths"]["par_dsp"], 
-                            f'cal/{run_dict["period"]}/{run}', 
-                            f'{run_dict["experiment"]}-{run_dict["period"]}-{run}-cal-{run_dict["timestamp"]}-par_dsp.json')
+                            f'cal/{period}/{run}', 
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_dsp.json')
     
     with open(cal_dict_path,'r') as r:
         cal_dict = json.load(r)
@@ -803,7 +803,7 @@ def plot_alpha(run, run_dict, path, key="String", download=False):
                 zac_alpha[det]=np.nan
 
     p = figure(width=1400, height=600, y_range=(-1, 4), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{run_dict['period']}-{run} Charge Trapping Constants"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Charge Trapping Constants"
     p.title.align = "center"
     p.title.text_font_size = "25px"
 
@@ -824,7 +824,7 @@ def plot_alpha(run, run_dict, path, key="String", download=False):
     filter_plot_colors = ["blue", "green", "red"]
 
     if download:
-        return df_plot, f"{run_dict['experiment']}-{run_dict['period']}-{run}_Charge_Trapping_Constants.csv"
+        return df_plot, f"{run_dict['experiment']}-{period}-{run}_Charge_Trapping_Constants.csv"
         
     # df_plot = ColumnDataSource(df_plot)
     for filter_type, filter_name, filter_plot_color in zip(filter_types, filter_names, filter_plot_colors):
@@ -872,11 +872,10 @@ def plot_alpha(run, run_dict, path, key="String", download=False):
     return p
 
 
-def plot_bls(plot_dict,chan_dict, channels, 
-            string, key="String"):
+def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key="String"):
 
     p = figure(width=700, height=600, y_axis_type="log",tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = string
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
     if len(channels) > 19:
@@ -894,18 +893,20 @@ def plot_bls(plot_dict,chan_dict, channels,
         except:
             pass
         
-    p.add_layout(Title(text="Wf Baseline Mean - FC Baseline", align="center"), "below")
-    p.add_layout(Title(text="Counts", align="center"), "left")
+    p.xaxis.axis_label = "Wf Baseline Mean - FC Baseline"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = 'Counts'
+    p.yaxis.axis_label_text_font_size = "16px"
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     return p
     
-def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string, 
+def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string, run, period, run_dict,
                                     key="String", energy_param = "cuspEmax_ctc"):
     
     times = None
     p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = string
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Stability | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
     if len(channels) > 19:
@@ -927,17 +928,20 @@ def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string
                 pass
 
     p.y_range = Range1d(yrange[0], yrange[1])
-    p.add_layout(Title(text=f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}", align="center"), "below")
-    p.add_layout(Title(text="Energy (keV)", align="center"), "left")
+    
+    p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Energy (keV)"
+    p.yaxis.axis_label_text_font_size = "16px"
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     return p
 
-def plot_energy_spectra(plot_dict, chan_dict, channels, string,  
+def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run_dict, 
                         key="String", energy_param = "cuspEmax_ctc"):
     
     p = figure(width=700, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = string
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Spectra | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
     if len(channels) > 19:
@@ -956,8 +960,10 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
         except:
             pass
     
-    p.add_layout(Title(text=f"Energy (keV)", align="center"), "below")
-    p.add_layout(Title(text="Counts", align="center"), "left")
+    p.xaxis.axis_label = "Energy (keV)"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Counts"
+    p.yaxis.axis_label_text_font_size = "16px"
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     
@@ -965,11 +971,11 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string,
 
 
 
-def plot_baseline_stability(plot_dict, chan_dict, channels, string,  
+def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period, run_dict,
                         key="String"):
     
     p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = string
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline Stability | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
     if len(channels) > 19:
@@ -995,17 +1001,19 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string,
         except:
             pass
     
-    p.add_layout(Title(text=f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}", align="center"), "below")
-    p.add_layout(Title(text="Shift (%)", align="center"), "left")
+    p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Shift (%)"
+    p.yaxis.axis_label_text_font_size = "16px"
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     return p
 
-def plot_stability(plot_dict, chan_dict, channels, string, parameter,
+def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, period, run_dict, 
                                 key="String", energy_param = "cuspEmax_ctc"):
     times = None
     p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = string
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Stability | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
     if len(channels) > 19:
@@ -1031,20 +1039,22 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter,
         except:
             pass
 
-    p.add_layout(Title(text=f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}", align="center"), "below")
-    p.add_layout(Title(text="Energy Shift (%)", align="center"), "left")
+    p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Energy Shift (%)"
+    p.yaxis.axis_label_text_font_size = "16px"
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     return p
 
-def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, string, 
+def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, string, run, period, run_dict,
                                     key="String", energy_param = "cuspEmax_ctc"):
     
-    return plot_stability(plot_dict, chan_dict, channels, string, "2614_stability",
+    return plot_stability(plot_dict, chan_dict, channels, string, "2614_stability", run, period, run_dict,
                                     key="String", energy_param = "cuspEmax_ctc")
     
 
-def plot_pulser_stability_channels2d(plot_dict, chan_dict, channels, string, 
+def plot_pulser_stability_channels2d(plot_dict, chan_dict, channels, string, run, period, run_dict,
                                     key="String", energy_param = "cuspEmax_ctc"):
-    return plot_stability(plot_dict, chan_dict, channels, string, "pulser_stability",
+    return plot_stability(plot_dict, chan_dict, channels, string, "pulser_stability", run, period, run_dict,
                                     key="String", energy_param = "cuspEmax_ctc")

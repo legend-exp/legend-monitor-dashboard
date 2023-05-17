@@ -156,31 +156,12 @@ class monitoring(param.Parameterized):
         prod_config = os.path.join(self.path, "config.json")
         self.prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
         
-        self.param["period"].objects = list(self.run_dict)
-        self.period = list(self.run_dict)[-1]
-        
-        self.run_dict = gen_run_dict(self.path)[self.period]
-        
-        self.param["run"].objects = list(self.run_dict)
-        self.run = list(self.run_dict)[-1]
-        # self.periods = {}
-        # for run in self.run_dict: 
-        #     if self.run_dict[run]['period'] not in self.periods:
-        #         self.periods[self.run_dict[run]['period']] = [run]
-        #     else:
-        #         self.periods[self.run_dict[run]['period']].append(run)
-        
         self.periods = gen_run_dict(self.path)
-        start_period = sorted(list(self.periods))[0]        
-        start_run    = sorted(list(self.periods[start_period]))[0]
-        end_period   = sorted(list(self.periods))[-1]
-        end_run      = sorted(list(self.periods[end_period]))[-1]
-
-        self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
-                                datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
-        self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+        self.param["period"].objects = list(self.periods)
+        self.period = list(self.periods)[-1]
         
-    
+        self._get_period_data()
+        
         self.update_plot_dict()
         self.update_plot_type_details()
         self.update_strings()
@@ -203,8 +184,32 @@ class monitoring(param.Parameterized):
         self.meta_visu_channel_map = {}
         self._get_metadata()
         
+    @param.depends("period", watch=True)
+    def _get_period_data(self):
+        
+        self.run_dict = self.periods[self.period]
+        
+        self.param["run"].objects = list(self.run_dict)
+        self.run = list(self.run_dict)[-1]
+        # self.periods = {}
+        # for run in self.run_dict: 
+        #     if self.run_dict[run]['period'] not in self.periods:
+        #         self.periods[self.run_dict[run]['period']] = [run]
+        #     else:
+        #         self.periods[self.run_dict[run]['period']].append(run)
+        
+        
+        start_period = sorted(list(self.periods))[0]
+        start_run    = sorted(list(self.periods[start_period]))[0]
+        end_period   = sorted(list(self.periods))[-1]
+        end_run      = sorted(list(self.periods[end_period]))[-1]
+
+        self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
+                                datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+        self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+        
     
-    @param.depends("run", "phy_plots", watch=True)
+    @param.depends("period", "run", "phy_plots", watch=True)
     def _get_phy_data(self):
         data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds'
         if not os.path.exists(data_file +'.dat'):
@@ -221,7 +226,7 @@ class monitoring(param.Parameterized):
                 
         self.phy_data_df, self.phy_plot_info = phy_data_df, phy_plot_info
     
-    @param.depends("run", watch=True)
+    @param.depends("period", "run", watch=True)
     def _get_muon_data(self):
         data_file = f"{self.muon_path}/generated/plt/phy/{self.period}/dsp/{self.run}/dashboard_period_{self.period}_run_{self.run}.shelve"
         if not os.path.exists(data_file +'.dat'):
@@ -237,7 +242,7 @@ class monitoring(param.Parameterized):
                 
                 self.muon_data_dict = arrays_dict    
             
-    @param.depends("date_range", watch=True)
+    @param.depends("period", "date_range", watch=True)
     def _get_run_dict(self):
         valid_from = [datetime.timestamp(datetime.strptime(self.run_dict[entry]["timestamp"], '%Y%m%dT%H%M%SZ')) for entry in self.run_dict]
         pos1 = bisect.bisect_right(valid_from, datetime.timestamp(self.date_range[0]))
@@ -251,7 +256,7 @@ class monitoring(param.Parameterized):
         out_dict = {key:self.run_dict[key] for key in valid_keys}
         return out_dict
     
-    @param.depends("run", watch=True)
+    @param.depends("period", "run", watch=True)
     def _get_metadata(self):
         try:
             chan_dict, channel_map = self.chan_dict, self.channel_map
@@ -293,13 +298,13 @@ class monitoring(param.Parameterized):
         except:
             pass
 
-    @param.depends("date_range", "plot_type_tracking", "string", "sort_by")
+    @param.depends("period", "date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
 
-        figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], self.string, key=self.sort_by)
+        figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], self.string, self.period, self.plot_type_tracking, key=self.sort_by)
         return figure
     
-    @param.depends("run", "muon_plots_cal")
+    @param.depends("period", "run", "muon_plots_cal")
     def view_muon_cal(self):
         if not bool(self.muon_data_dict):
             p = figure(width=1000, height=600)
@@ -323,7 +328,7 @@ class monitoring(param.Parameterized):
         else:
             return self.muon_plots_cal_dict[self.muon_plots_cal](self.muon_data_dict)
 
-    @param.depends("run", "muon_plots_mon")
+    @param.depends("period", "run", "muon_plots_mon")
     def view_muon_mon(self):
         if not bool(self.muon_data_dict):
             p = figure(width=1000, height=600)
@@ -334,14 +339,14 @@ class monitoring(param.Parameterized):
 
         return self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run)
 
-    @param.depends("sort_by", watch=True)
+    @param.depends("period", "sort_by", watch=True)
     def update_strings(self):
         self.strings_dict, self.chan_dict, self.channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sort_by)
 
         self.param["string"].objects = list(self.strings_dict)
         self.string = f"{list(self.strings_dict)[0]}"
         
-    @param.depends("sipm_sort_by", watch=True)
+    @param.depends("period", "sipm_sort_by", watch=True)
     def update_barrels(self):
         self.sipm_out_dict, self.sipm_chmap = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sipm_sort_by, spms=True)
         
@@ -349,7 +354,7 @@ class monitoring(param.Parameterized):
         self.sipm_barrel = f"{list(self.sipm_out_dict)[0]}"
         
         
-    @param.depends("run", watch=True)
+    @param.depends("period", "run", watch=True)
     def _get_sipm_data(self):
         data_file = self.sipm_path + f'{self.period}_{self.run}_spmmon.hdf'
         if not os.path.exists(data_file):
@@ -361,18 +366,18 @@ class monitoring(param.Parameterized):
         self.sipm_out_dict, self.sipm_chmap = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sipm_sort_by, spms=True)
         self.update_barrels()
         
-    @param.depends("run", "sort_by", "plot_types_download")
+    @param.depends("period", "run", "sort_by", "plot_types_download")
     def download_summary_files(self):
         
         download_file, download_filename = self.plot_types_summary_dict[self.plot_types_download](self.run, 
                                             self.run_dict[self.run], 
-                                            self.path, key=self.sort_by, download=True)
+                                            self.path, self.period, key=self.sort_by, download=True)
         if not os.path.exists(self.tmp_path + download_filename):
             download_file.to_csv(self.tmp_path + download_filename, index=False)
         return pn.widgets.FileDownload(self.tmp_path + download_filename,
                                 button_type='success', embed=False, name="Click to download 'csv'", width=350)
     
-    @param.depends("run", "sipm_sort_by", "sipm_resampled", "sipm_barrel", "sipm_plot_style")
+    @param.depends("period", "run", "sipm_sort_by", "sipm_resampled", "sipm_barrel", "sipm_plot_style")
     def view_sipm(self):
         if self.sipm_data_df.empty:
             p = figure(width=1000, height=600)
@@ -385,33 +390,32 @@ class monitoring(param.Parameterized):
             meta_barrel = {}
             return self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, self.sipm_resampled)
         
-    @param.depends("run", "sort_by", "plot_type_summary", "string")
+    @param.depends("period", "run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None
         if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E", "Tau", 
                                         "Alpha", "Valid. E", "Valid. A/E"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
-                                            self.path, key=self.sort_by)
+                                            self.path, self.period, key=self.sort_by)
             
         elif self.plot_type_summary in ["Detector Status", "FEP Counts"]:
         # elif self.plot_type_summary in ["Detector Status"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
-                                            self.path, self.meta_visu_source, self.meta_visu_xlabels, key=self.sort_by)
+                                            self.path, self.meta_visu_source, self.meta_visu_xlabels, self.period, key=self.sort_by)
         elif self.plot_type_summary in ["Baseline Spectrum", "Energy Spectra", "Baseline Stability", 
                                         "FEP Stability", "Pulser Stability"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.common_dict, self.channel_map, 
                             self.strings_dict[self.string],
-                            self.string, key=self.sort_by)
+                            self.string, self.run, self.period, self.run_dict[self.run], key=self.sort_by)
         else:
             figure = plt.figure()
             plt.close()
         
         return figure
     
-    # @pn.cache(max_items=50, policy='LFU', to_disk=True)
-    @param.depends("run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
+    @param.depends("period", "run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
     def view_phy(self):
         # update plot dict with resampled value
         # set plotting options
@@ -450,8 +454,8 @@ class monitoring(param.Parameterized):
                               f'hit/cal/{self.period}/{self.run}',
                             f'{self.run_dict[self.run]["experiment"]}-{self.period}-{self.run}-cal-{self.run_dict[self.run]["timestamp"]}-plt_hit')
         
-        print(self.run_dict)
-        print(self.plot_dict)
+        # print(self.run_dict)
+        # print(self.plot_dict)
         with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             channels = list(shelf.keys()) 
 
@@ -483,7 +487,7 @@ class monitoring(param.Parameterized):
         self.param["plot_type_details"].objects = plots
         self.plot_type_details = plots[0]
 
-    @param.depends("run", "channel", "parameter", "plot_type_details")
+    @param.depends("period", "run", "channel", "parameter", "plot_type_details")
     def view_details(self):
         if self.parameter in ["A/E", "Baseline"]:
             fig = self.plot_dict_ch[self.plot_type_details]
@@ -522,14 +526,14 @@ class monitoring(param.Parameterized):
 
         return fig
     
-    @param.depends("run", "channel")
+    @param.depends("period", "run", "channel")
     def get_RunAndChannel(self):
-        return pn.pane.Markdown("### Run: {} - String: {}".format(self.run, self.channel))
-    
-    @param.depends("run")
+        return pn.pane.Markdown(f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. | Details | Channel {self.channel}")
+
+    @param.depends("period", "run")
     def view_meta(self):
         return pn.widgets.Tabulator(self.meta_df, formatters={'Proc.': BooleanFormatter(), 'Usabl.': BooleanFormatter()})
     
-    @param.depends("run", "meta_visu_plots")
+    @param.depends("period", "run", "meta_visu_plots")
     def view_meta_visu(self):
         return self.meta_visu_plots_dict[self.meta_visu_plots](self.meta_visu_source, self.meta_visu_chan_dict, self.meta_visu_channel_map, self.meta_visu_xlabels)
