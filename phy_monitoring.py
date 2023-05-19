@@ -9,7 +9,6 @@ import pandas as pd
 
 import panel as pn
 
-import legend_data_monitor as ldm
 
 # @pn.cache(max_items=50, policy='LFU', to_disk=True)
 def phy_plot_vsTime(data_string, plot_info, string, run, period, run_dict):

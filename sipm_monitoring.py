@@ -9,7 +9,6 @@ import pandas as pd
 
 import panel as pn
 
-import legend_data_monitor as ldm
 
 def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period, run_dict):
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")

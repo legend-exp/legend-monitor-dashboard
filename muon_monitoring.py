@@ -42,7 +42,7 @@ def muon_plot_spectra(arrays_dict, run, period, run_dict, plot_type):
     for i in range(9):
 
         for enum, x in enumerate(range(round(((chan_num - 1) / 9),) * (i + 0), round(((chan_num - 1) / 9),) * (i + 1))):
-            p = figure(plot_width=300, plot_height=300, x_axis_label='Pulse height [LSBs]', 
+            p = figure(width=300, height=300, x_axis_label='Pulse height [LSBs]', 
                y_axis_label='counts', y_axis_type="log", x_range=(0, 100), y_range=(1e-0, 2 * np.amax(y_data[i])),
                title="Channel " + str(x) + " (PMT " + str(PMT_ID[x]) + ")")
             p.title.text_font_size = '9pt'

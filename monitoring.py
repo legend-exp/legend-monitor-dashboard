@@ -17,7 +17,6 @@ from  datetime import datetime
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
-import legend_data_monitor as ldm
 
 from bokeh.models.widgets.tables import NumberFormatter, BooleanFormatter
 

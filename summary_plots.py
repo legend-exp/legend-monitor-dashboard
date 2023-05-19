@@ -889,7 +889,7 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
 
             p.step(plot_dict_chan["baseline_spectrum"]["bins"], 
                     plot_dict_chan["baseline_spectrum"]["bl_array"],
-                    legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
+                    legend_label=f'{chan_dict[channel]["name"]}', 
                     mode="after", name=f'{chan_dict[channel]["name"]}',line_width=2, line_color = colours[i])
         except:
             pass
@@ -907,42 +907,6 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
     p.legend.click_policy="hide"
     return p
     
-# def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string, run, period, run_dict,
-#                                     key="String", energy_param = "cuspEmax_ctc"):
-    
-#     times = None
-#     p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-#     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Stability | {string}"
-#     p.title.align = "center"
-#     p.title.text_font_size = "15px"
-#     if len(channels) > 19:
-#         colours = Turbo256[len(channels)]
-#     else:
-#         colours = Category20[len(channels)]
-#     with shelve.open(plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-#         for i,channel in enumerate(channels):
-#             try:
-
-#                 plot_dict_chan = shelf[f"ch{channel:07}"]
-#                 p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param]["mean_stability"]["time"]], 
-#                         plot_dict_chan[energy_param]["mean_stability"]["energy"], 
-#                         legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
-#                         line_width=2, line_color = colours[i])
-#                 if times is None:
-#                     times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param]["mean_stability"]["time"]]      
-#             except:
-#                 pass
-
-#     p.y_range = Range1d(yrange[0], yrange[1])
-    
-#     p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
-#     p.xaxis.axis_label_text_font_size = "20px"
-#     p.yaxis.axis_label = "Energy (keV)"
-#     p.yaxis.axis_label_text_font_size = "16px"
-#     p.legend.location = "top_left"
-#     p.legend.click_policy="hide"
-#     return p
-
 def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run_dict, 
                         key="String", energy_param = "cuspEmax_ctc"):
     
@@ -961,7 +925,7 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
             p.step(plot_dict_chan[energy_param]["spectrum"]["bins"], 
                     plot_dict_chan[energy_param]["spectrum"]["counts"], 
-                    legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
+                    legend_label=f'{chan_dict[channel]["name"]}', 
                     mode="after", line_width=2, line_color = colours[i])
         except:
             pass
@@ -1000,7 +964,7 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
             
             p.line([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
                     bl_mean, 
-                    legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', name = f'{chan_dict[channel]["name"]}',
+                    legend_label=f'{chan_dict[channel]["name"]}', name = f'{chan_dict[channel]["name"]}',
                     line_width=2, line_color = colours[i])
             if times is None:
                     times = [datetime.fromtimestamp(t) for t in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]]      
@@ -1045,9 +1009,9 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
             en_mean = 100*(en-mean)/mean
             en_shift =  100*en_spread/en_mean
             
-            p.step([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param][parameter]["time"]], 
+            p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param][parameter]["time"]], 
                     en_mean, 
-                    legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
+                    legend_label=f'{chan_dict[channel]["name"]}', 
                     line_width=2, line_color = colours[i])
             if times is None:
                 times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param][parameter]["time"]]      
