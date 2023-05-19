@@ -11,9 +11,9 @@ import panel as pn
 
 import legend_data_monitor as ldm
 
-def sipm_plot_vsTime(data_barrel, barrel, resample_unit):
+def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period, run_dict):
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = barrel + " (Resampled: " + resample_unit + ")"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | SiPM | Light Intensity | {barrel}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.hover.formatters = {'$x': 'datetime', '$y': 'printf'}
@@ -31,7 +31,7 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit):
 
     data_barrel_resampled = data_barrel.resample(resample_unit, origin="start").mean()
     for i, col in enumerate(data_barrel_resampled):
-        p.line('time', col, source=data_barrel_resampled, color=colours[i], line_width=2.5, legend_label=col, name=col)
+        p.line('time', col, source=data_barrel_resampled, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
 
     p.legend.location = "bottom_left"
     p.legend.click_policy="hide"
@@ -44,9 +44,9 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit):
 
 
 
-def sipm_plot_histogram(data_barrel, barrel, resample_unit):
+def sipm_plot_histogram(data_barrel, barrel, resample_unit, name_dict, run, period, run_dict):
     p = figure(width=1000, height=600, y_axis_type="log", x_range = (0, 3), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = barrel
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | SiPM | Light Intensity | {barrel}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.hover.tooltips = [( 'Light Intensity Rate (PE/s)',   '$x'),
@@ -65,7 +65,7 @@ def sipm_plot_histogram(data_barrel, barrel, resample_unit):
         data_channel = data_barrel[col]
         counts_ch, bins_ch = np.histogram(data_channel, bins=300, range=(data_channel.min(), 3))
         bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
-        p.line(bins_ch, counts_ch, color=colours[i], line_width=2.5, legend_label=col, name=col)
+        p.line(bins_ch, counts_ch, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
 
     p.legend.location = "bottom_left"
     p.legend.click_policy="hide"

@@ -72,7 +72,7 @@ class monitoring(param.Parameterized):
                         "Tau":plot_pz_consts, "Alpha": plot_alpha, 
                         "Valid. E": plot_no_fitted_energy_peaks, 
                         "Valid. A/E": plot_no_fitted_aoe_slices,
-                        "Baseline Spectrum": plot_bls, "Energy Spectra": plot_energy_spectra,
+                        "Baseline Spectrum": plot_bls, "Energy Spectrum": plot_energy_spectra,
                         "Baseline Stability": plot_baseline_stability,
                         "FEP Stability":plot_fep_stability_channels2d,
                         "Pulser Stability":plot_pulser_stability_channels2d
@@ -158,7 +158,8 @@ class monitoring(param.Parameterized):
         
         self.periods = gen_run_dict(self.path)
         self.param["period"].objects = list(self.periods)
-        self.period = list(self.periods)[-1]
+        # self.period = list(self.periods)[-1]
+        self.period = 'p03'
         
         self._get_period_data()
         
@@ -175,7 +176,7 @@ class monitoring(param.Parameterized):
         
         
         self.sipm_data_df = pd.DataFrame()
-        # self._get_sipm_data()
+        self._get_sipm_data()
         
         self.meta_df = pd.DataFrame()
         self.meta_visu_source      = ColumnDataSource({})
@@ -308,7 +309,7 @@ class monitoring(param.Parameterized):
     def view_muon_cal(self):
         if not bool(self.muon_data_dict):
             p = figure(width=1000, height=600)
-            p.title.text = title=f"No data for run {self.run}"
+            p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
             return p
@@ -324,20 +325,20 @@ class monitoring(param.Parameterized):
                 # Reshape the x_data and y_data arrays
                 x_data = np.array([[dtt.datetime.strptime(date_str, '%Y_%m_%d') for date_str in row] for row in x_data_str])
                 
-                return self.muon_plots_cal_dict[self.muon_plots_cal](x_data, y_data)
+                return self.muon_plots_cal_dict[self.muon_plots_cal](x_data, y_data, self.run, self.period, self.run_dict[self.run], self.muon_plots_cal)
         else:
-            return self.muon_plots_cal_dict[self.muon_plots_cal](self.muon_data_dict)
+            return self.muon_plots_cal_dict[self.muon_plots_cal](self.muon_data_dict, self.run, self.period, self.run_dict[self.run], self.muon_plots_cal)
 
     @param.depends("period", "run", "muon_plots_mon")
     def view_muon_mon(self):
         if not bool(self.muon_data_dict):
             p = figure(width=1000, height=600)
-            p.title.text = title=f"No data for run {self.run}"
+            p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
             return p
 
-        return self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run)
+        return self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run, self.run_dict[self.run])
 
     @param.depends("period", "sort_by", watch=True)
     def update_strings(self):
@@ -364,6 +365,9 @@ class monitoring(param.Parameterized):
             self.sipm_data_df.index = pd.to_datetime(self.sipm_data_df.index, unit='s', origin='unix')
         
         self.sipm_out_dict, self.sipm_chmap = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sipm_sort_by, spms=True)
+        self.sipm_name_dict = {}
+        for val in self.sipm_chmap.values():
+            self.sipm_name_dict[val['daq']['rawid']] = val['name']
         self.update_barrels()
         
     @param.depends("period", "run", "sort_by", "plot_types_download")
@@ -381,14 +385,14 @@ class monitoring(param.Parameterized):
     def view_sipm(self):
         if self.sipm_data_df.empty:
             p = figure(width=1000, height=600)
-            p.title.text = title=f"No data for run {self.run}"
+            p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
             return p
         else:
             data_barrel = self.sipm_data_df[[f'ch{channel}' for channel in self.sipm_out_dict[self.sipm_barrel] if f'ch{channel}' in self.sipm_data_df.columns]]
             meta_barrel = {}
-            return self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, self.sipm_resampled)
+            return self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, self.sipm_resampled, self.sipm_name_dict, self.run, self.period, self.run_dict[self.run])
         
     @param.depends("period", "run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
@@ -404,7 +408,7 @@ class monitoring(param.Parameterized):
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
                                             self.path, self.meta_visu_source, self.meta_visu_xlabels, self.period, key=self.sort_by)
-        elif self.plot_type_summary in ["Baseline Spectrum", "Energy Spectra", "Baseline Stability", 
+        elif self.plot_type_summary in ["Baseline Spectrum", "Energy Spectrum", "Baseline Stability", 
                                         "FEP Stability", "Pulser Stability"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.common_dict, self.channel_map, 
                             self.strings_dict[self.string],
@@ -426,7 +430,7 @@ class monitoring(param.Parameterized):
         # return empty plot if no data exists for run
         if phy_data_df.empty:
             p = figure(width=1000, height=600)
-            p.title.text = title=f"No data for run {self.run}"
+            p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
             return p
@@ -446,7 +450,7 @@ class monitoring(param.Parameterized):
         data_string = phy_data_df[phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
         # plot data
         # print("Time to plot: ", time.time()-startt, "s")
-        return self.phy_plot_style_dict[self.phy_plot_style](data_string, phy_plot_info, self.string)
+        return self.phy_plot_style_dict[self.phy_plot_style](data_string, phy_plot_info, self.string, self.run, self.period, self.run_dict[self.run])
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):

@@ -32,7 +32,7 @@ for i in range(num_colors):
     colors.append(color)
 
 
-def muon_plot_spectra(arrays_dict):
+def muon_plot_spectra(arrays_dict, run, period, run_dict, plot_type):
     x_data = arrays_dict['histo_centers']
     # Extract the Y data column
     y_data = arrays_dict['histo_values']
@@ -47,7 +47,8 @@ def muon_plot_spectra(arrays_dict):
                title="Channel " + str(x) + " (PMT " + str(PMT_ID[x]) + ")")
             p.title.text_font_size = '9pt'
             p.xaxis.axis_label_text_font_size = "10pt"
-
+            p.title.text = f"{run_dict['experiment']}-{period}-{run} | Mu. | Ch. {x} - PMT {PMT_ID[x]}"
+            p.title.align = "center"
 
             # create a ColumnDataSource for each line
             source = ColumnDataSource(data=dict(x=x_data[x], y=y_data[x]))
@@ -60,7 +61,7 @@ def muon_plot_spectra(arrays_dict):
     return grid
 
 
-def muon_plot_spp(arrays_dict):
+def muon_plot_spp(arrays_dict, run, period, run_dict, plot_type):
     x_data = arrays_dict['mean_LSB']
     # Extract the Y data column
     y_data = arrays_dict['mean_sigma']
@@ -70,6 +71,7 @@ def muon_plot_spp(arrays_dict):
     p.hover.tooltips = [( 'Pulse Height (LSB)', '$x'),
                         ('σ of SPP', '$y'),
                         ('Channel'  , '$name')]
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | SPP Gaussian"
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.xaxis.axis_label_text_font_size = "20px"
@@ -104,17 +106,21 @@ def muon_plot_spp(arrays_dict):
     return p
 
 
-def muon_plot_calshift(x_data, y_data):
+def muon_plot_calshift(x_data, y_data, run, period, run_dict, plot_type):
     p = figure(title='Calibration mean shift', x_axis_label='Date', y_axis_label='Mean Shift [LSB]', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
                         ( 'Mean Shift (LSB)',  '$y' ), 
                         ( 'Channel', '$name')]
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Calibration Mean Shift"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
     p.hover.mode = 'vline'
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label_text_font_size = "20px"
+    p.xaxis.axis_label = f"Time (UTC), starting: {x_data[0][0].strftime('%d/%m/%Y %H:%M:%S')}"
     
     p.xaxis.formatter = DatetimeTickFormatter(
         hours=["%Y-%m-%d %H:%M"],
@@ -127,7 +133,7 @@ def muon_plot_calshift(x_data, y_data):
     legend_list = []
     for channel in range(53):
         dates = [dt.strftime("%Y %m %d %H:%M") for dt in x_data[channel]]
-        p.scatter(x_data[channel], y_data[channel], color=colors[channel])
+        p.scatter(x_data[channel], y_data[channel], color=colors[channel], name=PMT_ID[channel])
         line=p.line(x_data[channel], y_data[channel], color=colors[channel], name=PMT_ID[channel])
         lines.append(line)
         legend_list.append((PMT_ID[channel], [line]))
@@ -146,7 +152,7 @@ def muon_plot_calshift(x_data, y_data):
 
 # monitoring plots
 
-def muon_plot_intlight(arrays_dict, period, run):
+def muon_plot_intlight(arrays_dict, period, run, run_dict):
     
     x_data = arrays_dict['multiplicity']
     y_data = arrays_dict['int_light']
@@ -155,34 +161,34 @@ def muon_plot_intlight(arrays_dict, period, run):
     ax.set_yscale("log")
     ax.set_xlabel("PMT Multiplicity",size=15)
     ax.set_ylabel("Integral Light p.e.",size=15)
-    ax.set_title(f"l200-{period}-{run} Integral Light p.e. vs. Multiplicity")
+    ax.set_title(f"{run_dict['experiment']}-{period}-{run} | Muon | Integral Light p.e. vs. Multiplicity")
     
     return fig
 
 
-def muon_plot_totalRates_hourly(arrays_dict, period, run):
+def muon_plot_totalRates_hourly(arrays_dict, period, run, run_dict):
     x_data = arrays_dict['duration']
     y_data = arrays_dict['red_rates']
     
 
-    p = figure(x_axis_label="Time (H)",
-               y_axis_label="Rate (Hz)",
-               x_range=(0, max(x_data)/3600),
-               width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_range=(0, max(x_data)/3600), width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.hover.tooltips = [( 'Time (H)', '$x'),
                         ('Rate (Hz)', '$y'),
                         ('Channel'  , '$name')]
     p.hover.mode = 'vline'
-    p.title.text = f"l200-{period}-{run} Reduced hourly rates for all PMTs"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Red. Hourly Rates for all PMTs"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+    p.xaxis.axis_label = "Time (H)"
     p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Rate (Hz)"
     p.yaxis.axis_label_text_font_size = "20px"
     steps=[]
     legend_list = []
     for chan in range(53):
         #print(np.array(x_data)/3600)
-        step=p.step(np.array(x_data)/3600, np.swapaxes(y_data, 0, 1)[chan], line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        # step=p.step(np.array(x_data)/3600, np.swapaxes(y_data, 0, 1)[chan], line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        step=p.line(np.array(x_data)/3600, np.swapaxes(y_data, 0, 1)[chan], line_color=colors[chan], name=PMT_ID[chan])
         steps.append(step)
         legend_list.append((PMT_ID[chan], [step]))
         
@@ -198,23 +204,23 @@ def muon_plot_totalRates_hourly(arrays_dict, period, run):
     
     return p
 
-def muon_plot_totalRates_daily(arrays_dict, period, run):
+def muon_plot_totalRates_daily(arrays_dict, period, run, run_dict):
     x_data = arrays_dict['times']
     y_data = arrays_dict['red_rates']
     
 
-    p = figure(x_axis_label="Time (H)",
-               y_axis_label="Rate (Hz)",
-               width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [( 'Time', '$x'),
-                        ('Rate (Hz)', '$y'),
+                        ('Rate (Hz)', '$snap_y'),
                         ('Channel'  , '$name')]
     p.hover.mode = 'vline'
-    p.title.text = f"l200-{period}-{run} Reduced daily rates for all PMTs"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Red. Daily Rates for all PMTs"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+    p.xaxis.axis_label = f"Time (UTC), starting: {x_data[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Rate (Hz)"
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
     
@@ -243,7 +249,8 @@ def muon_plot_totalRates_daily(arrays_dict, period, run):
         daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
 
         # Add a glyph renderer for the line
-        step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        # step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        step = p.line(daily_rates, daily_mean_rates, line_color=colors[chan], name=PMT_ID[chan])
         legend_list.append((PMT_ID[chan], [step]))
 
     legend1 = Legend(items=legend_list[:18], orientation="vertical", location=(10, 15))
@@ -258,24 +265,23 @@ def muon_plot_totalRates_daily(arrays_dict, period, run):
 
     return p
 
-def muon_plot_ratesPillBox(arrays_dict, period, run):
+def muon_plot_ratesPillBox(arrays_dict, period, run, run_dict):
     
     x_data = arrays_dict['times']
     y_data = arrays_dict['red_rates']
 
-    p = figure(x_axis_type='datetime',
-               x_axis_label="date",
-               y_axis_label="Rate in Hz",
-               width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [( 'Time', '$x'),
                         ('Rate (Hz)', '$y'),
                         ('Channel'  , '$name')]
     p.hover.mode = 'vline'
-    p.title.text = f"l200-{period}-{run} Reduced daily rates over time for Pillbox PMTs"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Red. Daily Rates over Time for Pillbox PMTs"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+    p.xaxis.axis_label = f"Time (UTC), starting: {x_data[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Rate (Hz)"
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
 
@@ -303,7 +309,8 @@ def muon_plot_ratesPillBox(arrays_dict, period, run):
         daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
 
         # Add a glyph renderer for the line
-        step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        # step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        step = p.line(daily_rates, daily_mean_rates, line_color=colors[chan], name=PMT_ID[chan])
         renderers[PMT_ID[chan]] = step
 
     # Create a legend with interactive checkboxes
@@ -314,25 +321,24 @@ def muon_plot_ratesPillBox(arrays_dict, period, run):
     return p
 
 
-def muon_plot_ratesFloor(arrays_dict, period, run):
+def muon_plot_ratesFloor(arrays_dict, period, run, run_dict):
     
     x_data = arrays_dict['times']
     y_data = arrays_dict['red_rates']
 
-    p = figure(x_axis_type='datetime',
-               x_axis_label="date",
-               y_axis_label="Rate in Hz",
-               width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [( 'Time', '$x'),
                         ('Rate (Hz)', '$y'),
                         ('Channel'  , '$name')]
     p.hover.mode = 'vline'
-    p.title.text = f"l200-{period}-{run} Reduced daily rates over time for Floor PMTs"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Red. Daily Rates over Time for Floor PMTs"
     
     p.title.align = "center"
     p.title.text_font_size = "25px"
+    p.xaxis.axis_label = f"Time (UTC), starting: {x_data[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Rate (Hz)"
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
 
@@ -360,7 +366,8 @@ def muon_plot_ratesFloor(arrays_dict, period, run):
         daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
 
         # Add a glyph renderer for the line
-        step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        # step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        step = p.line(daily_rates, daily_mean_rates, line_color=colors[chan], name=PMT_ID[chan])
         renderers[PMT_ID[chan]] = step
 
     # Create a legend with interactive checkboxes
@@ -370,25 +377,24 @@ def muon_plot_ratesFloor(arrays_dict, period, run):
     
     return p
 
-def muon_plot_ratesWall(arrays_dict, period, run):
+def muon_plot_ratesWall(arrays_dict, period, run, run_dict):
     
     x_data = arrays_dict['times']
     y_data = arrays_dict['red_rates']
 
-    p = figure(x_axis_type='datetime',
-               x_axis_label="date",
-               y_axis_label="Rate in Hz",
-               width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [( 'Time', '$x'),
                         ('Rate (Hz)', '$y'),
                         ('Channel'  , '$name')]
     p.hover.mode = 'vline'
     
-    p.title.text = f"l200-{period}-{run} Reduced daily rates over time for Wall PMTs"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Red. Daily Rates over Time for Wall PMTs"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+    p.xaxis.axis_label = f"Time (UTC), starting: {x_data[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Rate (Hz)"
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
 
@@ -416,7 +422,8 @@ def muon_plot_ratesWall(arrays_dict, period, run):
         daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
 
         # Add a glyph renderer for the line
-        step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        # step = p.step(daily_rates, daily_mean_rates, line_color=colors[chan], mode="center", name=PMT_ID[chan])
+        step = p.line(daily_rates, daily_mean_rates, line_color=colors[chan], name=PMT_ID[chan])
         renderers[PMT_ID[chan]] = step
 
     # Create a legend with interactive checkboxes

@@ -270,7 +270,7 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
     p.yaxis.axis_label_text_font_size = "20px"
 
     p.xaxis.major_label_orientation = np.pi/2
-    p.xaxis.ticker = np.arange(1, len(list(res)), 1)
+    p.xaxis.ticker = np.arange(1, len(list(res))+1, 1)
     p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
     p.xaxis.major_label_text_font_style = "bold"
 
@@ -326,7 +326,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
         1620.50,
         2103.53,
         2614.50]
-    grid = np.zeros((len(peaks), len(channels)))
+    grid = np.zeros((len(peaks), len(channels))) 
     for i,channel in enumerate(channels):
         idxs = []
         try:
@@ -345,13 +345,13 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
             pass
     
     
-    p = figure(width=1400, height=300, y_range=(0.5, 7.5), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
+    p = figure(width=1400, height=300, y_range=(0, 7), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"
 
     label_res = [f"{chmap[channel]['name']}" for channel in channels]
-    p.image(image=[grid], x=0, y=0.5, dw=len(channels), dh=len(peaks), palette=["red", "green"], alpha=0.7)
+    p.image(image=[grid], x=0, y=0, dw=len(channels), dh=len(peaks), palette=["red", "green"], alpha=0.7)
 
     p.xaxis.axis_label = "Detector"
     p.xaxis.axis_label_text_font_size = "20px"
@@ -359,11 +359,12 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     p.yaxis.axis_label_text_font_size = "20px"
 
     p.xaxis.major_label_orientation = np.pi/2
-    p.xaxis.ticker = np.arange(1, len(list(channels)), 1)
-    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.ticker = np.arange(0, len(list(channels)), 1)
+    # p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_overrides = {i: label_res[i] for i in range(0, len(label_res), 1)}
     p.xaxis.major_label_text_font_style = "bold"
 
-    p.yaxis.ticker = np.arange(1, len(peaks), 1)
+    p.yaxis.ticker = np.arange(0, len(peaks), 1)
     p.yaxis.major_label_overrides = {i: f'{peaks[i]}' for i in range(0, len(peaks), 1)}
     
     return p
@@ -400,7 +401,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
             except:
                 nfits[detector] =np.nan
     
-    p = figure(width=1400, height=600, y_range=(-3, 50), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1400, height=600, y_range=(1, 50), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -440,7 +441,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
     p.yaxis.axis_label_text_font_size = "20px"
 
     p.xaxis.major_label_orientation = np.pi/2
-    p.xaxis.ticker = np.arange(1, len(list(nfits)), 1)
+    p.xaxis.ticker = np.arange(1, len(list(nfits))+1, 1)
     p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
     p.xaxis.major_label_text_font_style = "bold"
 
@@ -448,7 +449,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
         loc=np.where(np.array(list(nfits))==stri)[0][0]
         string_span = Span(location=loc+1, dimension='height',
                     line_color='black', line_width=3)
-        string_span_label = Label(x=loc+1.5, y=-2.5, text=stri, text_font_size='10pt', text_color='blue')
+        string_span_label = Label(x=loc+1.5, y=1.5, text=stri, text_font_size='10pt', text_color='blue')
         p.add_layout(string_span_label)
         p.add_layout(string_span)
         
@@ -520,11 +521,11 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
             detector = channel_map[channel]["name"]
 
             try:  
-                aoe_res[detector] =all_res[f"ch{channel:07}"]["aoe"]
+                aoe_res[detector] = all_res[f"ch{channel:07}"]["aoe"]
             except:
                 aoe_res[detector] = default
 
-            if len(list(aoe_res[detector])) ==10:
+            if len(list(aoe_res[detector])) == 10:
                 aoe_res[detector].update({
                                 'Low_side_sfs': {
                                     '1592.5': {
@@ -550,7 +551,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
                                     '2614.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}}})  
 
-            elif len(list(aoe_res[detector])) <10:
+            elif len(list(aoe_res[detector])) < 10:
                 aoe_res[detector] = default
     
     p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
@@ -889,10 +890,15 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
             p.step(plot_dict_chan["baseline_spectrum"]["bins"], 
                     plot_dict_chan["baseline_spectrum"]["bl_array"],
                     legend_label=f'ch{channel:03}: {chan_dict[channel]["name"]}', 
-                    mode="after", line_width=2, line_color = colours[i])
+                    mode="after", name=f'{chan_dict[channel]["name"]}',line_width=2, line_color = colours[i])
         except:
             pass
         
+    p.hover.tooltips = [( 'Detector',   '$name'),
+                        ( 'Baseline', '$x'),
+                        ( 'Counts',    '$y')
+                        ]
+    p.hover.mode = 'vline'
     p.xaxis.axis_label = "Wf Baseline Mean - FC Baseline"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = 'Counts'
@@ -901,41 +907,41 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
     p.legend.click_policy="hide"
     return p
     
-def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string, run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc"):
+# def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, yrange, string, run, period, run_dict,
+#                                     key="String", energy_param = "cuspEmax_ctc"):
     
-    times = None
-    p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Stability | {string}"
-    p.title.align = "center"
-    p.title.text_font_size = "15px"
-    if len(channels) > 19:
-        colours = Turbo256[len(channels)]
-    else:
-        colours = Category20[len(channels)]
-    with shelve.open(plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-        for i,channel in enumerate(channels):
-            try:
+#     times = None
+#     p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+#     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Stability | {string}"
+#     p.title.align = "center"
+#     p.title.text_font_size = "15px"
+#     if len(channels) > 19:
+#         colours = Turbo256[len(channels)]
+#     else:
+#         colours = Category20[len(channels)]
+#     with shelve.open(plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
+#         for i,channel in enumerate(channels):
+#             try:
 
-                plot_dict_chan = shelf[f"ch{channel:07}"]
-                p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param]["mean_stability"]["time"]], 
-                        plot_dict_chan[energy_param]["mean_stability"]["energy"], 
-                        legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
-                        line_width=2, line_color = colours[i])
-                if times is None:
-                    times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param]["mean_stability"]["time"]]      
-            except:
-                pass
+#                 plot_dict_chan = shelf[f"ch{channel:07}"]
+#                 p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param]["mean_stability"]["time"]], 
+#                         plot_dict_chan[energy_param]["mean_stability"]["energy"], 
+#                         legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
+#                         line_width=2, line_color = colours[i])
+#                 if times is None:
+#                     times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param]["mean_stability"]["time"]]      
+#             except:
+#                 pass
 
-    p.y_range = Range1d(yrange[0], yrange[1])
+#     p.y_range = Range1d(yrange[0], yrange[1])
     
-    p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
-    p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = "Energy (keV)"
-    p.yaxis.axis_label_text_font_size = "16px"
-    p.legend.location = "top_left"
-    p.legend.click_policy="hide"
-    return p
+#     p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+#     p.xaxis.axis_label_text_font_size = "20px"
+#     p.yaxis.axis_label = "Energy (keV)"
+#     p.yaxis.axis_label_text_font_size = "16px"
+#     p.legend.location = "top_left"
+#     p.legend.click_policy="hide"
+#     return p
 
 def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run_dict, 
                         key="String", energy_param = "cuspEmax_ctc"):
@@ -992,15 +998,21 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
             bl_mean = 100*(bl-mean)/mean
             bl_shift =  100*bl_spread/bl_mean
             
-            p.step([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
+            p.line([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
                     bl_mean, 
-                    legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', 
+                    legend_label=f'ch{channel:07}: {chan_dict[channel]["name"]}', name = f'{chan_dict[channel]["name"]}',
                     line_width=2, line_color = colours[i])
             if times is None:
                     times = [datetime.fromtimestamp(t) for t in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]]      
         except:
             pass
     
+    p.hover.formatters = {'$x': 'datetime'}
+    p.hover.tooltips = [( 'Detector',   '$name'),
+                        ( 'Time',   '$x{%F %H:%M:%S}'),
+                        ( 'BL Shift (%)',  '$snap_y')
+                        ]
+    p.hover.mode = 'vline'
     p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Shift (%)"
@@ -1013,7 +1025,10 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
                                 key="String", energy_param = "cuspEmax_ctc"):
     times = None
     p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Stability | {string}"
+    if parameter == "2614_stability":
+        p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Stability | {string}"
+    else:
+        p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Pulser Stability | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
     if len(channels) > 19:

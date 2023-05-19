@@ -12,9 +12,9 @@ import panel as pn
 import legend_data_monitor as ldm
 
 # @pn.cache(max_items=50, policy='LFU', to_disk=True)
-def phy_plot_vsTime(data_string, plot_info, string):
+def phy_plot_vsTime(data_string, plot_info, string, run, period, run_dict):
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = string + " " + plot_info['label']
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. | {plot_info['label']} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.hover.formatters = {'$x': 'datetime', '$y': 'printf', '@{}_mean'.format(plot_info['parameter'].split('_var')[0]): 'printf'}
@@ -98,9 +98,9 @@ def phy_plot_vsTime(data_string, plot_info, string):
 
 
 
-def phy_plot_histogram(data_string, plot_info, string):
+def phy_plot_histogram(data_string, plot_info, string, run, period, run_dict):
     p = figure(width=1000, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = string + " " + plot_info['label']
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. | {plot_info['label']} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.hover.formatters = {'$x': 'datetime'}
