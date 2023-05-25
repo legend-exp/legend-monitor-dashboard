@@ -2,7 +2,7 @@ import numpy as np
 import math
 
 from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, FuncTickFormatter, Legend, LegendItem, PrintfTickFormatter
+from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, CustomJSTickFormatter, Legend, LegendItem, PrintfTickFormatter
 from bokeh.palettes import *
 
 # # display bokeh plots in a notebook
@@ -155,7 +155,7 @@ def get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict, ΔR = 160,
     ), xlabels
 
 
-def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title = "LEGEND detector monitoring", palette = inferno(256), ticker = BasicTicker(), formatter = None):
+def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title = "LEGEND detector monitoring", palette = inferno(256), ticker = None, formatter = None):
     source.data["y_label"] = list(map(lambda i: display_dict[i], source.data["ch"]))
     tooltips = [
     ("Detector Name", "@dn"),
@@ -166,6 +166,8 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title 
     ("Mass", "@mass"),
     (f"{ctitle}", "@y_label")
     ]
+    
+    if ticker is None: ticker = BasicTicker()
     
     # To Do: find optimal width and height values for plotting (do not hardcode)
     p = figure(title= plot_title, width=1200, height=920,
@@ -211,7 +213,7 @@ def plot_visu_usability(source, chan_dict, channel_map, xlabels):
     palette = ('red', 'green')
     ctitle = 'Usability'
     ticker = FixedTicker(ticks=[0.25,0.75], tags = ['off', 'on'])
-    formatter = FuncTickFormatter(code="""
+    formatter = CustomJSTickFormatter(code="""
         var mapping = {0.25: "off", 0.75: "on"};
         return mapping[tick];
     """)
@@ -223,7 +225,7 @@ def plot_visu_processable(source, chan_dict, channel_map, xlabels):
     palette = ('red', 'green')
     ctitle = 'Processable'
     ticker = FixedTicker(ticks=[0.25,0.75], tags = ['True', 'False'])
-    formatter = FuncTickFormatter(code="""
+    formatter = CustomJSTickFormatter(code="""
         var mapping = {0.25: "True", 0.75: "False"};
         return mapping[tick];
     """)

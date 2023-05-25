@@ -55,7 +55,6 @@ def phy_plot_vsTime(data_string, plot_info, string, run, period, run_dict):
     
     if plot_info["resampled"] == "yes":
         line_alpha = 0.2
-        hover_names = []
         window = plot_info["time_window"]
         for position, data_channel in data_string.groupby("position"):
             p.line("datetime", plot_info["parameter"], source=data_channel, color=colours[position-1], 
@@ -77,8 +76,6 @@ def phy_plot_vsTime(data_string, plot_info, string, run, period, run_dict):
             p.line("datetime", plot_info["parameter"], source=data_channel_resampled, color=colours[position-1], 
                 legend_label=f"{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}"+ f" (resampled {window})",
                 line_width=2.5)
-            hover_names.append(f"ch {data_channel['channel'].unique()[0]}" + f" (resampled {window})")
-        p.hover.names = hover_names
             
     if plot_info["resampled"] == "no":
         for position, data_channel in data_string.groupby("position"):
@@ -152,13 +149,10 @@ def phy_plot_histogram(data_string, plot_info, string, run, period, run_dict):
         bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
         # create plot histo
         histo_df = pd.DataFrame({"counts": counts_ch, "bins": bins_ch, "position": position, "cc4_id": data_channel['cc4_id'].unique()[0]})
-        # print(histo_df)
         # plot    
         p.line("bins", "counts", source=histo_df, color=colours[position-1], 
             legend_label=f"{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
-            line_width=2)#, mode="after")
-        p.hover.names.append(f"ch {data_channel['channel'].unique()[0]}")
-        # break
+            line_width=2)
     
 
             

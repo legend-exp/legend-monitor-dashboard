@@ -12,7 +12,7 @@ import matplotlib
 from bokeh.models import Span, Label, Title, Range1d
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, FuncTickFormatter, Legend, LegendItem, PrintfTickFormatter
+from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, CustomJSTickFormatter, Legend, LegendItem, PrintfTickFormatter
 from bokeh.palettes import *
 
 import datetime as dtt
@@ -95,7 +95,7 @@ def plot_status(run, run_dict, path, source, xlabels, period, key = None):
     palette = ('red', 'green')
     ctitle = 'Working Detector'
     ticker = FixedTicker(ticks=[0.25,0.75], tags = ['Non-Working', 'Working'])
-    formatter = FuncTickFormatter(code="""
+    formatter = CustomJSTickFormatter(code="""
         var mapping = {0.25: "Non-Working", 0.75: "Working"};
         return mapping[tick];
     """)

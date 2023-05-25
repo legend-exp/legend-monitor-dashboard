@@ -11,17 +11,20 @@ import shelve
 import bisect
 import time
 
+from pathlib import Path
+
 import datetime as dtt
 from  datetime import datetime
 
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
+import holoviews as hv
 
 from bokeh.models.widgets.tables import NumberFormatter, BooleanFormatter
 
 from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, FuncTickFormatter
+from bokeh.models import ColumnDataSource
 from bokeh.palettes import *
 
 from src.util import *
@@ -111,14 +114,15 @@ class monitoring(param.Parameterized):
     # sipm plots
     # sipm_plots_barrels    = ['InnerBarrel-Top', 'InnerBarrel-Bottom', 'OuterBarrel-Top', 'OuterBarrel-Bottom']
     sipm_plot_style_dict  = {'Time': sipm_plot_vsTime, 'Histogram': sipm_plot_histogram}
-    sipm_resampled_vals   = ['1min', '5min', '10min', '30min', '60min']
+    # sipm_resampled_vals   = ['1min', '5min', '10min', '30min', '60min']
+    sipm_resampled_vals   = [1, 5, 10, 30, 60]
     
     
     sipm_sort_dict        = ['Barrel']
     sipm_sort_by          = param.ObjectSelector(default = list(sipm_sort_dict)[0], objects= list(sipm_sort_dict))
     
     sipm_barrel          = param.ObjectSelector(default=0, objects=[0])
-    sipm_resampled       = param.ObjectSelector(default=sipm_resampled_vals[1], objects=sipm_resampled_vals, label="Resampled")
+    sipm_resampled       = param.Integer(default=sipm_resampled_vals[0], bounds=(sipm_resampled_vals[0], sipm_resampled_vals[-1]))
     sipm_plot_style      = param.ObjectSelector(default=list(sipm_plot_style_dict)[0], objects=list(sipm_plot_style_dict))
     
     # muon plots
@@ -143,12 +147,13 @@ class monitoring(param.Parameterized):
     plot_types_download_dict = ["FWHM Qbb", "FWHM FEP", "A/E", "Tau", "Alpha"]
     plot_types_download = param.Selector(default = plot_types_download_dict[0], objects= plot_types_download_dict)
     
-    def __init__(self, cal_path, phy_path, sipm_path, muon_path, tmp_path, name=None):
+    def __init__(self, cal_path, phy_path, sipm_path, muon_path, llama_path, tmp_path, name=None):
         super().__init__(name=name)
         self.path=cal_path
         self.phy_path=phy_path
         self.sipm_path=sipm_path
         self.muon_path = muon_path
+        self.llama_path = llama_path
         self.tmp_path = tmp_path
         self.cached_plots ={}
 
@@ -157,8 +162,7 @@ class monitoring(param.Parameterized):
         
         self.periods = gen_run_dict(self.path)
         self.param["period"].objects = list(self.periods)
-        # self.period = list(self.periods)[-1]
-        self.period = 'p03'
+        self.period = list(self.periods)[-1]
         
         self._get_period_data()
         
@@ -292,9 +296,9 @@ class monitoring(param.Parameterized):
             self.meta_df = df_out
             
             # get metadata visu plot data
-            strings_dict, chan_dict, channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
-            self.meta_visu_source, self.meta_visu_xlabels = get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict)
-            self.meta_visu_chan_dict, self.meta_visu_channel_map = chan_dict, channel_map
+            # strings_dict, chan_dict, channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
+            # self.meta_visu_source, self.meta_visu_xlabels = get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict)
+            # self.meta_visu_chan_dict, self.meta_visu_channel_map = chan_dict, channel_map
         except:
             pass
 
@@ -375,9 +379,11 @@ class monitoring(param.Parameterized):
         download_file, download_filename = self.plot_types_summary_dict[self.plot_types_download](self.run, 
                                             self.run_dict[self.run], 
                                             self.path, self.period, key=self.sort_by, download=True)
+        print(download_filename)
         if not os.path.exists(self.tmp_path + download_filename):
             download_file.to_csv(self.tmp_path + download_filename, index=False)
-        return pn.widgets.FileDownload(self.tmp_path + download_filename,
+            print(download_file)
+        return pn.widgets.FileDownload(self.tmp_path + download_filename, filename=download_filename,
                                 button_type='success', embed=False, name="Click to download 'csv'", width=350)
     
     @param.depends("period", "run", "sipm_sort_by", "sipm_resampled", "sipm_barrel", "sipm_plot_style")
@@ -391,7 +397,7 @@ class monitoring(param.Parameterized):
         else:
             data_barrel = self.sipm_data_df[[f'ch{channel}' for channel in self.sipm_out_dict[self.sipm_barrel] if f'ch{channel}' in self.sipm_data_df.columns]]
             meta_barrel = {}
-            return self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, self.sipm_resampled, self.sipm_name_dict, self.run, self.period, self.run_dict[self.run])
+            return self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, f"{self.sipm_resampled}min", self.sipm_name_dict, self.run, self.period, self.run_dict[self.run])
         
     @param.depends("period", "run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
@@ -404,9 +410,12 @@ class monitoring(param.Parameterized):
             
         elif self.plot_type_summary in ["Detector Status", "FEP Counts"]:
         # elif self.plot_type_summary in ["Detector Status"]:
+            strings_dict, meta_visu_chan_dict, meta_visu_channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
+            meta_visu_source, meta_visu_xlabels = get_plot_source_and_xlabels(meta_visu_chan_dict, meta_visu_channel_map, strings_dict)
+            # self.meta_visu_chan_dict, self.meta_visu_channel_map = chan_dict, channel_map
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
-                                            self.path, self.meta_visu_source, self.meta_visu_xlabels, self.period, key=self.sort_by)
+                                            self.path, meta_visu_source, meta_visu_xlabels, self.period, key=self.sort_by)
         elif self.plot_type_summary in ["Baseline Spectrum", "Energy Spectrum", "Baseline Stability", 
                                         "FEP Stability", "Pulser Stability"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.common_dict, self.channel_map, 
@@ -531,7 +540,7 @@ class monitoring(param.Parameterized):
     
     @param.depends("period", "run", "channel")
     def get_RunAndChannel(self):
-        return pn.pane.Markdown(f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. | Details | Channel {self.channel}")
+        return pn.pane.Markdown(f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. Details | Channel {self.channel}")
 
     @param.depends("period", "run")
     def view_meta(self):
@@ -539,4 +548,40 @@ class monitoring(param.Parameterized):
     
     @param.depends("period", "run", "meta_visu_plots")
     def view_meta_visu(self):
-        return self.meta_visu_plots_dict[self.meta_visu_plots](self.meta_visu_source, self.meta_visu_chan_dict, self.meta_visu_channel_map, self.meta_visu_xlabels)
+        strings_dict, meta_visu_chan_dict, meta_visu_channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
+        meta_visu_source, meta_visu_xlabels = get_plot_source_and_xlabels(meta_visu_chan_dict, meta_visu_channel_map, strings_dict)
+        figure = None
+        figure = self.meta_visu_plots_dict[self.meta_visu_plots](meta_visu_source, meta_visu_chan_dict, meta_visu_channel_map, meta_visu_xlabels)
+        return figure
+    
+        
+    def view_llama(self):
+        try:
+            llama_data = pd.read_csv(self.llama_path + 'monivalues.txt', sep='\s+', dtype={'timestamp': np.int64}, parse_dates=[1])
+            llama_data["timestamp"] = pd.to_datetime(llama_data["timestamp"], origin='unix', unit='s')
+            llama_data = llama_data.rename(columns={"#run_no": "#Run", "timestamp": "Timestamp", "triplet_val" : "Triplet Lifetime (µs)", "triplet_err": "Error Triplet Lifetime (µs)",	"ly_val": "Light Yield", "ly_err": "Error Light Yield"})
+        except:
+            p = figure(width=1000, height=600)
+            p.title.text = title=f"No current Llama data available."
+            p.title.align = "center"
+            p.title.text_font_size = "25px"
+            return p
+        llama_width, llama_height = 1200, 400
+        triplet_plot = hv.Scatter(llama_data, ["Timestamp", "Triplet Lifetime (µs)"], label="Triplet LT")
+        triplet_plot_error = hv.ErrorBars(llama_data, vdims=['Triplet Lifetime (µs)', 'Error Triplet Lifetime (µs)'], kdims=['Timestamp'], label="Triplet LT Error")
+        triplet_plot.opts(xlabel="Time", ylabel="Triplet Lifetime (µs)", tools=['hover'], line_width=1.5, color='blue', width=llama_width, height=llama_height)
+        triplet_plot_error.opts(line_width=0.2, width=llama_width, height=llama_height, show_grid=True)
+
+        lightyield_plot = hv.Scatter(llama_data, ["Timestamp", "Light Yield"], label="Light Yield")
+        lightyield_plot_error = hv.ErrorBars(llama_data, vdims=['Light Yield', 'Error Light Yield'], kdims=['Timestamp'], label="Light Yield Error")
+        lightyield_plot.opts(xlabel="Time", ylabel="Light yield (a.u.)", tools=['hover'], line_width=1.5, color='orange', width=llama_width, height=llama_height, show_grid=True)
+        lightyield_plot_error.opts(line_width=0.2, width=llama_width, height=llama_height)
+
+        layout = triplet_plot * triplet_plot_error + lightyield_plot * lightyield_plot_error
+        layout.opts(width=llama_width, height=llama_height).cols(1)
+        
+        return layout
+    
+    def get_llama_lastUpdate(self):
+        llama_pathlib = Path(self.llama_path + 'monivalues.txt')
+        return "Last modified: {}".format(pd.to_datetime(llama_pathlib.stat().st_mtime, origin='unix', unit='s'))

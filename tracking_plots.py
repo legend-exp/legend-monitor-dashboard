@@ -252,8 +252,8 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
             dets.append(chmap[chan]["name"])
         string_dets[stri] = dets
         
-    p = figure(width=700, height=600, x_axis_type="datetime")
-    p.title.text = f"{run_dict[list(run_dict)[0]]['experiment']}-{period} | Cal. Tracking | {plot_type}"
+    p = figure(width=1400, height=800, x_axis_type="datetime")
+    p.title.text = f"{run_dict[list(run_dict)[0]]['experiment']}-{period} | Cal. Tracking | {plot_type} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
 
