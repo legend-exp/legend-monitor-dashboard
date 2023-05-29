@@ -10,7 +10,6 @@ import pandas as pd
 import panel as pn
 
 
-# @pn.cache(max_items=50, policy='LFU', to_disk=True)
 def phy_plot_vsTime(data_string, plot_info, string, run, period, run_dict):
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. | {plot_info['label']} | {string}"

@@ -211,11 +211,10 @@ class monitoring(param.Parameterized):
         self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
                                 datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
         self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
-        
     
-    @param.depends("period", "run", "phy_plots", watch=True)
-    def _get_phy_data(self):
-        data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds'
+    @pn.cache(max_items=100, policy='LFU', to_disk=True)
+    def _get_phy_dataframe(phy_path, phy_plots, period, run, phy_plots):
+        data_file = phy_path + f'/generated/plt/phy/{period}/{run}/l200-{period}-{run}-phy-geds'
         if not os.path.exists(data_file +'.dat'):
             phy_data_df = pd.DataFrame()
             phy_plot_info = {}
@@ -223,11 +222,29 @@ class monitoring(param.Parameterized):
             with shelve.open(data_file, 'r', protocol=pkl.HIGHEST_PROTOCOL) as file:
 
                 # take df with parameter you want
-                phy_data_df = file['monitoring']['pulser'][self.phy_plots]['df_geds']
+                phy_data_df = file['monitoring']['pulser'][phy_plots]['df_geds']
                 
                 # take a random plot_info, it should be enough to save only one per time
-                phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
+                phy_plot_info = file['monitoring']['pulser'][phy_plots]['plot_info']
+        return phy_data_df, phy_plot_info
+    
+    
+    @param.depends("period", "run", "phy_plots", watch=True)
+    def _get_phy_data(self):
+#         data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds'
+#         if not os.path.exists(data_file +'.dat'):
+#             phy_data_df = pd.DataFrame()
+#             phy_plot_info = {}
+#         else:
+#             with shelve.open(data_file, 'r', protocol=pkl.HIGHEST_PROTOCOL) as file:
+
+#                 # take df with parameter you want
+#                 phy_data_df = file['monitoring']['pulser'][self.phy_plots]['df_geds']
                 
+#                 # take a random plot_info, it should be enough to save only one per time
+#                 phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
+        
+        phy_data_df, phy_plot_info = self._get_phy_dataframe(self.phy_path, self.phy_plots, self.period, self.run, self.phy_plots)
         self.phy_data_df, self.phy_plot_info = phy_data_df, phy_plot_info
     
     @param.depends("period", "run", watch=True)
@@ -379,10 +396,10 @@ class monitoring(param.Parameterized):
         download_file, download_filename = self.plot_types_summary_dict[self.plot_types_download](self.run, 
                                             self.run_dict[self.run], 
                                             self.path, self.period, key=self.sort_by, download=True)
-        print(download_filename)
+        # print(download_filename)
         if not os.path.exists(self.tmp_path + download_filename):
             download_file.to_csv(self.tmp_path + download_filename, index=False)
-            print(download_file)
+            print(download_file, self.tmp_path)
         return pn.widgets.FileDownload(self.tmp_path + download_filename, filename=download_filename,
                                 button_type='success', embed=False, name="Click to download 'csv'", width=350)
     
