@@ -32,6 +32,7 @@ from src.summary_plots import *
 from src.tracking_plots import *
 from src.detailed_plots import *
 from src.phy_monitoring import *
+from src.phy_monitoring  import _get_phy_dataframe
 from src.string_visulization import *
 from src.sipm_monitoring import *
 from src.muon_monitoring import *
@@ -164,29 +165,45 @@ class monitoring(param.Parameterized):
         self.param["period"].objects = list(self.periods)
         self.period = list(self.periods)[-1]
         
-        self._get_period_data()
-        
-        self.update_plot_dict()
-        self.update_plot_type_details()
-        self.update_strings()
-        
+        # create inital dataframes
         self.phy_data_df = pd.DataFrame()
         self.phy_plot_info = {}
-        self._get_phy_data()
         
         self.muon_data_dict = {}
-        self._get_muon_data()
-        
         
         self.sipm_data_df = pd.DataFrame()
-        self._get_sipm_data()
         
         self.meta_df = pd.DataFrame()
         self.meta_visu_source      = ColumnDataSource({})
         self.meta_visu_xlabels     = {}
         self.meta_visu_chan_dict   = {}
         self.meta_visu_channel_map = {}
-        self._get_metadata()
+        
+        # get avaliable periods and runs
+        self._get_period_data()
+        
+        
+        # self.update_plot_dict()
+        # self.update_plot_type_details()
+        # self.update_strings()
+        
+        # self.phy_data_df = pd.DataFrame()
+        # self.phy_plot_info = {}
+        # self._get_phy_data()
+        
+        # self.muon_data_dict = {}
+        # self._get_muon_data()
+        
+        
+        # self.sipm_data_df = pd.DataFrame()
+        # self._get_sipm_data()
+        
+        # self.meta_df = pd.DataFrame()
+        # self.meta_visu_source      = ColumnDataSource({})
+        # self.meta_visu_xlabels     = {}
+        # self.meta_visu_chan_dict   = {}
+        # self.meta_visu_channel_map = {}
+        # self._get_metadata()
         
     @param.depends("period", watch=True)
     def _get_period_data(self):
@@ -212,24 +229,24 @@ class monitoring(param.Parameterized):
                                 datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
         self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
     
-    @pn.cache(max_items=100, policy='LFU', to_disk=True)
-    def _get_phy_dataframe(phy_path, phy_plots, period, run, phy_plots):
-        data_file = phy_path + f'/generated/plt/phy/{period}/{run}/l200-{period}-{run}-phy-geds'
-        if not os.path.exists(data_file +'.dat'):
-            phy_data_df = pd.DataFrame()
-            phy_plot_info = {}
-        else:
-            with shelve.open(data_file, 'r', protocol=pkl.HIGHEST_PROTOCOL) as file:
+    # @pn.cache(max_items=100, policy='LFU', to_disk=True)
+    # def _get_phy_dataframe(phy_path, phy_plots, p, r):
+    #     data_file = phy_path + f'/generated/plt/phy/{p}/{r}/l200-{p}-{r}-phy-geds'
+    #     if not os.path.exists(data_file +'.dat'):
+    #         phy_data_df = pd.DataFrame()
+    #         phy_plot_info = {}
+    #     else:
+    #         with shelve.open(data_file, 'r', protocol=pkl.HIGHEST_PROTOCOL) as file:
 
-                # take df with parameter you want
-                phy_data_df = file['monitoring']['pulser'][phy_plots]['df_geds']
+    #             # take df with parameter you want
+    #             phy_data_df = file['monitoring']['pulser'][phy_plots]['df_geds']
                 
-                # take a random plot_info, it should be enough to save only one per time
-                phy_plot_info = file['monitoring']['pulser'][phy_plots]['plot_info']
-        return phy_data_df, phy_plot_info
+    #             # take a random plot_info, it should be enough to save only one per time
+    #             phy_plot_info = file['monitoring']['pulser'][phy_plots]['plot_info']
+    #     return phy_data_df, phy_plot_info
     
     
-    @param.depends("period", "run", "phy_plots", watch=True)
+    @param.depends("run", "phy_plots", watch=True)
     def _get_phy_data(self):
 #         data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds'
 #         if not os.path.exists(data_file +'.dat'):
@@ -243,11 +260,11 @@ class monitoring(param.Parameterized):
                 
 #                 # take a random plot_info, it should be enough to save only one per time
 #                 phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
-        
-        phy_data_df, phy_plot_info = self._get_phy_dataframe(self.phy_path, self.phy_plots, self.period, self.run, self.phy_plots)
+        print(self.phy_path, self.phy_plots, self.period, self.run)
+        phy_data_df, phy_plot_info = _get_phy_dataframe(self.phy_path, self.phy_plots, self.period, self.run)
         self.phy_data_df, self.phy_plot_info = phy_data_df, phy_plot_info
     
-    @param.depends("period", "run", watch=True)
+    @param.depends("run", watch=True)
     def _get_muon_data(self):
         data_file = f"{self.muon_path}/generated/plt/phy/{self.period}/dsp/{self.run}/dashboard_period_{self.period}_run_{self.run}.shelve"
         if not os.path.exists(data_file +'.dat'):
@@ -263,7 +280,7 @@ class monitoring(param.Parameterized):
                 
                 self.muon_data_dict = arrays_dict    
             
-    @param.depends("period", "date_range", watch=True)
+    @param.depends("date_range", watch=True)
     def _get_run_dict(self):
         valid_from = [datetime.timestamp(datetime.strptime(self.run_dict[entry]["timestamp"], '%Y%m%dT%H%M%SZ')) for entry in self.run_dict]
         pos1 = bisect.bisect_right(valid_from, datetime.timestamp(self.date_range[0]))
@@ -277,7 +294,7 @@ class monitoring(param.Parameterized):
         out_dict = {key:self.run_dict[key] for key in valid_keys}
         return out_dict
     
-    @param.depends("period", "run", watch=True)
+    @param.depends("run", watch=True)
     def _get_metadata(self):
         try:
             chan_dict, channel_map = self.chan_dict, self.channel_map
@@ -319,13 +336,13 @@ class monitoring(param.Parameterized):
         except:
             pass
 
-    @param.depends("period", "date_range", "plot_type_tracking", "string", "sort_by")
+    @param.depends("date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
 
         figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], self.string, self.period, self.plot_type_tracking, key=self.sort_by)
         return figure
     
-    @param.depends("period", "run", "muon_plots_cal")
+    @param.depends("run", "muon_plots_cal")
     def view_muon_cal(self):
         if not bool(self.muon_data_dict):
             p = figure(width=1000, height=600)
@@ -349,7 +366,7 @@ class monitoring(param.Parameterized):
         else:
             return self.muon_plots_cal_dict[self.muon_plots_cal](self.muon_data_dict, self.run, self.period, self.run_dict[self.run], self.muon_plots_cal)
 
-    @param.depends("period", "run", "muon_plots_mon")
+    @param.depends("run", "muon_plots_mon")
     def view_muon_mon(self):
         if not bool(self.muon_data_dict):
             p = figure(width=1000, height=600)
@@ -360,14 +377,14 @@ class monitoring(param.Parameterized):
 
         return self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run, self.run_dict[self.run])
 
-    @param.depends("period", "sort_by", watch=True)
+    @param.depends("sort_by", watch=True)
     def update_strings(self):
         self.strings_dict, self.chan_dict, self.channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sort_by)
 
         self.param["string"].objects = list(self.strings_dict)
         self.string = f"{list(self.strings_dict)[0]}"
         
-    @param.depends("period", "sipm_sort_by", watch=True)
+    @param.depends("sipm_sort_by", watch=True)
     def update_barrels(self):
         self.sipm_out_dict, self.sipm_chmap = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sipm_sort_by, spms=True)
         
@@ -375,7 +392,7 @@ class monitoring(param.Parameterized):
         self.sipm_barrel = f"{list(self.sipm_out_dict)[0]}"
         
         
-    @param.depends("period", "run", watch=True)
+    @param.depends("run", watch=True)
     def _get_sipm_data(self):
         data_file = self.sipm_path + f'{self.period}_{self.run}_spmmon.hdf'
         if not os.path.exists(data_file):
@@ -390,7 +407,7 @@ class monitoring(param.Parameterized):
             self.sipm_name_dict[val['daq']['rawid']] = val['name']
         self.update_barrels()
         
-    @param.depends("period", "run", "sort_by", "plot_types_download")
+    @param.depends("run", "sort_by", "plot_types_download")
     def download_summary_files(self):
         
         download_file, download_filename = self.plot_types_summary_dict[self.plot_types_download](self.run, 
@@ -403,7 +420,7 @@ class monitoring(param.Parameterized):
         return pn.widgets.FileDownload(self.tmp_path + download_filename, filename=download_filename,
                                 button_type='success', embed=False, name="Click to download 'csv'", width=350)
     
-    @param.depends("period", "run", "sipm_sort_by", "sipm_resampled", "sipm_barrel", "sipm_plot_style")
+    @param.depends("run", "sipm_sort_by", "sipm_resampled", "sipm_barrel", "sipm_plot_style")
     def view_sipm(self):
         if self.sipm_data_df.empty:
             p = figure(width=1000, height=600)
@@ -416,7 +433,7 @@ class monitoring(param.Parameterized):
             meta_barrel = {}
             return self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, f"{self.sipm_resampled}min", self.sipm_name_dict, self.run, self.period, self.run_dict[self.run])
         
-    @param.depends("period", "run", "sort_by", "plot_type_summary", "string")
+    @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None
         if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E", "Tau", 
@@ -444,7 +461,7 @@ class monitoring(param.Parameterized):
         
         return figure
     
-    @param.depends("period", "run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
+    @param.depends("run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
     def view_phy(self):
         # update plot dict with resampled value
         # set plotting options
@@ -516,7 +533,7 @@ class monitoring(param.Parameterized):
         self.param["plot_type_details"].objects = plots
         self.plot_type_details = plots[0]
 
-    @param.depends("period", "run", "channel", "parameter", "plot_type_details")
+    @param.depends("run", "channel", "parameter", "plot_type_details")
     def view_details(self):
         if self.parameter in ["A/E", "Baseline"]:
             fig = self.plot_dict_ch[self.plot_type_details]
@@ -555,15 +572,15 @@ class monitoring(param.Parameterized):
 
         return fig
     
-    @param.depends("period", "run", "channel")
+    @param.depends("run", "channel")
     def get_RunAndChannel(self):
         return pn.pane.Markdown(f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. Details | Channel {self.channel}")
 
-    @param.depends("period", "run")
+    @param.depends("run")
     def view_meta(self):
-        return pn.widgets.Tabulator(self.meta_df, formatters={'Proc.': BooleanFormatter(), 'Usabl.': BooleanFormatter()})
+        return pn.widgets.Tabulator(self.meta_df, formatters={'Proc.': BooleanFormatter(), 'Usabl.': BooleanFormatter()}, frozen_columns=[0])
     
-    @param.depends("period", "run", "meta_visu_plots")
+    @param.depends("run", "meta_visu_plots")
     def view_meta_visu(self):
         strings_dict, meta_visu_chan_dict, meta_visu_channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
         meta_visu_source, meta_visu_xlabels = get_plot_source_and_xlabels(meta_visu_chan_dict, meta_visu_channel_map, strings_dict)
