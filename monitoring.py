@@ -32,7 +32,7 @@ from src.summary_plots import *
 from src.tracking_plots import *
 from src.detailed_plots import *
 from src.phy_monitoring import *
-from src.phy_monitoring  import _get_phy_dataframe
+from src.phy_monitoring  import _get_phy_dataframes
 from src.string_visulization import *
 from src.sipm_monitoring import *
 from src.muon_monitoring import *
@@ -163,11 +163,13 @@ class monitoring(param.Parameterized):
         
         self.periods = gen_run_dict(self.path)
         self.param["period"].objects = list(self.periods)
-        self.period = list(self.periods)[-1]
+        # self.period = list(self.periods)[-1]
+        self.period = 'p04'
         
         # create inital dataframes
-        self.phy_data_df = pd.DataFrame()
-        self.phy_plot_info = {}
+        self.phy_data_df_dict           = {}
+        self.phy_data_resampled_df_dict = {}
+        self.phy_plot_info_dict         = {}
         
         self.muon_data_dict = {}
         
@@ -181,6 +183,8 @@ class monitoring(param.Parameterized):
         
         # get avaliable periods and runs
         self._get_period_data()
+        self._get_phy_data()
+        self._get_sipm_data()
         
         
         # self.update_plot_dict()
@@ -228,41 +232,13 @@ class monitoring(param.Parameterized):
         self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
                                 datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
         self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
-    
-    # @pn.cache(max_items=100, policy='LFU', to_disk=True)
-    # def _get_phy_dataframe(phy_path, phy_plots, p, r):
-    #     data_file = phy_path + f'/generated/plt/phy/{p}/{r}/l200-{p}-{r}-phy-geds'
-    #     if not os.path.exists(data_file +'.dat'):
-    #         phy_data_df = pd.DataFrame()
-    #         phy_plot_info = {}
-    #     else:
-    #         with shelve.open(data_file, 'r', protocol=pkl.HIGHEST_PROTOCOL) as file:
 
-    #             # take df with parameter you want
-    #             phy_data_df = file['monitoring']['pulser'][phy_plots]['df_geds']
-                
-    #             # take a random plot_info, it should be enough to save only one per time
-    #             phy_plot_info = file['monitoring']['pulser'][phy_plots]['plot_info']
-    #     return phy_data_df, phy_plot_info
-    
-    
-    @param.depends("run", "phy_plots", watch=True)
+
+    @param.depends("run", watch=True)
     def _get_phy_data(self):
-#         data_file = self.phy_path + f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds'
-#         if not os.path.exists(data_file +'.dat'):
-#             phy_data_df = pd.DataFrame()
-#             phy_plot_info = {}
-#         else:
-#             with shelve.open(data_file, 'r', protocol=pkl.HIGHEST_PROTOCOL) as file:
-
-#                 # take df with parameter you want
-#                 phy_data_df = file['monitoring']['pulser'][self.phy_plots]['df_geds']
-                
-#                 # take a random plot_info, it should be enough to save only one per time
-#                 phy_plot_info = file['monitoring']['pulser'][self.phy_plots]['plot_info']
-        print(self.phy_path, self.phy_plots, self.period, self.run)
-        phy_data_df, phy_plot_info = _get_phy_dataframe(self.phy_path, self.phy_plots, self.period, self.run)
-        self.phy_data_df, self.phy_plot_info = phy_data_df, phy_plot_info
+        self.phy_data_df_dict, self.phy_data_resampled_df_dict, self.phy_plot_info_dict = _get_phy_dataframes(self.phy_path, self.phy_plots_vals, self.period, self.run)
+        self.phy_plots = self.phy_plots_vals[0]
+        
     
     @param.depends("run", watch=True)
     def _get_muon_data(self):
@@ -461,21 +437,22 @@ class monitoring(param.Parameterized):
         
         return figure
     
-    @param.depends("run", "string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
+    @param.depends("string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
     def view_phy(self):
-        # update plot dict with resampled value
-        # set plotting options
-        # startt = time.time()
-        phy_data_df   = self.phy_data_df
-        phy_plot_info = self.phy_plot_info
-        
         # return empty plot if no data exists for run
-        if phy_data_df.empty:
+        if not bool(self.phy_data_df_dict) or self.phy_data_df_dict[self.phy_plots].empty:
             p = figure(width=1000, height=600)
             p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
             return p
+        
+        # load dataframe for current plot value
+        phy_data_df             = self.phy_data_df_dict[self.phy_plots]
+        phy_data_resampled_df   = self.phy_data_resampled_df_dict[self.phy_plots]
+        phy_plot_info           = self.phy_plot_info_dict[self.phy_plots]
+        
+        
         
         if self.phy_units == "Relative":
             phy_plot_info["parameter"] = f"{phy_plot_info['parameter'].split('_var')[0]}_var"
@@ -489,10 +466,11 @@ class monitoring(param.Parameterized):
         phy_plot_info['resampled'] = self.phy_resampled
         
         # get all data from selected string
-        data_string = phy_data_df[phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
+        # data_string = phy_data_df[phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
         # plot data
-        # print("Time to plot: ", time.time()-startt, "s")
-        return self.phy_plot_style_dict[self.phy_plot_style](data_string, phy_plot_info, self.string, self.run, self.period, self.run_dict[self.run])
+        channels = self.strings_dict[self.string]
+        channels = [ch for ch in channels if ch in phy_data_resampled_df.reset_index()['channel'].unique()]
+        return self.phy_plot_style_dict[self.phy_plot_style](phy_data_df.loc[channels], phy_data_resampled_df.loc[channels], phy_plot_info, self.string, self.run, self.period, self.run_dict[self.run], channels, self.channel_map)
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):
