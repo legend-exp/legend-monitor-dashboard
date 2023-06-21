@@ -1,4 +1,4 @@
-from bokeh.models import Span, Label, Title, Range1d, HoverTool
+from bokeh.models import Span, Label, Title, Range1d, HoverTool, Slope
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
 import shelve
@@ -12,102 +12,75 @@ import shelve
 
 import panel as pn
 
-@pn.cache(max_items=10, policy='LFU', to_disk=True)
-def _get_phy_dataframes(phy_path, phy_plots_vals, period, run):
-    data_file = phy_path + f'/generated/plt/phy/{period}/{run}/l200-{period}-{run}-phy-geds'
-    phy_data_df_dict, phy_data_resampled_df_dict, phy_plot_info_dict = {}, {}, {}
-    print(data_file)
-    if not os.path.exists(data_file +'.dat'):
-        for phy_plots in phy_plots_vals:
-            phy_data_df_dict[phy_plots]   = pd.DataFrame()
-            phy_plot_info_dict[phy_plots] = {}
-    else:
-        with shelve.open(data_file, 'r', protocol=pkl.HIGHEST_PROTOCOL) as file:
-            for phy_plots in phy_plots_vals:
-                # take df with parameter you want
-                phy_data_df   = file['monitoring']['pulser'][phy_plots]['df_geds']
-
-                # take a random plot_info, it should be enough to save only one per time
-                phy_plot_info = file['monitoring']['pulser'][phy_plots]['plot_info']
-                
-                # preselect data
-                phy_data_df = phy_data_df[['datetime', 'channel', phy_plot_info["parameter"], f"{phy_plot_info['parameter'].split('_var')[0]}", "{}_mean".format(phy_plot_info['parameter'].split("_var")[0])]].reset_index().set_index(['channel', 'datetime'])
-                
-                phy_data_resampled_df = phy_data_df.reset_index().set_index("datetime").groupby('channel').resample(phy_plot_info["time_window"], origin="start").mean(numeric_only=True).dropna().drop(columns=['channel'])
-                
-                # save to dict
-                phy_data_df_dict[phy_plots]           = phy_data_df
-                phy_data_resampled_df_dict[phy_plots] = phy_data_resampled_df
-                phy_plot_info_dict[phy_plots]         = phy_plot_info
-                
-                
-    return phy_data_df_dict, phy_data_resampled_df_dict, phy_plot_info_dict
-
-def phy_plot_vsTime(data_string, data_string_resampled, plot_info, string, run, period, run_dict, channels, channel_map):
+def phy_plot_vsTime(data_string, plot_info, plot_type, resample_unit, string, run, period, run_dict, channels, channel_map):
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. | {plot_info['label']} | {string}"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'][0]} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
-    p.hover.formatters = {'$x': 'datetime', '$snap_y': 'printf', '@{}_mean'.format(plot_info['parameter'].split('_var')[0]): 'printf'}
+    p.hover.formatters = {'$x': 'datetime', '$snap_y': 'printf'}
     p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
-                        (f"{plot_info['label']} ({plot_info['unit_label']})", '$snap_y{%0.2f}'),
-                        (f"Mean {plot_info['label']} ({plot_info['unit_label']})", '@{}_mean{{%d}}'.format(plot_info['parameter'].split('_var')[0])),
+                        (f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]}", '$snap_y{%0.2f}'),
                         ("Detector", "$name")
                         ]
 
     p.hover.mode = 'vline'
-    
-    len_colours = len(channels)
+
+    len_colours = len(data_string.columns)
     if len_colours > 19:
         colours = Turbo256[len_colours]
     else:
         colours = Category20[len_colours]
 
-    window = plot_info["time_window"]
+    # resample data
+    data_string_resampled = data_string.resample(resample_unit, origin="start").mean()
+    # change column names to detector names
+    data_string_resampled.columns = [channel_map[ch]["name"] for ch in data_string_resampled.columns]
 
-    if plot_info["resampled"] == "only":
-        for i, ch in enumerate(channels):
-            p.line("datetime", plot_info["parameter"], source=data_string_resampled.loc[ch], color=colours[i], legend_label=channel_map[ch]["name"], name=channel_map[ch]["name"] + f" (resampled {window})")
+    for i, det in enumerate(data_string_resampled):
+        p.line('datetime', det, source=data_string_resampled, color=colours[i], legend_label=det, name=det, line_width=2.5)
     
-    if plot_info["resampled"] == "yes":
-        line_alpha = 0.1
-        for i, ch in enumerate(channels):
-            p.line("datetime", plot_info["parameter"], source=data_string.loc[ch], color=colours[i], legend_label=channel_map[ch]["name"], name=channel_map[ch]["name"], line_alpha=line_alpha)
-            # the timestamps in the resampled table will start from the first timestamp, and go with sampling intervals
-            # I want to shift them by half sampling window, so that the resampled value is plotted in the middle time window in which it was calculated
-            p.line("datetime", plot_info["parameter"], source=data_string_resampled.loc[ch], color=colours[i], 
-                legend_label=channel_map[ch]["name"], name=channel_map[ch]["name"] + f" (resampled {window})",
-                line_width=2.5)
+    # draw horizontal line at thresholds from plot info if available
+    if plot_info.loc["lower_lim_var"][0] != 'None' and plot_info.loc["unit"][0] == "%":
+        lower_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["lower_lim_var"][0]),
+                line_color='black', line_dash='dashed', line_width=4)
+        upper_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["upper_lim_var"][0]),
+                line_color='black', line_dash='dashed', line_width=4)
 
-    if plot_info["resampled"] == "no":
-        for i, ch in enumerate(channels):
-            p.line("datetime", plot_info["parameter"], source=data_string.loc[ch], color=colours[i], legend_label=channel_map[ch]["name"], name=channel_map[ch]["name"])
-
+        p.add_layout(lower_lim_var)
+        p.add_layout(upper_lim_var)
+    
+    # legend setups etc...
     p.legend.location = "bottom_left"
     p.legend.click_policy="hide"
-    p.xaxis.axis_label = f"Time (UTC), starting: {data_string.reset_index()['datetime'][0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label = f"Time (UTC), starting: {data_string.index[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = f"{plot_info['label']} [{plot_info['unit_label']}]"
+    p.yaxis.axis_label = f"{plot_info.loc['label'][0]} [{plot_info.loc['unit'][0]}]"
     p.yaxis.axis_label_text_font_size = "20px"
+    
+    if plot_info.loc["label"][0] == 'Noise':
+        if plot_info.loc["unit"][0] == "%":
+            p.y_range = Range1d(-50, 200)
+        else:
+            p.y_range = Range1d(0, 50)
     
     return p
 
 
 
-def phy_plot_histogram(data_string, plot_info, string, run, period, run_dict):
-    p = figure(width=1000, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. | {plot_info['label']} | {string}"
+def phy_plot_histogram(data_string, plot_info, plot_type, resample_unit, string, run, period, run_dict, channels, channel_map):
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'][0]} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
-    p.hover.formatters = {'$x': 'datetime'}
-    p.hover.tooltips = [( f"{plot_info['label']} [{plot_info['unit_label']}]", '$x'),
-                        ( 'Counts',  '$y'), 
-                        ( 'Channel', '$name'),
-                        ('Position', '@position'),
-                        ('CC4', '@cc4_id')]
+    p.hover.formatters = {'$x': 'printf', '$snap_y': 'printf'}
+    p.hover.tooltips = [(f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]}", '$x{%0.2f}'),
+                        ( 'Counts',   '$snap_y'),
+                        ("Detector", "$name")
+                        ]
+
     p.hover.mode = 'vline'
-    
-    len_colours = data_string['position'].max()
+
+    len_colours = len(data_string.columns)
     if len_colours > 19:
         colours = Turbo256[len_colours]
     else:

@@ -32,7 +32,6 @@ from src.summary_plots import *
 from src.tracking_plots import *
 from src.detailed_plots import *
 from src.phy_monitoring import *
-from src.phy_monitoring  import _get_phy_dataframes
 from src.string_visulization import *
 from src.sipm_monitoring import *
 from src.muon_monitoring import *
@@ -102,20 +101,21 @@ class monitoring(param.Parameterized):
     period = param.Selector(default = 0, objects = [0])
     
     # physics plots 
-    phy_plots_vals          = ['baseline', 'cuspEmax', 'cuspEmax_ctc_cal', 'bl_std', 'AoE_Corrected', 'AoE_Classifier']
+    phy_plots_types_dict    = {'Pulser Evt': 'IsPulser', 'Baseline Evt' : 'IsBsln'}
+    phy_plots_vals_dict     = {'Baseline Mean': 'Baseline', 'Noise': 'BlStd', 'Energy CUSP': 'Cuspemax', 'Energy CUSP CTC': 'CuspemaxCtcCal', 'Rate': 'EventRate', 'PSD Classifier': 'AoeCustom'}
     phy_plot_style_dict     = {'Time': phy_plot_vsTime, 'Histogram': phy_plot_histogram}
-    phy_resampled_vals      = ['yes', 'no', 'only']
+    phy_resampled_vals      = [1, 5, 10, 30, 60]
     phy_unit_vals           = ['Relative', 'Absolute']
     
-    phy_plots           = param.ObjectSelector(default=phy_plots_vals[0], objects=phy_plots_vals, label="Value")
+    phy_plots_types     = param.ObjectSelector(default=list(phy_plots_types_dict)[0], objects=list(phy_plots_types_dict), label="Type")
+    phy_plots           = param.ObjectSelector(default=list(phy_plots_vals_dict)[0], objects=list(phy_plots_vals_dict), label="Value")
     phy_plot_style      = param.ObjectSelector(default=list(phy_plot_style_dict)[0], objects=list(phy_plot_style_dict), label="Plot Style")
-    phy_resampled       = param.ObjectSelector(default=phy_resampled_vals[1], objects=phy_resampled_vals, label="Resampled")
+    phy_resampled       = param.Integer(default=phy_resampled_vals[0], bounds=(phy_resampled_vals[0], phy_resampled_vals[-1]))
     phy_units           = param.ObjectSelector(default=phy_unit_vals[0], objects=phy_unit_vals, label="Units")
     
     # sipm plots
     # sipm_plots_barrels    = ['InnerBarrel-Top', 'InnerBarrel-Bottom', 'OuterBarrel-Top', 'OuterBarrel-Bottom']
     sipm_plot_style_dict  = {'Time': sipm_plot_vsTime, 'Histogram': sipm_plot_histogram}
-    # sipm_resampled_vals   = ['1min', '5min', '10min', '30min', '60min']
     sipm_resampled_vals   = [1, 5, 10, 30, 60]
     
     
@@ -163,14 +163,10 @@ class monitoring(param.Parameterized):
         
         self.periods = gen_run_dict(self.path)
         self.param["period"].objects = list(self.periods)
-        # self.period = list(self.periods)[-1]
-        self.period = 'p04'
+        self.period = list(self.periods)[-1]
+        # self.period = 'p04'
         
-        # create inital dataframes
-        self.phy_data_df_dict           = {}
-        self.phy_data_resampled_df_dict = {}
-        self.phy_plot_info_dict         = {}
-        
+        # create inital dataframes        
         self.muon_data_dict = {}
         
         self.sipm_data_df = pd.DataFrame()
@@ -183,7 +179,6 @@ class monitoring(param.Parameterized):
         
         # get avaliable periods and runs
         self._get_period_data()
-        self._get_phy_data()
         self._get_sipm_data()
         
         
@@ -216,6 +211,8 @@ class monitoring(param.Parameterized):
         
         self.param["run"].objects = list(self.run_dict)
         self.run = list(self.run_dict)[-1]
+        # self.run = 'r000'
+        
         # self.periods = {}
         # for run in self.run_dict: 
         #     if self.run_dict[run]['period'] not in self.periods:
@@ -234,10 +231,10 @@ class monitoring(param.Parameterized):
         self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
 
 
-    @param.depends("run", watch=True)
-    def _get_phy_data(self):
-        self.phy_data_df_dict, self.phy_data_resampled_df_dict, self.phy_plot_info_dict = _get_phy_dataframes(self.phy_path, self.phy_plots_vals, self.period, self.run)
-        self.phy_plots = self.phy_plots_vals[0]
+    # @param.depends("run", , watch=True)
+    # def _get_phy_data(self):
+    #     self.phy_data_df_dict, self.phy_data_resampled_df_dict, self.phy_plot_info_dict = _get_phy_dataframes(self.phy_path, self.phy_plots_vals, self.period, self.run)
+    #     self.phy_plots = self.phy_plots_vals[0]
         
     
     @param.depends("run", watch=True)
@@ -437,40 +434,34 @@ class monitoring(param.Parameterized):
         
         return figure
     
-    @param.depends("string", "sort_by", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
+    @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
     def view_phy(self):
+        data_file = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf'
         # return empty plot if no data exists for run
-        if not bool(self.phy_data_df_dict) or self.phy_data_df_dict[self.phy_plots].empty:
+        if not os.path.exists(data_file):
             p = figure(width=1000, height=600)
             p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
             return p
         
-        # load dataframe for current plot value
-        phy_data_df             = self.phy_data_df_dict[self.phy_plots]
-        phy_data_resampled_df   = self.phy_data_resampled_df_dict[self.phy_plots]
-        phy_plot_info           = self.phy_plot_info_dict[self.phy_plots]
-        
-        
-        
-        if self.phy_units == "Relative":
-            phy_plot_info["parameter"] = f"{phy_plot_info['parameter'].split('_var')[0]}_var"
-            phy_plot_info["unit_label"] = "%"
-        else:
-            phy_plot_info["parameter"] = f"{phy_plot_info['parameter'].split('_var')[0]}"
-            phy_plot_info["unit_label"] = phy_plot_info["unit"]
-        
-        # set plotting options
-        phy_plot_info['plot_style'] = self.phy_plot_style
-        phy_plot_info['resampled'] = self.phy_resampled
-        
-        # get all data from selected string
-        # data_string = phy_data_df[phy_data_df.isin({'channel': self.strings_dict[self.string]})['channel']]
-        # plot data
+        # load dataframe for current plot value and get all data from selected string
         channels = self.strings_dict[self.string]
-        channels = [ch for ch in channels if ch in phy_data_resampled_df.reset_index()['channel'].unique()]
-        return self.phy_plot_style_dict[self.phy_plot_style](phy_data_df.loc[channels], phy_data_resampled_df.loc[channels], phy_plot_info, self.string, self.run, self.period, self.run_dict[self.run], channels, self.channel_map)
+        phy_data_key            = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
+        phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+        if self.phy_units == "Relative":
+            phy_data_df                    = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
+            phy_plot_info.loc["unit"][0]   = "%"
+        else:
+            phy_data_df             = pd.read_hdf(data_file, key=phy_data_key)
+        
+        # check if channel selection actually exists in data
+        channels    = [ch for ch in channels if ch in phy_data_df.columns]
+        phy_data_df = phy_data_df[channels]
+            
+        
+        # plot data
+        return self.phy_plot_style_dict[self.phy_plot_style](phy_data_df[channels], phy_plot_info, self.phy_plots_types_dict[self.phy_plots_types], f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], channels, self.channel_map)
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):
