@@ -101,10 +101,10 @@ class monitoring(param.Parameterized):
     period = param.Selector(default = 0, objects = [0])
     
     # physics plots 
-    phy_plots_types_dict    = {'Pulser Evt': 'IsPulser', 'Baseline Evt' : 'IsBsln'}
-    phy_plots_vals_dict     = {'Baseline Mean': 'Baseline', 'Noise': 'BlStd', 'Energy CUSP': 'Cuspemax', 'Energy CUSP CTC': 'CuspemaxCtcCal', 'Rate': 'EventRate', 'PSD Classifier': 'AoeCustom'}
+    phy_plots_types_dict    = {'Pulser Events': 'IsPulser', 'Baseline Events' : 'IsBsln'}
+    phy_plots_vals_dict     = {'Baseline Mean': 'Baseline', 'Noise': 'BlStd', 'Gain': 'Cuspemax', 'Cal. Gain': 'CuspemaxCtcCal', 'Gain to Pulser Ratio': 'Cuspemax_pulser01anaRatio', 'Gain to Pulser Diff.': 'Cuspemax_pulser01anaDiff', 'Rate': 'EventRate', 'PSD Classifier': 'AoeCustom'}
     phy_plot_style_dict     = {'Time': phy_plot_vsTime, 'Histogram': phy_plot_histogram}
-    phy_resampled_vals      = [1, 5, 10, 30, 60]
+    phy_resampled_vals      = [0, 5, 10, 30, 60]
     phy_unit_vals           = ['Relative', 'Absolute']
     
     phy_plots_types     = param.ObjectSelector(default=list(phy_plots_types_dict)[0], objects=list(phy_plots_types_dict), label="Type")
@@ -157,6 +157,8 @@ class monitoring(param.Parameterized):
         self.llama_path = llama_path
         self.tmp_path = tmp_path
         self.cached_plots ={}
+        
+        self.startup_bool = True
 
         prod_config = os.path.join(self.path, "config.json")
         self.prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
@@ -182,61 +184,30 @@ class monitoring(param.Parameterized):
         self._get_sipm_data()
         
         
-        # self.update_plot_dict()
-        # self.update_plot_type_details()
-        # self.update_strings()
-        
-        # self.phy_data_df = pd.DataFrame()
-        # self.phy_plot_info = {}
-        # self._get_phy_data()
-        
-        # self.muon_data_dict = {}
-        # self._get_muon_data()
-        
-        
-        # self.sipm_data_df = pd.DataFrame()
-        # self._get_sipm_data()
-        
-        # self.meta_df = pd.DataFrame()
-        # self.meta_visu_source      = ColumnDataSource({})
-        # self.meta_visu_xlabels     = {}
-        # self.meta_visu_chan_dict   = {}
-        # self.meta_visu_channel_map = {}
-        # self._get_metadata()
-        
     @param.depends("period", watch=True)
     def _get_period_data(self):
-        
-        self.run_dict = self.periods[self.period]
-        
-        self.param["run"].objects = list(self.run_dict)
-        self.run = list(self.run_dict)[-1]
-        # self.run = 'r000'
-        
-        # self.periods = {}
-        # for run in self.run_dict: 
-        #     if self.run_dict[run]['period'] not in self.periods:
-        #         self.periods[self.run_dict[run]['period']] = [run]
-        #     else:
-        #         self.periods[self.run_dict[run]['period']].append(run)
-        
-        
-        start_period = sorted(list(self.periods))[0]
-        start_run    = sorted(list(self.periods[start_period]))[0]
-        end_period   = sorted(list(self.periods))[-1]
-        end_run      = sorted(list(self.periods[end_period]))[-1]
+        if self.startup_bool:
+            print("Startup procedure, skip _get_period_data")
+            self.startup_bool = False
+        else:
+            self.run_dict = self.periods[self.period]
+            
+            self.param["run"].objects = list(self.run_dict)
+            if self.run == list(self.run_dict)[-1]:
+                self.run = list(self.run_dict)[0]
+            else:
+                self.run = list(self.run_dict)[-1]
+            
+            start_period = sorted(list(self.periods))[0]
+            start_run    = sorted(list(self.periods[start_period]))[0]
+            end_period   = sorted(list(self.periods))[-1]
+            end_run      = sorted(list(self.periods[end_period]))[-1]
 
-        self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
-                                datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
-        self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+            self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
+                                    datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+            self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
 
 
-    # @param.depends("run", , watch=True)
-    # def _get_phy_data(self):
-    #     self.phy_data_df_dict, self.phy_data_resampled_df_dict, self.phy_plot_info_dict = _get_phy_dataframes(self.phy_path, self.phy_plots_vals, self.period, self.run)
-    #     self.phy_plots = self.phy_plots_vals[0]
-        
-    
     @param.depends("run", watch=True)
     def _get_muon_data(self):
         data_file = f"{self.muon_path}/generated/plt/phy/{self.period}/dsp/{self.run}/dashboard_period_{self.period}_run_{self.run}.shelve"
@@ -309,7 +280,7 @@ class monitoring(param.Parameterized):
         except:
             pass
 
-    @param.depends("date_range", "plot_type_tracking", "string", "sort_by")
+    @param.depends("period", "date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
 
         figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], self.string, self.period, self.plot_type_tracking, key=self.sort_by)
@@ -448,20 +419,32 @@ class monitoring(param.Parameterized):
         # load dataframe for current plot value and get all data from selected string
         channels = self.strings_dict[self.string]
         phy_data_key            = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
-        phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+        if "pulser" in phy_data_key:
+            phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key.split('_pulser')[0]}_info")
+            if "Diff" in phy_data_key:
+                phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
+            else:
+                phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
+        else:
+            phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+        abs_unit                = phy_plot_info.loc["unit"][0]
+        
         if self.phy_units == "Relative":
             phy_data_df                    = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
             phy_plot_info.loc["unit"][0]   = "%"
         else:
             phy_data_df             = pd.read_hdf(data_file, key=phy_data_key)
         
+        # load mean values
+        phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
+        
         # check if channel selection actually exists in data
-        channels    = [ch for ch in channels if ch in phy_data_df.columns]
-        phy_data_df = phy_data_df[channels]
-            
+        channels            = [ch for ch in channels if ch in phy_data_df.columns and ch in phy_data_df_mean.columns]
+        phy_data_df         = phy_data_df[channels]
+        phy_data_df_mean    = phy_data_df_mean[channels]
         
         # plot data
-        return self.phy_plot_style_dict[self.phy_plot_style](phy_data_df[channels], phy_plot_info, self.phy_plots_types_dict[self.phy_plots_types], f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], channels, self.channel_map)
+        return self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, phy_plot_info, self.phy_plots_types, f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, abs_unit)
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):
