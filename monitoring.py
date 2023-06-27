@@ -165,8 +165,8 @@ class monitoring(param.Parameterized):
         
         self.periods = gen_run_dict(self.path)
         self.param["period"].objects = list(self.periods)
-        # self.period = list(self.periods)[-1]
-        self.period = 'p04'
+        self.period = list(self.periods)[-1]
+        # self.period = 'p04'
         
         # create inital dataframes        
         self.muon_data_dict = {}
