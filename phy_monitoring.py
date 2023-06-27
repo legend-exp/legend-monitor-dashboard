@@ -54,14 +54,14 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, resampl
             p.line('datetime', f"{det}_val", source=data_string, color=colours[i], legend_label=det, name=det, line_width=2.5, alpha=0.2)
     
     # draw horizontal line at thresholds from plot info if available
-    if plot_info.loc["lower_lim_var"][0] != 'None' and plot_info.loc["unit"][0] == "%":
-        lower_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["lower_lim_var"][0]),
-                line_color='black', line_dash='dashed', line_width=4)
-        upper_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["upper_lim_var"][0]),
-                line_color='black', line_dash='dashed', line_width=4)
+#     if plot_info.loc["lower_lim_var"][0] != 'None' and plot_info.loc["unit"][0] == "%":
+#         lower_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["lower_lim_var"][0]),
+#                 line_color='black', line_dash='dashed', line_width=4)
+#         upper_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["upper_lim_var"][0]),
+#                 line_color='black', line_dash='dashed', line_width=4)
 
-        p.add_layout(lower_lim_var)
-        p.add_layout(upper_lim_var)
+#         p.add_layout(lower_lim_var)
+#         p.add_layout(upper_lim_var)
     
     # legend setups etc...
     p.legend.location = "bottom_left"

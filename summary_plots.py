@@ -267,6 +267,7 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
         p.yaxis.axis_label = 'FWHM at Qbb (keV)'
     else:
         p.yaxis.axis_label = 'FWHM of 2.6 MeV peak (keV)'
+        p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Energy Resolution"
     p.yaxis.axis_label_text_font_size = "20px"
 
     p.xaxis.major_label_orientation = np.pi/2

@@ -102,7 +102,7 @@ class monitoring(param.Parameterized):
     
     # physics plots 
     phy_plots_types_dict    = {'Pulser Events': 'IsPulser', 'Baseline Events' : 'IsBsln'}
-    phy_plots_vals_dict     = {'Baseline Mean': 'Baseline', 'Noise': 'BlStd', 'Gain': 'Cuspemax', 'Cal. Gain': 'CuspemaxCtcCal', 'Gain to Pulser Ratio': 'Cuspemax_pulser01anaRatio', 'Gain to Pulser Diff.': 'Cuspemax_pulser01anaDiff', 'Rate': 'EventRate', 'PSD Classifier': 'AoeCustom'}
+    phy_plots_vals_dict     = {'Baseline FPGA': 'Baseline', 'Baseline Mean': 'BlMean', 'Noise': 'BlStd', 'Gain': 'Cuspemax', 'Cal. Gain': 'CuspemaxCtcCal', 'Gain to Pulser Ratio': 'Cuspemax_pulser01anaRatio', 'Gain to Pulser Diff.': 'Cuspemax_pulser01anaDiff', 'Rate': 'EventRate', 'PSD Classifier': 'AoeCustom'}
     phy_plot_style_dict     = {'Time': phy_plot_vsTime, 'Histogram': phy_plot_histogram}
     phy_resampled_vals      = [0, 5, 10, 30, 60]
     phy_unit_vals           = ['Relative', 'Absolute']
@@ -165,8 +165,8 @@ class monitoring(param.Parameterized):
         
         self.periods = gen_run_dict(self.path)
         self.param["period"].objects = list(self.periods)
-        self.period = list(self.periods)[-1]
-        # self.period = 'p04'
+        # self.period = list(self.periods)[-1]
+        self.period = 'p04'
         
         # create inital dataframes        
         self.muon_data_dict = {}
