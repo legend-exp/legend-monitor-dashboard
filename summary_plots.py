@@ -13,7 +13,6 @@ from bokeh.models import Span, Label, Title, Range1d
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, CustomJSTickFormatter, Legend, LegendItem, PrintfTickFormatter
-from bokeh.palettes import *
 
 import colorcet as cc
 
