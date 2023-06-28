@@ -23,10 +23,7 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
     p.hover.mode = 'vline'
 
     len_colours = len(data_barrel.columns)
-    if len_colours > 19:
-        colours = Turbo256[len_colours]
-    else:
-        colours = Category20[len_colours]
+    colours = Turbo256[0:len_colours]
 
     data_barrel_resampled = data_barrel.resample(resample_unit, origin="start").mean()
     for i, col in enumerate(data_barrel_resampled):

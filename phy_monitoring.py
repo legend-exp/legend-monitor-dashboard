@@ -15,6 +15,13 @@ import panel as pn
 def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, resample_unit, string, run, period, run_dict, channel_map, abs_unit):
     # change column names to detector names
     data_string.columns           = ["{}_val".format(channel_map[ch]["name"]) for ch in data_string.columns]
+    
+    # create plot colours
+    len_colours = len(data_string.columns)
+    colours = Turbo256[0:len_colours]
+
+    
+    # add mean values for hover feature
     data_string_mean.columns      = [channel_map[ch]["name"] for ch in data_string_mean.columns]
     for col in data_string_mean.columns:
         data_string[col] = data_string_mean[col][0]
@@ -26,20 +33,13 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, resampl
     p.hover.formatters = {'$x': 'datetime', '$snap_y': 'printf', "@$name": 'printf'}
     p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
                         (f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]})", '$snap_y{%0.2f}'),
-                        (f"Mean {plot_info.loc['label'][0]} ({abs_unit})", '@$name{%0.2f}'),
+                        (f"Mean {plot_info.loc['label'][0]} ({abs_unit})", '@$name'),
                         ("Detector", "$name")
                         ]
 
     p.hover.mode = 'vline'
 
-    len_colours = len(data_string.columns)
-    if len_colours > 19:
-        colours = Turbo256[len_colours]
-    else:
-        colours = Category20[len_colours]
 
-    
-    
     # plot data
     if resample_unit == "0min":
         for i, det in enumerate(data_string_mean):
