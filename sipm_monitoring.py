@@ -1,6 +1,9 @@
 from bokeh.models import Span, Label, Title, Range1d, HoverTool
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
+
+import colorcet as cc
+
 import shelve
 import matplotlib
 from matplotlib import pyplot as plt
@@ -23,7 +26,7 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
     p.hover.mode = 'vline'
 
     len_colours = len(data_barrel.columns)
-    colours = Turbo256[0:len_colours]
+    colours = cc.palette['glasbey_category10'][:len_colours]
 
     data_barrel_resampled = data_barrel.resample(resample_unit, origin="start").mean()
     for i, col in enumerate(data_barrel_resampled):
@@ -52,10 +55,7 @@ def sipm_plot_histogram(data_barrel, barrel, resample_unit, name_dict, run, peri
     p.hover.mode = 'vline'
 
     len_colours = len(data_barrel.columns)
-    if len_colours > 19:
-        colours = Turbo256[len_colours]
-    else:
-        colours = Category20[len_colours]
+    colours = cc.palette['glasbey_category10'][:len_colours]
 
     for i, col in enumerate(data_barrel):
         data_channel = data_barrel[col]

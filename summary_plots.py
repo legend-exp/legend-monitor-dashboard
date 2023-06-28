@@ -15,6 +15,8 @@ from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, CustomJSTickFormatter, Legend, LegendItem, PrintfTickFormatter
 from bokeh.palettes import *
 
+import colorcet as cc
+
 import datetime as dtt
 from  datetime import datetime
 
@@ -880,8 +882,10 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
+    
     len_colours = len(channels)
-    colours = Turbo256[0:len_colours]
+    colours = cc.palette['glasbey_category10'][:len_colours]
+    
     for i,channel in enumerate(channels):
         try:
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
@@ -913,8 +917,9 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Spectra | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
+    
     len_colours = len(channels)
-    colours = Turbo256[0:len_colours]
+    colours = cc.palette['glasbey_category10'][:len_colours]
     
     for i,channel in enumerate(channels):
         try:
@@ -945,8 +950,9 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline Stability | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
+    
     len_colours = len(channels)
-    colours = Turbo256[0:len_colours]
+    colours = cc.palette['glasbey_category10'][:len_colours]
     
     times=None
     for i,channel in enumerate(channels):
@@ -992,7 +998,7 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
     p.title.text_font_size = "15px"
     
     len_colours = len(channels)
-    colours = Turbo256[0:len_colours]
+    colours = cc.palette['glasbey_category10'][:len_colours]
     
     for i,channel in enumerate(channels):
         try:

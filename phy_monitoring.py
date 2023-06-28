@@ -1,6 +1,9 @@
 from bokeh.models import Span, Label, Title, Range1d, HoverTool, Slope
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
+
+import colorcet as cc
+
 import shelve
 import matplotlib
 from matplotlib import pyplot as plt
@@ -18,7 +21,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, resampl
     
     # create plot colours
     len_colours = len(data_string.columns)
-    colours = Turbo256[0:len_colours]
+    colours = cc.palette['glasbey_category10'][:len_colours]
 
     
     # add mean values for hover feature
@@ -33,7 +36,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, resampl
     p.hover.formatters = {'$x': 'datetime', '$snap_y': 'printf', "@$name": 'printf'}
     p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
                         (f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]})", '$snap_y{%0.2f}'),
-                        (f"Mean {plot_info.loc['label'][0]} ({abs_unit})", '@$name'),
+                        (f"Mean {plot_info.loc['label'][0]} ({abs_unit})", '@$name{0.2f}'),
                         ("Detector", "$name")
                         ]
 
@@ -41,17 +44,21 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, resampl
 
 
     # plot data
+    hover_renderers = []
     if resample_unit == "0min":
         for i, det in enumerate(data_string_mean):
             if "mean" in det: continue
-            p.line('datetime', f"{det}_val", source=data_string, color=colours[i], legend_label=det, name=det, line_width=2.5)
+            l = p.line('datetime', f"{det}_val", source=data_string, color=colours[i], legend_label=det, name=det, line_width=2.5)
+            hover_renderers.append(l)
     else:
         data_string_resampled = data_string.resample(resample_unit, origin="start").mean()
         
         for i, det in enumerate(data_string_mean):
             if "mean" in det: continue
-            p.line('datetime', f"{det}_val", source=data_string_resampled, color=colours[i], legend_label=det, name=det, line_width=2.5)
+            l = p.line('datetime', f"{det}_val", source=data_string_resampled, color=colours[i], legend_label=det, name=det, line_width=2.5)
             p.line('datetime', f"{det}_val", source=data_string, color=colours[i], legend_label=det, name=det, line_width=2.5, alpha=0.2)
+            hover_renderers.append(l)
+            
     
     # draw horizontal line at thresholds from plot info if available
 #     if plot_info.loc["lower_lim_var"][0] != 'None' and plot_info.loc["unit"][0] == "%":
@@ -70,6 +77,8 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, resampl
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = f"{plot_info.loc['label'][0]} [{plot_info.loc['unit'][0]}]"
     p.yaxis.axis_label_text_font_size = "20px"
+    
+    p.hover.renderers = hover_renderers
     
     if plot_info.loc["unit"][0] == "%":
         if plot_info.loc["label"][0] == 'Noise':

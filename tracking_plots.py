@@ -12,6 +12,9 @@ import bisect
 from bokeh.models import Span, Label, Title, Range1d
 from bokeh.palettes import Category10, Category20
 from bokeh.plotting import figure, show
+
+import colorcet as cc
+
 import datetime as dtt
 from  datetime import datetime
 
@@ -257,7 +260,7 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
     p.title.align = "center"
     p.title.text_font_size = "15px"
 
-    colours = Category10[10]
+    colours = cc.palette['glasbey_category10'][:100]
     
     for i, det in enumerate(string_dets[string]):
         try:
