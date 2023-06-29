@@ -10,6 +10,7 @@ import pickle as pkl
 import shelve
 import bisect
 import time
+import h5py
 
 from pathlib import Path
 
@@ -408,34 +409,46 @@ class monitoring(param.Parameterized):
     @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units")
     def view_phy(self):
         data_file = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf'
+        
+        # Create empty plot inc ase of errors
+        p = figure(width=1000, height=600)
+        p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
+        p.title.align = "center"
+        p.title.text_font_size = "25px"
+        
         # return empty plot if no data exists for run
         if not os.path.exists(data_file):
-            p = figure(width=1000, height=600)
-            p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
-            p.title.align = "center"
-            p.title.text_font_size = "25px"
             return p
         
+        # get filekeys to check if key exists
+        with h5py.File(data_file, 'r') as f:
+            filekeys = list(f.keys())
+            
         # load dataframe for current plot value and get all data from selected string
         channels = self.strings_dict[self.string]
         phy_data_key            = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
         if "pulser" in phy_data_key:
+            if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys: return p
             phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key.split('_pulser')[0]}_info")
             if "Diff" in phy_data_key:
                 phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
             else:
                 phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
         else:
+            if f"{phy_data_key}_info" not in filekeys: return p
             phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
         abs_unit                = phy_plot_info.loc["unit"][0]
         
         if self.phy_units == "Relative":
+            if f"{phy_data_key}_var" not in filekeys: return p
             phy_data_df                    = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
             phy_plot_info.loc["unit"][0]   = "%"
         else:
+            if phy_data_key not in filekeys: return p
             phy_data_df             = pd.read_hdf(data_file, key=phy_data_key)
         
         # load mean values
+        if f"{phy_data_key}_mean" not in filekeys: return p
         phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
         
         # check if channel selection actually exists in data
@@ -444,7 +457,7 @@ class monitoring(param.Parameterized):
         phy_data_df_mean    = phy_data_df_mean[channels]
         
         # plot data
-        return self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, phy_plot_info, self.phy_plots_types, f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, abs_unit)
+        return self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, phy_plot_info, self.phy_plots_types, self.phy_plots,f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, abs_unit)
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):
