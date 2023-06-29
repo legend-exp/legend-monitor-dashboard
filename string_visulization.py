@@ -239,7 +239,7 @@ def plot_visu_mass(source, chan_dict, channel_map, xlabels):
 
 
 def plot_visu_depletion(source, chan_dict, channel_map, xlabels):
-    display_dict = {i : channel_map[i]['production']['mass_in_g'] for i in source.data['ch']}
+    display_dict = {i : channel_map[i]['characterization']['manufacturer']['depletion_voltage_in_V'] for i in source.data['ch']}
     ctitle = "Depletion voltage in V (manufacturer)"
     palette = viridis(256)
     return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette=palette)
