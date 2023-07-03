@@ -1,8 +1,9 @@
-from bokeh.models import Span, Label, Title, Range1d, HoverTool, Slope
+from bokeh.models import Span, Label, Title, Range1d, HoverTool, Slope, LinearAxis
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
 
 import colorcet as cc
+from seaborn import color_palette
 
 import shelve
 import matplotlib
@@ -11,17 +12,16 @@ import numpy as np
 import pandas as pd
 import os
 import pickle as pkl
-import shelve
 
-import panel as pn
 
-def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_name, resample_unit, string, run, period, run_dict, channel_map, abs_unit):
+
+def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_name, resample_unit, string, run, period, run_dict, channel_map, abs_unit, data_sc, sc_param, sc_option):
     # change column names to detector names
     data_string.columns           = ["{}_val".format(channel_map[ch]["name"]) for ch in data_string.columns]
     
     # create plot colours
     len_colours = len(data_string.columns)
-    colours = cc.palette['glasbey_category10'][:len_colours]
+    colours = color_palette("hls", len_colours).as_hex() 
 
     
     # add mean values for hover feature
@@ -77,7 +77,6 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = f"{plot_info.loc['label'][0]} [{plot_info.loc['unit'][0]}]"
     p.yaxis.axis_label_text_font_size = "20px"
-    
     p.hover.renderers = hover_renderers
     
     if plot_info.loc["unit"][0] == "%":
@@ -90,7 +89,44 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     else:
         if plot_info.loc["label"][0] == 'Noise':
             p.y_range = Range1d(0, 50)
-    
+            
+            
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # SLOW CONTROL DATA
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    if sc_option is True:
+        y_column2_range = f"{sc_param}_range"
+        y_min = float(data_sc.copy()["value"].min())*(1-0.01)
+        y_max = float(data_sc.copy()["value"].max())*(1+0.01)
+        p.extra_y_ranges = {y_column2_range: Range1d(start=y_min, end=y_max)}
+        
+        unit = data_sc["unit"][0]
+        p.add_layout(LinearAxis(y_range_name=y_column2_range, axis_label=f'{sc_param} [{unit}]', axis_label_text_font_size = "20px"), "right")
+
+        time = data_sc["tstamp"]
+        time = pd.to_datetime(time, origin="unix", utc=True)
+        values = data_sc["value"]
+        values = pd.to_numeric(values)
+        values.index = time
+
+        # we use the same resampling of geds data
+        # (use black line to distinguish from geds data)
+        if resample_unit == "0min":
+            p.line(
+                time,
+                values,
+                legend_label=sc_param,
+                y_range_name=y_column2_range,
+                color="black",
+                line_width=2,
+            )
+            hover_renderers.append(l)
+        else:
+            binned_data = values.resample(resample_unit).mean()
+            p.line(time, values, color="black", legend_label=sc_param, y_range_name=y_column2_range, line_width=2, alpha=0.2)
+            p.line(binned_data.index, binned_data.values, color="black", legend_label=sc_param, y_range_name=y_column2_range, line_width=2)
+
+
     return p
 
 
