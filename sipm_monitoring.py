@@ -28,13 +28,17 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
     len_colours = len(data_barrel.columns)
     colours = cc.palette['glasbey_category10'][:len_colours]
 
-    data_barrel_resampled = data_barrel.resample(resample_unit, origin="start").mean()
-    for i, col in enumerate(data_barrel_resampled):
-        p.line('time', col, source=data_barrel_resampled, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
+    if resample_unit == "1min":
+        for i, col in enumerate(data_barrel):
+            p.line('time', col, source=data_barrel, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
+    else:
+        data_barrel_resampled = data_barrel.resample(resample_unit, origin="start").mean()
+        for i, col in enumerate(data_barrel_resampled):
+            p.line('time', col, source=data_barrel_resampled, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
 
     p.legend.location = "bottom_left"
     p.legend.click_policy="hide"
-    p.xaxis.axis_label = f"Time (UTC), starting: {data_barrel_resampled.index[0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label = f"Time (UTC), starting: {data_barrel.index[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Light Intensity Rate (PE/s)"
     p.yaxis.axis_label_text_font_size = "20px"
