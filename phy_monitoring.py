@@ -15,7 +15,7 @@ import pickle as pkl
 
 
 
-def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_name, resample_unit, string, run, period, run_dict, channel_map, abs_unit, data_sc, sc_param, sc_option):
+def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_name, resample_unit, string, run, period, run_dict, channel_map, abs_unit, data_sc, sc_param):
     # change column names to detector names
     data_string.columns           = ["{}_val".format(channel_map[ch]["name"]) for ch in data_string.columns]
     
@@ -94,7 +94,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # SLOW CONTROL DATA
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    if sc_option is True:
+    if data_sc != None:
         y_column2_range = f"{sc_param}_range"
         y_min = float(data_sc.copy()["value"].min())*(1-0.01)
         y_max = float(data_sc.copy()["value"].max())*(1+0.01)
