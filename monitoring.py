@@ -107,14 +107,14 @@ class monitoring(param.Parameterized):
     phy_plot_style_dict     = {'Time': phy_plot_vsTime, 'Histogram': phy_plot_histogram}
     phy_resampled_vals      = [0, 5, 10, 30, 60]
     phy_unit_vals           = ['Relative', 'Absolute']
-    phy_plots_sc_vals_dict  = {"DAQ Temp. Left 1": "DaqLeft_Temp1", "DAQ Temp. Left 2": "DaqLeft_Temp2", "DAQ Temp. Right 1": "DaqRight_Temp1", "DAQ Temp. Right 2": "DaqRight_Temp2", "RREiT": "RREiT", "RRNTe": "RRNTe", "RRSTe" : "RRSTe", "ZUL_T_RR" : "ZUL_T_RR"}
+    phy_plots_sc_vals_dict  = {"None": False, "DAQ Temp. Left 1": "DaqLeft_Temp1", "DAQ Temp. Left 2": "DaqLeft_Temp2", "DAQ Temp. Right 1": "DaqRight_Temp1", "DAQ Temp. Right 2": "DaqRight_Temp2", "RREiT": "RREiT", "RRNTe": "RRNTe", "RRSTe" : "RRSTe", "ZUL_T_RR" : "ZUL_T_RR"}
 
     phy_plots_types     = param.ObjectSelector(default=list(phy_plots_types_dict)[0], objects=list(phy_plots_types_dict), label="Type")
     phy_plots           = param.ObjectSelector(default=list(phy_plots_vals_dict)[0], objects=list(phy_plots_vals_dict), label="Value")
     phy_plot_style      = param.ObjectSelector(default=list(phy_plot_style_dict)[0], objects=list(phy_plot_style_dict), label="Plot Style")
     phy_resampled       = param.Integer(default=phy_resampled_vals[0], bounds=(phy_resampled_vals[0], phy_resampled_vals[-1]))
     phy_units           = param.ObjectSelector(default=phy_unit_vals[0], objects=phy_unit_vals, label="Units")
-    phy_plots_sc        = param.Boolean(default=False, label="SC")
+    # phy_plots_sc        = param.Boolean(default=False, label="SC")
     phy_plots_sc_vals   = param.ObjectSelector(default=list(phy_plots_sc_vals_dict)[0], objects=list(phy_plots_sc_vals_dict), label="SC Values")
     
     # sipm plots
@@ -163,6 +163,8 @@ class monitoring(param.Parameterized):
         self.cached_plots ={}
         
         self.startup_bool = True
+        
+        self._phy_sc_plotted = False
 
         prod_config = os.path.join(self.path, "config.json")
         self.prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
@@ -409,7 +411,7 @@ class monitoring(param.Parameterized):
         
         return figure
     
-    @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc", "phy_plots_sc_vals")
+    @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals")
     def view_phy(self):
         data_file     = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf'
         data_file_sc  = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-slow_control.hdf'
@@ -456,10 +458,13 @@ class monitoring(param.Parameterized):
         phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
         
         # get sc data if selected
-        if self.phy_plots_sc and self.phy_units == "Relative":
+        # if self.phy_plots_sc and self.phy_units == "Relative" and os.path.exists(data_file_sc):
+        if self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals] and os.path.exists(data_file_sc):
             data_sc = pd.read_hdf(data_file_sc, self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals])
+            self._phy_sc_plotted = True
         else:
-            data_sc = None
+            data_sc = pd.DataFrame()
+            self._phy_sc_plotted = False
         # check if channel selection actually exists in data
         channels            = [ch for ch in channels if ch in phy_data_df.columns and ch in phy_data_df_mean.columns]
         phy_data_df         = phy_data_df[channels]

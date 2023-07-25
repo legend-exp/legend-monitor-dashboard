@@ -94,7 +94,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # SLOW CONTROL DATA
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    if data_sc != None:
+    if not data_sc.empty:
         y_column2_range = f"{sc_param}_range"
         y_min = float(data_sc.copy()["value"].min())*(1-0.01)
         y_max = float(data_sc.copy()["value"].max())*(1+0.01)
@@ -120,7 +120,6 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
                 color="black",
                 line_width=2,
             )
-            hover_renderers.append(l)
         else:
             binned_data = values.resample(resample_unit).mean()
             p.line(time, values, color="black", legend_label=sc_param, y_range_name=y_column2_range, line_width=2, alpha=0.2)
