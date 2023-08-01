@@ -102,13 +102,15 @@ def plot_energy_res_2614(path, run_dict, det, plot, colour, period):
     return plot_energy_res(path,run_dict, det, plot, colour, period, at="2.6")
 
 def plot_aoe_mean(path, run_dict, det, plot, colour, period):
-
     
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     configs = LegendMetadata(path = prod_config["paths"]["chan_map"])
     
-    cals= []
+    means= []
+    mean_errs = []
+    reses = []
+    res_errs = []
     times = []
     for run in run_dict:
 
@@ -117,23 +119,26 @@ def plot_aoe_mean(path, run_dict, det, plot, colour, period):
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit_results.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            cals.append(hit_pars_dict[f"ch{channel:07}"]["operations"]["AoE_Corrected"]["parameters"]["a"]*20000 +\
-                       hit_pars_dict[f"ch{channel:07}"]["operations"]["AoE_Corrected"]["parameters"]["b"])
+            means.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["mean"][0])
+            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["mean_errs"][0])
+            reses.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["res"][0])
+            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["res_errs"][0])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
-    cals=np.array(cals)
+    means=np.array(means)
+    reses=np.array(reses)
     plot.step([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                100*(cals-cals[0])/cals[0],
+                (means-means[0])/reses,
            legend_label=det, mode="after", line_width=2, line_color = colour)
 
     plot.circle([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                100*(cals-cals[0])/cals[0],
+                100*(means-means[0])/reses,
             legend_label=det, fill_color="white", size=8, color = colour)
 
     return plot
@@ -144,7 +149,10 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period):
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     configs = LegendMetadata(path = prod_config["paths"]["chan_map"])
     
-    cals= []
+    means= []
+    mean_errs = []
+    reses = []
+    res_errs = []
     times = []
     for run in run_dict:
 
@@ -153,23 +161,26 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period):
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit_results.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            cals.append(hit_pars_dict[f"ch{channel:07}"]["operations"]["AoE_Classifier"]["parameters"]["c"]*20000 +\
-                       hit_pars_dict[f"ch{channel:07}"]["operations"]["AoE_Classifier"]["parameters"]["d"])
+            means.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["mean"][0])
+            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["mean_errs"][0])
+            reses.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["res"][0])
+            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["res_errs"][0])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
-    cals=np.array(cals)
+    means=np.array(means)
+    reses=np.array(reses)
     plot.step([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                100*(cals-cals[0])/cals[0],
+                100*(reses-reses[0])/reses[0],
            legend_label=det, mode="after", line_width=2, line_color = colour)
 
     plot.circle([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                100*(cals-cals[0])/cals[0],
+                100*(reses-reses[0])/reses[0],
             legend_label=det, fill_color="white", size=8, color = colour)
 
     return plot

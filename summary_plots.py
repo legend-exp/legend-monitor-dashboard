@@ -9,7 +9,7 @@ import bisect
 import seaborn as sns
 import matplotlib
 
-from bokeh.models import Span, Label, Title, Range1d
+from bokeh.models import Span, Label, Title, Range1d, Grid, FixedTicker
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, CustomJSTickFormatter, Legend, LegendItem, PrintfTickFormatter
@@ -328,22 +328,22 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
         1620.50,
         2103.53,
         2614.50]
-    grid = np.zeros((len(peaks), len(channels))) 
+    grid = np.ones((len(peaks), len(channels))) 
     for i,channel in enumerate(channels):
-        idxs = []
+        idxs = np.zeros(len(peaks),dtype=bool)
         try:
             fitted_peaks = res[f"ch{channel:07}"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
             if not isinstance(fitted_peaks,list):
                 fitted_peaks = [fitted_peaks]
             for j,peak in enumerate(peaks):
                 if peak in fitted_peaks:
-                    idxs.append(j)
+                    idxs[j]=1
             if len(idxs)>0:
-                grid[np.array(idxs),i]=1
+                grid[idxs,i]=2
                 
         except:
-            if chmap[channel] in off_dets:
-                grid[:,i]=1
+            if channel in off_dets:
+                grid[:,i]=0
             pass
     
     
@@ -353,7 +353,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     p.title.text_font_size = "25px"
 
     label_res = [f"{chmap[channel]['name']}" for channel in channels]
-    p.image(image=[grid], x=0, y=0, dw=len(channels), dh=len(peaks), palette=["red", "green"], alpha=0.7)
+    p.image(image=[grid], x=0, y=0, dw=len(channels), dh=len(peaks), palette=["red", "orange","green"], alpha=0.7)
 
     p.xaxis.axis_label = "Detector"
     p.xaxis.axis_label_text_font_size = "20px"
@@ -361,13 +361,113 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     p.yaxis.axis_label_text_font_size = "20px"
 
     p.xaxis.major_label_orientation = np.pi/2
-    p.xaxis.ticker = np.arange(0, len(list(channels)), 1)
+    p.xaxis.ticker = FixedTicker(ticks=np.arange(0, len(channels), 1)+0.5, minor_ticks = np.arange(0, len(channels), 1))
     # p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
-    p.xaxis.major_label_overrides = {i: label_res[i] for i in range(0, len(label_res), 1)}
+    p.xaxis.major_label_overrides = {i+0.5: label_res[i] for i in range(0, len(label_res), 1)}
     p.xaxis.major_label_text_font_style = "bold"
+    p.xgrid.grid_line_color = None
+    p.xgrid.minor_grid_line_color = 'black'
+    p.xgrid.minor_grid_line_alpha = 0.1
+    p.xaxis.minor_tick_line_color = None
 
-    p.yaxis.ticker = np.arange(0, len(peaks), 1)
-    p.yaxis.major_label_overrides = {i: f'{peaks[i]}' for i in range(0, len(peaks), 1)}
+    p.yaxis.ticker = FixedTicker(ticks=np.arange(0, len(peaks), 1)+0.5, minor_ticks = np.arange(0, len(peaks), 1))
+    p.yaxis.major_label_overrides = {i+0.5: f'{peaks[i]}' for i in range(0, len(peaks), 1)}
+    p.ygrid.grid_line_color = None
+    p.ygrid.minor_grid_line_color = 'black'
+    p.ygrid.minor_grid_line_alpha = 0.1
+    p.yaxis.minor_tick_line_color = None
+    
+    return p
+
+def plot_aoe_status(run, run_dict, path, period, key="String"):
+    
+    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"])
+    
+    prod_config = os.path.join(path,"config.json")
+    prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
+    cfg_file = prod_config["paths"]["chan_map"]
+    configs = LegendMetadata(path = cfg_file)
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
+    channels = [field for field in chmap if chmap[field]["system"]=="geds"]
+    
+    off_dets = [chmap.map("name")[field].daq.rawid for field in soft_dict if soft_dict[field]["processable"]is False]
+    
+    file_path = os.path.join(prod_config["paths"]["par_hit"], 
+                            f'cal/{period}/{run}', 
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+    
+    res = {}
+    with open(file_path, 'r') as r:
+        res = json.load(r)
+
+    checks = ["Time_corr",
+        "Energy_corr",
+        "Cut_det",
+        "Low_side_sfs",
+        "2_side_sfs"]
+    
+    
+    grid = np.ones((len(checks), len(channels))) 
+    for i,channel in enumerate(channels):
+        idxs = np.ones(len(checks), dtype=bool)
+        try:
+            aoe_dict = res[f"ch{channel:07}"]["aoe"]
+            if np.isnan(aoe_dict["1000-1300keV"]["mean"][0]) ==False:
+                idxs[0]=1
+            if np.isnan(np.array(aoe_dict["Mean_pars"])).all() ==False :
+                idxs[1]=1
+            if np.isnan(aoe_dict["Low_cut"]) ==False:
+                idxs[2]=1
+            if isinstance(aoe_dict["Low_side_sfs"],float):
+                pass
+            else:
+                sfs = [float(dic["sf"]) for peak,dic in aoe_dict["Low_side_sfs"].items()]
+                if np.isnan(np.array(sfs)).all() ==False :
+                    idxs[3]=1
+            if isinstance(aoe_dict["2_side_sfs"],float):
+                pass
+            else:
+                sfs = [float(dic["sf"]) for peak,dic in aoe_dict["2_side_sfs"].items()]
+                if np.isnan(np.array(sfs)).all() ==False :
+                    idxs[4]=1
+
+            if len(idxs)>0:
+                grid[idxs,i]=2
+                
+        except KeyError:
+            if channel in off_dets:
+                grid[:,i]=0
+            pass
+    
+    p = figure(width=1400, height=300, y_range=(0, 5), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E status"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+
+    label_res = [f"{chmap[channel]['name']}" for channel in channels]
+    p.image(image=[grid], x=0, y=0, dw=len(channels), dh=len(checks), palette=["red", "orange", "green"], alpha=0.7)
+
+    p.xaxis.axis_label = "Detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Peaks"
+    p.yaxis.axis_label_text_font_size = "20px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = FixedTicker(ticks=np.arange(0, len(channels), 1)+0.5, minor_ticks = np.arange(0, len(channels), 1))
+    # p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_overrides = {i+0.5: label_res[i] for i in range(0, len(label_res), 1)}
+    p.xaxis.major_label_text_font_style = "bold"
+    p.xgrid.grid_line_color = None
+    p.xgrid.minor_grid_line_color = 'black'
+    p.xgrid.minor_grid_line_alpha = 0.1
+    p.xaxis.minor_tick_line_color = None
+
+    p.yaxis.ticker = FixedTicker(ticks=np.arange(0, len(checks), 1)+0.5, minor_ticks = np.arange(0, len(checks), 1))
+    p.yaxis.major_label_overrides = {i+0.5: f'{checks[i]}' for i in range(0, len(checks), 1)}
+    p.ygrid.grid_line_color = None
+    p.ygrid.minor_grid_line_color = 'black'
+    p.ygrid.minor_grid_line_alpha = 0.1
+    p.yaxis.minor_tick_line_color = None
     
     return p
 

@@ -67,15 +67,17 @@ class monitoring(param.Parameterized):
             "A/E": aoe_plots, "Tau": tau_plots, "Optimisation": optimisation_plots}
         
     plot_types_summary_dict = {
-                        "Detector Status": plot_status, 
+                        "Detector Status": plot_status,
+                        "Valid. E": plot_no_fitted_energy_peaks,
+                        "A/E Status": plot_aoe_status,
+                        "Energy Spectrum": plot_energy_spectra,  
                         "FEP Counts": plot_counts, 
                         "FWHM Qbb": plot_energy_resolutions_Qbb, 
                         "FWHM FEP": plot_energy_resolutions_2614,
-                        "A/E":get_aoe_results, 
+                        "A/E sfs":get_aoe_results, 
                         "Tau":plot_pz_consts, "Alpha": plot_alpha, 
-                        "Valid. E": plot_no_fitted_energy_peaks, 
                         "Valid. A/E": plot_no_fitted_aoe_slices,
-                        "Baseline Spectrum": plot_bls, "Energy Spectrum": plot_energy_spectra,
+                        "Baseline Spectrum": plot_bls,
                         "Baseline Stability": plot_baseline_stability,
                         "FEP Stability":plot_fep_stability_channels2d,
                         "Pulser Stability":plot_pulser_stability_channels2d
