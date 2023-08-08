@@ -39,7 +39,8 @@ def plot_geometry(d, R, H):
     xbot = []
     ybot = []
 
-    botout = g['taper']['bottom']['outer']
+    # botout = g['taper']['bottom']['outer']
+    botout = g['taper']['bottom']
     if is_taper(botout):
         TH = botout['height_in_mm']
         TR = botout['radius_in_mm'] if 'radius_in_mm' in botout else TH * math.sin(botout['angle_in_deg'] * math.pi/180)
@@ -50,14 +51,16 @@ def plot_geometry(d, R, H):
         ybot.append(H-DH)
 
     if has_groove(g):
-        GR = g['groove']['outer_radius_in_mm']
+        # GR = g['groove']['outer_radius_in_mm']
+        GR = g['groove']['radius_in_mm']['outer']
         GH = g['groove']['depth_in_mm']
-        GW = g['groove']['width_in_mm']
+        # GW = g['groove']['width_in_mm']
+        GW = g['groove']['radius_in_mm']['outer'] - g['groove']['radius_in_mm']['inner']
         xbot.extend([GR,GR,GR-GW,GR-GW])
         ybot.extend([H-DH,H-DH+GH,H-DH+GH,H-DH])
         
     if coax:
-        BG = g['borehole']['gap_in_mm']
+        BG = g['borehole']['depth_in_mm']
         BR = g['borehole']['radius_in_mm']
         xbot.extend([BR, BR])
         ybot.extend([H-DH, H-DH+BG])
@@ -66,7 +69,8 @@ def plot_geometry(d, R, H):
     xtop = []
     ytop = []
 
-    topout = g['taper']['top']['outer']
+    # topout = g['taper']['top']['outer']
+    topout = g['taper']['top']
     if is_taper(topout):
         TH = topout['height_in_mm']
         TR = TH * math.sin(topout['angle_in_deg'] * math.pi/180)
@@ -77,10 +81,11 @@ def plot_geometry(d, R, H):
         ytop.append(H)
 
     if has_borehole(g) and not coax:
-        BG = g['borehole']['gap_in_mm']
+        BG = g['borehole']['depth_in_mm']
         BR = g['borehole']['radius_in_mm']
 
-        topin  = g['taper']['top']['inner']
+        # topin  = g['taper']['top']['inner']
+        topin  = g['taper']['top']
         if is_taper(topin):
             TH = topin['height_in_mm']
             TR = TH * math.sin(topin['angle_in_deg'] * math.pi/180)

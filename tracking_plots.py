@@ -255,7 +255,7 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
             dets.append(chmap[chan]["name"])
         string_dets[stri] = dets
         
-    p = figure(width=1400, height=600, x_axis_type="datetime")
+    p = figure(width=1000, height=400, x_axis_type="datetime", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict[list(run_dict)[0]]['experiment']}-{period} | Cal. Tracking | {plot_type} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -303,4 +303,4 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     
-    return p
+    return pn.pane.Bokeh(p, sizing_mode="stretch_width")
