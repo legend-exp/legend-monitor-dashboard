@@ -503,7 +503,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
             except:
                 nfits[detector] =np.nan
     
-    p = figure(width=1400, height=600, y_range=(1, 50), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1400, height=600, y_range=(1, 70), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"

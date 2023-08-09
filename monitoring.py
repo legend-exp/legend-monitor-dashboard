@@ -69,14 +69,15 @@ class monitoring(param.Parameterized):
     plot_types_summary_dict = {
                         "Detector Status": plot_status,
                         "Valid. E": plot_no_fitted_energy_peaks,
-                        "A/E Status": plot_aoe_status,
                         "Energy Spectrum": plot_energy_spectra,  
                         "FEP Counts": plot_counts, 
                         "FWHM Qbb": plot_energy_resolutions_Qbb, 
                         "FWHM FEP": plot_energy_resolutions_2614,
-                        "A/E sfs":get_aoe_results, 
-                        "Tau":plot_pz_consts, "Alpha": plot_alpha, 
+                        "A/E Status": plot_aoe_status,
                         "Valid. A/E": plot_no_fitted_aoe_slices,
+                        "A/E SF":get_aoe_results, 
+                        "Tau":plot_pz_consts, 
+                        "CT Alpha": plot_alpha, 
                         "Baseline Spectrum": plot_bls,
                         "Baseline Stability": plot_baseline_stability,
                         "FEP Stability":plot_fep_stability_channels2d,
@@ -388,8 +389,8 @@ class monitoring(param.Parameterized):
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None
-        if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E", "Tau", 
-                                        "Alpha", "Valid. E", "Valid. A/E"]:
+        if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E Status", "Tau", 
+                                        "CT Alpha", "Valid. E", "Valid. A/E", "A/E SF"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
                                             self.path, self.period, key=self.sort_by)
@@ -408,8 +409,7 @@ class monitoring(param.Parameterized):
                             self.strings_dict[self.string],
                             self.string, self.run, self.period, self.run_dict[self.run], key=self.sort_by)
         else:
-            figure = plt.figure()
-            plt.close()
+            figure = figure()
         
         return figure
     
