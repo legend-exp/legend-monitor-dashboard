@@ -591,6 +591,7 @@ class monitoring(param.Parameterized):
             p.title.text_font_size = "25px"
             return p
         llama_width, llama_height = 1200, 400
+        # add two hours to x values to convert from UTC to CET if values still in UTC
         if llama_data["Timestamp"][0].utcoffset() == None:
             llama_data["Timestamp"] += pd.Timedelta(hours=2)
         triplet_plot = hv.Scatter(llama_data, ["Timestamp", "Triplet Lifetime (µs)"], label="Triplet LT")

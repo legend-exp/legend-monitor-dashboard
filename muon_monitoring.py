@@ -107,7 +107,7 @@ def muon_plot_spp(arrays_dict, run, period, run_dict, plot_type):
     return p
 
 def muon_plot_calshift(x_data, y_data, run, period, run_dict, plot_type): #ueberpruefen
-   ## Add a timedelta of 2 hours
+   # add a timedelta of 2 hours to convert from UTC to CET
     two_hours = timedelta(hours=2)
     x_data += two_hours
     p = figure(title='Calibration mean shift', x_axis_label='Date', y_axis_label='Mean Shift [LSB]', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
@@ -124,7 +124,6 @@ def muon_plot_calshift(x_data, y_data, run, period, run_dict, plot_type): #ueber
     p.title.text_font_size = "25px"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label_text_font_size = "20px"
-  #  p.scatter(x_data[0], y_data[0], color='red', name='Channel 1')  # Example data for Channel 1
     p.xaxis.axis_label = f"Time (CET), starting: {x_data[0][0].strftime('%d/%m/%Y %H:%M:%S')}"
     
     p.xaxis.formatter = DatetimeTickFormatter(
@@ -174,7 +173,6 @@ def muon_plot_intlight(arrays_dict, period, run, run_dict):
 def muon_plot_totalRates_hourly(arrays_dict, period, run, run_dict):
     x_data = arrays_dict['duration']
     y_data = arrays_dict['red_rates']
-    #ggf. von Hz in mHz
 
     p = figure(x_range=(0, max(x_data)/3600), width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.hover.tooltips = [( 'Time (H)', '$x'),
@@ -213,6 +211,7 @@ def muon_plot_totalRates_daily(arrays_dict, period, run, run_dict):
     x_data = arrays_dict['times']
     y_data = arrays_dict['red_rates']
 
+    # add a timedelta of two hours to the first entry which is the starting time
     x_label = x_data[0] + timedelta(hours=2)
 
     p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
@@ -253,7 +252,8 @@ def muon_plot_totalRates_daily(arrays_dict, period, run, run_dict):
         daily_rates.append(current_day)
         daily_mean_rates.append(sum_rate/count)
         daily_rates = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
-
+        
+        # define new array with CET times 
         daily_rates_cet = [dtt.datetime.combine(date, dtt.datetime.min.time()) for date in daily_rates]
         daily_rates_cet = [dt + timedelta(hours=2) for dt in daily_rates_cet]
         
@@ -276,6 +276,7 @@ def muon_plot_ratesPillBox(arrays_dict, period, run, run_dict):
     x_data = arrays_dict['times']
     y_data = arrays_dict['red_rates']
 
+    # same steps as in the function above
     x_label = x_data[0] + timedelta(hours=2)
 
     p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")

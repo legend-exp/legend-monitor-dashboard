@@ -28,7 +28,8 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     for col in data_string_mean.columns:
         data_string[col] = data_string_mean[col][0]
     
-    if data_string.index[0].utcoffset() != pd.Timedelta(hours=2):
+    # add two hours to x values with if condition
+    if data_string.index[0].utcoffset() != pd.Timedelta(hours=2): # only add timedelta if still in UTC
         data_string.index += pd.Timedelta(hours=2)
     
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")

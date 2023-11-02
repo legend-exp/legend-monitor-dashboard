@@ -16,6 +16,7 @@ from bokeh.models import DatetimeTickFormatter
 
 def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period, run_dict):
 
+    # add two hours to the x values with if condition
     if data_barrel.index[0].utcoffset() != pd.Timedelta(hours=2):
         data_barrel.index += pd.Timedelta(hours=2)
 

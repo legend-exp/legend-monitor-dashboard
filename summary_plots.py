@@ -25,8 +25,6 @@ from legendmeta.catalog import Props
 from src.util import *
 from src.string_visulization import *
 
-from datetime import datetime, timedelta
-
 def build_string_array(chan_map):
     dets = []
     strings = []
@@ -1028,9 +1026,7 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
             p.step(plot_dict_chan[energy_param]["spectrum"]["bins"], 
                     plot_dict_chan[energy_param]["spectrum"]["counts"], 
-                 #   legend_label=f'{chan_dict[channel]["name"]}', 
-                  #  mode="after", line_width=2, line_color = colours[i])
-                  legend_label=f'{chan_dict[channel]["name"]}', 
+                    legend_label=f'{chan_dict[channel]["name"]}', 
                     mode="after", name=f'{chan_dict[channel]["name"]}',line_width=2, line_color = colours[i])
         except:
             pass
@@ -1066,13 +1062,13 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
             bl_mean = 100*(bl-mean)/mean
             bl_shift =  100*bl_spread/bl_mean
             
-            #if condition
+            # define if condition such that timedelta only added if still in UTC
             base_time = plot_dict[f'ch{channel:07}']["baseline_stability"]["time"][0]
             dt_object_base = datetime.utcfromtimestamp(base_time)
             utc_offset_base = dt_object_base.utcoffset()
             
             if utc_offset_base == None:
-                p.line([(datetime.fromtimestamp(time) + timedelta(hours=2)) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
+                p.line([(datetime.fromtimestamp(time) + timedelta(hours=2)) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], # add two hours manually
                         bl_mean, 
                         legend_label=f'{chan_dict[channel]["name"]}', name = f'{chan_dict[channel]["name"]}',
                         line_width=2, line_color = colours[i])   
@@ -1088,6 +1084,7 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
         except:
             pass
     
+    # revision of hover tool to display values correctly
     p.hover.formatters = {'$x': 'datetime', '$y': 'printf'}
     p.hover.tooltips = [( 'Detector',   '$name'),
                         ( 'Time',   '$x{%F %H:%M:%S CET}'),
@@ -1126,13 +1123,13 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
             en_mean = 100*(en-mean)/mean
             en_shift =  100*en_spread/en_mean
             
-            #if condition
+            # define if condition such that timedelta only added if still in UTC
             plot_time = plot_dict_chan[energy_param][parameter]["time"][0]
             dt_object_plot = datetime.utcfromtimestamp(plot_time)
             utc_offset = dt_object_plot.utcoffset()
 
             if utc_offset == None:
-                p.line([(datetime.fromtimestamp(time) + timedelta(hours=2)) for time in plot_dict_chan[energy_param][parameter]["time"]], 
+                p.line([(datetime.fromtimestamp(time) + timedelta(hours=2)) for time in plot_dict_chan[energy_param][parameter]["time"]],  # add two hours manually
                         en_mean, 
                         legend_label=f'{chan_dict[channel]["name"]}',  name = f'{chan_dict[channel]["name"]}',
                         line_width=2, line_color = colours[i])
@@ -1148,6 +1145,7 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
         except:
             pass
 
+    # revision of hover tool to display detector name and values correctly
     p.hover.formatters = {'$x': 'datetime', '$y': 'printf'}
     p.hover.tooltips = [( 'Detector',   '$name'),
                         ( 'Time',   '$x{%F %H:%M:%S CET}'),
