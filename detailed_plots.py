@@ -161,12 +161,12 @@ def track_peaks(plot_dict):
 
     ticks, labels = plt.xticks()
     plt.xlabel(
-        f"Time starting (CET): {datetime.fromtimestamp(ticks[0]).strftime('%d/%m/%y %H:%M')}" #change utcfromtimestamp to fromtimestamp
+        f"Time starting : {datetime.utcfromtimestamp(ticks[0]).strftime('%d/%m/%y %H:%M')}"
     )
     plt.ylabel("% Shift")
     plt.xticks(
     ticks,
-    [datetime.fromtimestamp(tick).strftime("%H:%M") for tick in ticks], #change utcfromtimestamp to fromtimestamp
+    [datetime.utcfromtimestamp(tick).strftime("%H:%M") for tick in ticks],
     )
     plt.xlim([time_bins[0]-10, time_bins[-1]+10])
 
