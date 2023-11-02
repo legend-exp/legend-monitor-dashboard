@@ -15,7 +15,7 @@ import h5py
 from pathlib import Path
 
 import datetime as dtt
-from  datetime import datetime
+from  datetime import datetime, timedelta
 
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
@@ -327,7 +327,8 @@ class monitoring(param.Parameterized):
             p.title.align = "center"
             p.title.text_font_size = "25px"
             return p
-
+        if self.muon_plots_mon == "Integral Light":
+            return pn.pane.Matplotlib(self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run, self.run_dict[self.run]), sizing_mode="scale_width")
         return self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run, self.run_dict[self.run])
 
     @param.depends("sort_by", watch=True)
@@ -590,14 +591,16 @@ class monitoring(param.Parameterized):
             p.title.text_font_size = "25px"
             return p
         llama_width, llama_height = 1200, 400
+        if llama_data["Timestamp"][0].utcoffset() == None:
+            llama_data["Timestamp"] += pd.Timedelta(hours=2)
         triplet_plot = hv.Scatter(llama_data, ["Timestamp", "Triplet Lifetime (µs)"], label="Triplet LT")
         triplet_plot_error = hv.ErrorBars(llama_data, vdims=['Triplet Lifetime (µs)', 'Error Triplet Lifetime (µs)'], kdims=['Timestamp'], label="Triplet LT Error")
-        triplet_plot.opts(xlabel="Time", ylabel="Triplet Lifetime (µs)", tools=['hover'], line_width=1.5, color='blue', width=llama_width, height=llama_height)
+        triplet_plot.opts(xlabel="Time (CET)", ylabel="Triplet Lifetime (µs)", tools=['hover'], line_width=1.5, color='blue', width=llama_width, height=llama_height)
         triplet_plot_error.opts(line_width=0.2, width=llama_width, height=llama_height, show_grid=True)
 
         lightyield_plot = hv.Scatter(llama_data, ["Timestamp", "Light Yield"], label="Light Yield")
         lightyield_plot_error = hv.ErrorBars(llama_data, vdims=['Light Yield', 'Error Light Yield'], kdims=['Timestamp'], label="Light Yield Error")
-        lightyield_plot.opts(xlabel="Time", ylabel="Light yield (a.u.)", tools=['hover'], line_width=1.5, color='orange', width=llama_width, height=llama_height, show_grid=True)
+        lightyield_plot.opts(xlabel="Time (CET)", ylabel="Light yield (a.u.)", tools=['hover'], line_width=1.5, color='orange', width=llama_width, height=llama_height, show_grid=True)
         lightyield_plot_error.opts(line_width=0.2, width=llama_width, height=llama_height)
 
         layout = triplet_plot * triplet_plot_error + lightyield_plot * lightyield_plot_error

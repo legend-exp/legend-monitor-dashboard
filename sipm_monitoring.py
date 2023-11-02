@@ -11,15 +11,20 @@ import numpy as np
 import pandas as pd
 
 import panel as pn
-
+import pytz
+from bokeh.models import DatetimeTickFormatter
 
 def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period, run_dict):
+
+    if data_barrel.index[0].utcoffset() != pd.Timedelta(hours=2):
+        data_barrel.index += pd.Timedelta(hours=2)
+
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | SiPM | Light Intensity | {barrel}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.hover.formatters = {'$x': 'datetime', '$y': 'printf'}
-    p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
+    p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S CET}'),
                         ( 'Light Intensity Rate (PE/s)',  '$y' ), 
                         ( 'Channel', '$name')]
 
@@ -29,17 +34,18 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
     colours = cc.palette['glasbey_category10'][:len_colours]
 
     if resample_unit == "1min":
-        for i, col in enumerate(data_barrel):
+        for i, col in enumerate(data_barrel.columns):
             p.line('time', col, source=data_barrel, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
     else:
         data_barrel_resampled = data_barrel.resample(resample_unit, origin="start").mean()
-        for i, col in enumerate(data_barrel_resampled):
+        for i, col in enumerate(data_barrel_resampled.columns):
             p.line('time', col, source=data_barrel_resampled, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
 
     p.legend.location = "bottom_left"
     p.legend.click_policy="hide"
-    p.xaxis.axis_label = f"Time (UTC), starting: {data_barrel.index[0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label = f"Time (CET), starting: {data_barrel.index[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
+    p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
     p.yaxis.axis_label = "Light Intensity Rate (PE/s)"
     p.yaxis.axis_label_text_font_size = "20px"
     

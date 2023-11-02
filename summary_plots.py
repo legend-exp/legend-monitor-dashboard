@@ -17,13 +17,15 @@ from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTic
 import colorcet as cc
 
 import datetime as dtt
-from  datetime import datetime
+from  datetime import datetime, timedelta
 
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 
 from src.util import *
 from src.string_visulization import *
+
+from datetime import datetime, timedelta
 
 def build_string_array(chan_map):
     dets = []
@@ -1012,7 +1014,7 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
 def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run_dict, 
                         key="String", energy_param = "cuspEmax_ctc"):
     
-    p = figure(width=700, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=700, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Spectra | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -1026,11 +1028,13 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
             p.step(plot_dict_chan[energy_param]["spectrum"]["bins"], 
                     plot_dict_chan[energy_param]["spectrum"]["counts"], 
-                    legend_label=f'{chan_dict[channel]["name"]}', 
-                    mode="after", line_width=2, line_color = colours[i])
+                 #   legend_label=f'{chan_dict[channel]["name"]}', 
+                  #  mode="after", line_width=2, line_color = colours[i])
+                  legend_label=f'{chan_dict[channel]["name"]}', 
+                    mode="after", name=f'{chan_dict[channel]["name"]}',line_width=2, line_color = colours[i])
         except:
             pass
-    
+
     p.xaxis.axis_label = "Energy (keV)"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Counts"
@@ -1045,6 +1049,7 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run
 def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period, run_dict,
                         key="String"):
     
+    times = None
     p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline Stability | {string}"
     p.title.align = "center"
@@ -1053,7 +1058,6 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
     len_colours = len(channels)
     colours = cc.palette['glasbey_category10'][:len_colours]
     
-    times=None
     for i,channel in enumerate(channels):
         try:
             bl = plot_dict[f'ch{channel:07}']["baseline_stability"]["baseline"]
@@ -1062,22 +1066,35 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
             bl_mean = 100*(bl-mean)/mean
             bl_shift =  100*bl_spread/bl_mean
             
-            p.line([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
-                    bl_mean, 
-                    legend_label=f'{chan_dict[channel]["name"]}', name = f'{chan_dict[channel]["name"]}',
-                    line_width=2, line_color = colours[i])
-            if times is None:
-                    times = [datetime.fromtimestamp(t) for t in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]]      
+            #if condition
+            base_time = plot_dict[f'ch{channel:07}']["baseline_stability"]["time"][0]
+            dt_object_base = datetime.utcfromtimestamp(base_time)
+            utc_offset_base = dt_object_base.utcoffset()
+            
+            if utc_offset_base == None:
+                p.line([(datetime.fromtimestamp(time) + timedelta(hours=2)) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
+                        bl_mean, 
+                        legend_label=f'{chan_dict[channel]["name"]}', name = f'{chan_dict[channel]["name"]}',
+                        line_width=2, line_color = colours[i])   
+                if times is None:
+                        times = [(datetime.fromtimestamp(t) + timedelta(hours=2)) for t in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]] 
+            if utc_offset_base != None:
+                p.line([datetime.fromtimestamp(time) for time in plot_dict[f'ch{channel:07}']["baseline_stability"]["time"]], 
+                        bl_mean, 
+                        legend_label=f'{chan_dict[channel]["name"]}', name = f'{chan_dict[channel]["name"]}',
+                        line_width=2, line_color = colours[i])
+                if times is None:
+                        times = [datetime.fromtimestamp(t) for t in plot_dict[f'ch{channel:03}']["baseline_stability"]["time"]] 
         except:
             pass
     
-    p.hover.formatters = {'$x': 'datetime'}
+    p.hover.formatters = {'$x': 'datetime', '$y': 'printf'}
     p.hover.tooltips = [( 'Detector',   '$name'),
-                        ( 'Time',   '$x{%F %H:%M:%S}'),
-                        ( 'BL Shift (%)',  '$snap_y')
+                        ( 'Time',   '$x{%F %H:%M:%S CET}'),
+                        ( 'BL Shift (%)',  '@y{0, 0.0000} %')
                         ]
     p.hover.mode = 'vline'
-    p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label = f"Time (CET), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Shift (%)"
     p.yaxis.axis_label_text_font_size = "16px"
@@ -1109,16 +1126,35 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
             en_mean = 100*(en-mean)/mean
             en_shift =  100*en_spread/en_mean
             
-            p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param][parameter]["time"]], 
-                    en_mean, 
-                    legend_label=f'{chan_dict[channel]["name"]}', 
-                    line_width=2, line_color = colours[i])
-            if times is None:
-                times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param][parameter]["time"]]      
+            #if condition
+            plot_time = plot_dict_chan[energy_param][parameter]["time"][0]
+            dt_object_plot = datetime.utcfromtimestamp(plot_time)
+            utc_offset = dt_object_plot.utcoffset()
+
+            if utc_offset == None:
+                p.line([(datetime.fromtimestamp(time) + timedelta(hours=2)) for time in plot_dict_chan[energy_param][parameter]["time"]], 
+                        en_mean, 
+                        legend_label=f'{chan_dict[channel]["name"]}',  name = f'{chan_dict[channel]["name"]}',
+                        line_width=2, line_color = colours[i])
+                if times is None: 
+                        times = [(datetime.fromtimestamp(t) + timedelta(hours=2)) for t in plot_dict_chan[energy_param][parameter]["time"]] 
+            if utc_offset != None:
+                p.line([(datetime.fromtimestamp(time)) for time in plot_dict_chan[energy_param][parameter]["time"]], 
+                        en_mean, 
+                        legend_label=f'{chan_dict[channel]["name"]}',  name = f'{chan_dict[channel]["name"]}',
+                        line_width=2, line_color = colours[i])
+                if times is None: 
+                        times = [datetime.fromtimestamp(t) for t in plot_dict_chan[energy_param][parameter]["time"]] 
         except:
             pass
 
-    p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.hover.formatters = {'$x': 'datetime', '$y': 'printf'}
+    p.hover.tooltips = [( 'Detector',   '$name'),
+                        ( 'Time',   '$x{%F %H:%M:%S CET}'),
+                        ( 'Energy Shift (%)',  '@y{0, 0.0000} %')
+                        ]
+    p.hover.mode = 'vline'
+    p.xaxis.axis_label = f"Time (CET), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Energy Shift (%)"
     p.yaxis.axis_label_text_font_size = "16px"
