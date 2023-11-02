@@ -35,11 +35,11 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
     colours = cc.palette['glasbey_category10'][:len_colours]
 
     if resample_unit == "1min":
-        for i, col in enumerate(data_barrel.columns):
+        for i, col in enumerate(data_barrel):
             p.line('time', col, source=data_barrel, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
     else:
         data_barrel_resampled = data_barrel.resample(resample_unit, origin="start").mean()
-        for i, col in enumerate(data_barrel_resampled.columns):
+        for i, col in enumerate(data_barrel_resampled):
             p.line('time', col, source=data_barrel_resampled, color=colours[i], line_width=2.5, legend_label=name_dict[int(col[2:])], name=col)
 
     p.legend.location = "bottom_left"

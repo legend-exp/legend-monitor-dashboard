@@ -23,7 +23,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     len_colours = len(data_string.columns)
     colours = color_palette("hls", len_colours).as_hex() 
 
-    #add mean values for hover feature
+    # add mean values for hover feature
     data_string_mean.columns      = [channel_map[ch]["name"] for ch in data_string_mean.columns]
     for col in data_string_mean.columns:
         data_string[col] = data_string_mean[col][0]
@@ -43,7 +43,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
                         ("Detector", "$name")]
     p.hover.mode = 'vline'
 
-    # Plot data
+    # plot data
     hover_renderers = []
     if resample_unit == "0min":
         for i, det in enumerate(data_string_mean):
