@@ -130,7 +130,7 @@ def build_counts_map(chan_map, data):
             
     return data_array, x_axes, y_axes, annot_array
 
-def plot_counts(run, run_dict, path, source, xlabels, period, key =None):
+def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP counts plot
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     chmap = LegendMetadata(path = prod_config["paths"]["metadata"])
@@ -145,19 +145,26 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None):
     
     with open(path, 'r') as r:
         all_res = json.load(r)
-        
+
     res = {}
     for det in cmap:
         if cmap[det].system == "geds":
             try:
-                res[cmap[det]['daq']['rawid']] = all_res[f"ch{cmap[det].daq.rawid:07}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+                raw_id = cmap[det]['daq']['rawid']
+                fep_counts = all_res[f"ch{raw_id:07}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+                mass = cmap[det]['production']['mass_in_g']
+                mass_in_kg = mass * 0.001
+                counts_per_kg = fep_counts / mass_in_kg  # calculate counts per kg
+                round_counts = round(counts_per_kg, 0)
+                res[raw_id] = round_counts
             except:
-                res[cmap[det]['daq']['rawid']] = 0
+                res[raw_id] = 0
     
     display_dict = res
-    ctitle = 'FEP Counts'
-    palette = cividis(256)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts")
+    ctitle = 'FEP Counts per kg'
+    #palette = viridis(256)
+    palette = plasma(256) #alternatively use viridis
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts per kg")
 
 def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb", download=False):
     
