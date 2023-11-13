@@ -162,8 +162,7 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
     
     display_dict = res
     ctitle = 'FEP Counts per kg'
-    #palette = viridis(256)
-    palette = plasma(256) #alternatively use viridis
+    palette = plasma(256) #alternatively use viridis palette = viridis(256)
     return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts per kg")
 
 def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb", download=False):
