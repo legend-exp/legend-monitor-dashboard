@@ -45,7 +45,7 @@ def muon_plot_spectra(arrays_dict, run, period, run_dict, plot_type):
         for enum, x in enumerate(range(round(((chan_num - 1) / 9),) * (i + 0), round(((chan_num - 1) / 9),) * (i + 1))):
             p = figure(width=300, height=300, x_axis_label='Pulse height [LSBs]', 
                y_axis_label='counts', y_axis_type="log", x_range=(0, 100), y_range=(1e-0, 2 * np.amax(y_data[i])),
-               title="Channel " + str(x) + " (PMT " + str(PMT_ID[x]) + ")")
+                title="Channel " + str(x) + " (PMT " + str(PMT_ID[x]) + ")")
             p.title.text_font_size = '9pt'
             p.xaxis.axis_label_text_font_size = "10pt"
             p.title.text = f"{run_dict['experiment']}-{period}-{run} | Mu. | Ch. {x} - PMT {PMT_ID[x]}"
@@ -107,7 +107,7 @@ def muon_plot_spp(arrays_dict, run, period, run_dict, plot_type):
     return p
 
 def muon_plot_calshift(x_data, y_data, run, period, run_dict, plot_type): #ueberpruefen
-   # add a timedelta of 2 hours to convert from UTC to CET
+    # add a timedelta of 2 hours to convert from UTC to CET
     two_hours = timedelta(hours=2)
     x_data += two_hours
     p = figure(title='Calibration mean shift', x_axis_label='Date', y_axis_label='Mean Shift [LSB]', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
@@ -237,6 +237,13 @@ def muon_plot_totalRates_daily(arrays_dict, period, run, run_dict):
         sum_rate = 0
         count = 0
         current_day = x_data[0].date()
+        
+        if len(x_data) != len(np.swapaxes(y_data,0,1)[chan]):
+            print("lengths of x_data and y_data are not equal")
+            print(len(x_data), len(np.swapaxes(y_data,0,1)[chan]))
+            print("x_data: ", x_data)
+            print("y_data: ", np.swapaxes(y_data,0,1)[chan])
+            continue
 
         for i in range(len(x_data)):
             if x_data[i].date() == current_day:
@@ -301,6 +308,13 @@ def muon_plot_ratesPillBox(arrays_dict, period, run, run_dict):
         sum_rate = 0
         count = 0
         current_day = x_data[0].date()
+        
+        if len(x_data) != len(np.swapaxes(y_data,0,1)[chan]):
+            print("lengths of x_data and y_data are not equal")
+            print(len(x_data), len(np.swapaxes(y_data,0,1)[chan]))
+            print("x_data: ", x_data)
+            print("y_data: ", np.swapaxes(y_data,0,1)[chan])
+            continue
 
         for i in range(len(x_data)):
             if x_data[i].date() == current_day:
@@ -362,6 +376,13 @@ def muon_plot_ratesFloor(arrays_dict, period, run, run_dict):
         sum_rate = 0
         count = 0
         current_day = x_data[0].date()
+        
+        if len(x_data) != len(np.swapaxes(y_data,0,1)[chan]):
+            print("lengths of x_data and y_data are not equal")
+            print(len(x_data), len(np.swapaxes(y_data,0,1)[chan]))
+            print("x_data: ", x_data)
+            print("y_data: ", np.swapaxes(y_data,0,1)[chan])
+            continue
 
         for i in range(len(x_data)):
             if x_data[i].date() == current_day:
@@ -422,6 +443,13 @@ def muon_plot_ratesWall(arrays_dict, period, run, run_dict):
         sum_rate = 0
         count = 0
         current_day = x_data[0].date()
+        
+        if len(x_data) != len(np.swapaxes(y_data,0,1)[chan]):
+            print("lengths of x_data and y_data are not equal")
+            print(len(x_data), len(np.swapaxes(y_data,0,1)[chan]))
+            print("x_data: ", x_data)
+            print("y_data: ", np.swapaxes(y_data,0,1)[chan])
+            continue
 
         for i in range(len(x_data)):
             if x_data[i].date() == current_day:
