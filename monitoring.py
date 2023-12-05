@@ -89,10 +89,10 @@ class monitoring(param.Parameterized):
                                 "A/E Sigma": plot_aoe_sig, "Tau": plot_tau,  "Alpha": plot_ctc_const}
     
     channel = param.Selector(default = 0, objects = [0])
-    plot_type_tracking = param.ObjectSelector(default = list(plot_types_tracking_dict)[0], objects= list(plot_types_tracking_dict))
+    plot_type_tracking = param.ObjectSelector(default = list(plot_types_tracking_dict)[1], objects= list(plot_types_tracking_dict))
     parameter = param.ObjectSelector(default = list(_options)[0], objects = list(_options))
     plot_type_details = param.ObjectSelector(default = cal_plots[0], objects= cal_plots)#, labels=cal_plots_labels)
-    plot_type_summary = param.ObjectSelector(default = list(plot_types_summary_dict)[0], objects= list(plot_types_summary_dict))
+    plot_type_summary = param.ObjectSelector(default = list(plot_types_summary_dict)[3], objects= list(plot_types_summary_dict))
     date_range = param.DateRange(default = (datetime.now()-dtt.timedelta(minutes = 10),
                                         datetime.now()+dtt.timedelta(minutes = 10)) , 
                                 bounds=(datetime.now()-dtt.timedelta(minutes = 110),
@@ -113,7 +113,7 @@ class monitoring(param.Parameterized):
     phy_plots_sc_vals_dict  = {"None": False, "DAQ Temp. Left 1": "DaqLeft_Temp1", "DAQ Temp. Left 2": "DaqLeft_Temp2", "DAQ Temp. Right 1": "DaqRight_Temp1", "DAQ Temp. Right 2": "DaqRight_Temp2", "RREiT": "RREiT", "RRNTe": "RRNTe", "RRSTe" : "RRSTe", "ZUL_T_RR" : "ZUL_T_RR"}
 
     phy_plots_types     = param.ObjectSelector(default=list(phy_plots_types_dict)[0], objects=list(phy_plots_types_dict), label="Type")
-    phy_plots           = param.ObjectSelector(default=list(phy_plots_vals_dict)[0], objects=list(phy_plots_vals_dict), label="Value")
+    phy_plots           = param.ObjectSelector(default=list(phy_plots_vals_dict)[4], objects=list(phy_plots_vals_dict), label="Value")
     phy_plot_style      = param.ObjectSelector(default=list(phy_plot_style_dict)[0], objects=list(phy_plot_style_dict), label="Plot Style")
     phy_resampled       = param.Integer(default=phy_resampled_vals[0], bounds=(phy_resampled_vals[0], phy_resampled_vals[-1]))
     phy_units           = param.ObjectSelector(default=phy_unit_vals[0], objects=phy_unit_vals, label="Units")
@@ -174,8 +174,8 @@ class monitoring(param.Parameterized):
         
         self.periods = gen_run_dict(self.path)
         self.param["period"].objects = list(self.periods)
-        self.period = list(self.periods)[-1]
-        # self.period = 'p04'
+       # self.period = list(self.periods)[-1]
+        self.period = 'p04'
         
         # create inital dataframes        
         self.muon_data_dict = {}

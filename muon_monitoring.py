@@ -110,7 +110,7 @@ def muon_plot_calshift(x_data, y_data, run, period, run_dict, plot_type): #ueber
     # add a timedelta of 2 hours to convert from UTC to CET
     two_hours = timedelta(hours=2)
     x_data += two_hours
-    p = figure(title='Calibration mean shift', x_axis_label='Date', y_axis_label='Mean Shift [LSB]', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(title='Calibration mean shift', x_axis_label='Date', y_axis_label='Mean Shift [LSB]', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Should now correctly display CET timezone
                     ('Mean Shift (LSB)',  '$y'),
@@ -174,7 +174,7 @@ def muon_plot_totalRates_hourly(arrays_dict, period, run, run_dict):
     x_data = arrays_dict['duration']
     y_data = arrays_dict['red_rates']
 
-    p = figure(x_range=(0, max(x_data)/3600), width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_range=(0, max(x_data)/3600), width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.tooltips = [( 'Time (H)', '$x'),
                         ('Rate (Hz)', '$y'),
                         ('Channel'  , '$name')]
@@ -214,7 +214,7 @@ def muon_plot_totalRates_daily(arrays_dict, period, run, run_dict):
     # add a timedelta of two hours to the first entry which is the starting time
     x_label = x_data[0] + timedelta(hours=2)
 
-    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Use the formatted CET
                         ('Rate (Hz)', '$snap_y'),
@@ -286,7 +286,7 @@ def muon_plot_ratesPillBox(arrays_dict, period, run, run_dict):
     # same steps as in the function above
     x_label = x_data[0] + timedelta(hours=2)
 
-    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Use the formatted CET
                         ('Rate (Hz)', '$y'),
@@ -353,7 +353,7 @@ def muon_plot_ratesFloor(arrays_dict, period, run, run_dict):
 
     x_label = x_data[0] + timedelta(hours=2)
 
-    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Use the formatted CET
                         ('Rate (Hz)', '$y'),
@@ -420,7 +420,7 @@ def muon_plot_ratesWall(arrays_dict, period, run, run_dict):
 
     x_label = x_data[0] + timedelta(hours=2)
 
-    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [( 'Time', '$x{%F %H:%M:%S CET}'),
                         ('Rate (Hz)', '$y'),

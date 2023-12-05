@@ -20,7 +20,7 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
     if data_barrel.index[0].utcoffset() != pd.Timedelta(hours=2):
         data_barrel.index += pd.Timedelta(hours=2)
 
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | SiPM | Light Intensity | {barrel}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -55,7 +55,7 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
 
 
 def sipm_plot_histogram(data_barrel, barrel, resample_unit, name_dict, run, period, run_dict):
-    p = figure(width=1000, height=600, y_axis_type="log", x_range = (0, 3), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1000, height=600, y_axis_type="log", x_range = (0, 3), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | SiPM | Light Intensity | {barrel}"
     p.title.align = "center"
     p.title.text_font_size = "25px"

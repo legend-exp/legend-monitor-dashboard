@@ -213,7 +213,7 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
             except:
                 res[detector] = default
     
-    p = figure(width=1400, height=600, y_range=(1, 5), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1400, height=600, y_range=(1, 5), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | {at} Energy Resolution"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -353,7 +353,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
             pass
     
     
-    p = figure(width=1400, height=300, y_range=(0, 7), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
+    p = figure(width=1400, height=300, y_range=(0, 7), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -445,7 +445,7 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
                 grid[:,i]=0
             pass
     
-    p = figure(width=1400, height=300, y_range=(0, 5), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
+    p = figure(width=1400, height=300, y_range=(0, 5), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E status"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -509,7 +509,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
             except:
                 nfits[detector] =np.nan
     
-    p = figure(width=1400, height=600, y_range=(1, 70), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1400, height=600, y_range=(1, 70), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -662,7 +662,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
             elif len(list(aoe_res[detector])) < 10:
                 aoe_res[detector] = default
     
-    p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E Survival Fractions"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -784,7 +784,7 @@ def plot_pz_consts(run, run_dict, path, period, key="String", download=False):
             except:
                 taus[det] =np.nan
     
-    p = figure(width=1400, height=600, y_range=(350, 800), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1400, height=600, y_range=(350, 800), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Pole Zero Constants"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -911,7 +911,7 @@ def plot_alpha(run, run_dict, path, period, key="String", download=False):
                 cusp_alpha[det]=np.nan
                 zac_alpha[det]=np.nan
 
-    p = figure(width=1400, height=600, y_range=(-1, 4), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1400, height=600, y_range=(-1, 4), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Charge Trapping Constants"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -983,7 +983,7 @@ def plot_alpha(run, run_dict, path, period, key="String", download=False):
 
 def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key="String"):
 
-    p = figure(width=700, height=600, y_axis_type="log",tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=700, height=600, y_axis_type="log", tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -1018,7 +1018,7 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
 def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run_dict, 
                         key="String", energy_param = "cuspEmax_ctc"):
     
-    p = figure(width=700, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,reset,save")
+    p = figure(width=700, height=600, y_axis_type="log", tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Spectra | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -1052,7 +1052,7 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
                         key="String"):
     
     times = None
-    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline Stability | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
@@ -1108,7 +1108,7 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
 def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, period, run_dict, 
                                 key="String", energy_param = "cuspEmax_ctc"):
     times = None
-    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     if parameter == "2614_stability":
         p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Stability | {string}"
     else:

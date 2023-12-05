@@ -80,16 +80,24 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     p.hover.renderers = hover_renderers
     
     if plot_info.loc["unit"][0] == "%":
+       # print(plot_info.loc["label"][0])
         if plot_info.loc["label"][0] == 'Noise':
-            p.y_range = Range1d(-50, 200)
-        # if plot_info.loc["label"][0] == 'FPGA Baseline':
-        #     p.y_range = Range1d(-6, 6)
+            p.y_range = Range1d(-50, 150)
+        elif plot_info.loc["label"][0] == 'FPGA baseline':
+             p.y_range = Range1d(-6, 6)
+        elif plot_info.loc["label"][0] == 'Mean Baseline':
+             p.y_range = Range1d(-8, 8)
+        elif plot_info.loc["label"][0] == 'Gain to Pulser Difference':
+             p.y_range = Range1d(-4, 4)
+        elif plot_info.loc["label"][0] == 'Event Rate':
+             p.y_range = Range1d(-150, 50)
+        elif plot_info.loc["label"][0] == 'Custom A/E (A_max / cuspEmax)':
+             p.y_range = Range1d(-10, 10)
         else:
-            p.y_range = Range1d(-6, 6)
-    else:
+            p.y_range = Range1d(-1, 1)
+    else: #why?
         if plot_info.loc["label"][0] == 'Noise':
-            p.y_range = Range1d(0, 50)
-            
+            p.y_range = Range1d(-50, 150)
             
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # SLOW CONTROL DATA
@@ -131,7 +139,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
 
 
 def phy_plot_histogram(data_string, plot_info, plot_type, resample_unit, string, run, period, run_dict, channels, channel_map):
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'][0]} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"

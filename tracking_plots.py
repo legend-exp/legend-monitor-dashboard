@@ -266,7 +266,7 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
             dets.append(chmap[chan]["name"])
         string_dets[stri] = dets
         
-    p = figure(width=1000, height=400, x_axis_type="datetime", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1000, height=400, x_axis_type="datetime", tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict[list(run_dict)[0]]['experiment']}-{period} | Cal. Tracking | {plot_type} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
