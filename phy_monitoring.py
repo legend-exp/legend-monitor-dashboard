@@ -14,6 +14,12 @@ import os
 import pickle as pkl
 
 from bokeh.models import DatetimeTickFormatter
+from bokeh.core.properties import field
+from bokeh.io import show
+from bokeh.layouts import column, row
+from bokeh.models import (ColumnDataSource, CustomJS, Div, FactorRange, HoverTool,
+                          Range1d, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool)
+from bokeh.palettes import Category10
 
 def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_name, resample_unit, string, run, period, run_dict, channel_map, abs_unit, data_sc, sc_param):
     # change column names to detector names
@@ -32,7 +38,8 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     if data_string.index[0].utcoffset() != pd.Timedelta(hours=2): # only add timedelta if still in UTC
         data_string.index += pd.Timedelta(hours=2)
     
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    #p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_name} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -42,6 +49,11 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
                         (f"Mean {plot_info.loc['label'][0]} ({abs_unit})", '@$name{0.2f}'),
                         ("Detector", "$name")]
     p.hover.mode = 'vline'
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
 
     # plot data
     hover_renderers = []
@@ -82,11 +94,11 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     if plot_info.loc["unit"][0] == "%":
        # print(plot_info.loc["label"][0])
         if plot_info.loc["label"][0] == 'Noise':
-            p.y_range = Range1d(-50, 150)
+            p.y_range = Range1d(-150, 150)
         elif plot_info.loc["label"][0] == 'FPGA baseline':
-             p.y_range = Range1d(-6, 6)
+             p.y_range = Range1d(-10, 10)
         elif plot_info.loc["label"][0] == 'Mean Baseline':
-             p.y_range = Range1d(-8, 8)
+             p.y_range = Range1d(-10, 10)
         elif plot_info.loc["label"][0] == 'Gain to Pulser Difference':
              p.y_range = Range1d(-4, 4)
         elif plot_info.loc["label"][0] == 'Event Rate':
@@ -97,7 +109,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
             p.y_range = Range1d(-1, 1)
     else: #why?
         if plot_info.loc["label"][0] == 'Noise':
-            p.y_range = Range1d(-50, 150)
+            p.y_range = Range1d(-150, 150)
             
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # SLOW CONTROL DATA
