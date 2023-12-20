@@ -38,7 +38,6 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     if data_string.index[0].utcoffset() != pd.Timedelta(hours=2): # only add timedelta if still in UTC
         data_string.index += pd.Timedelta(hours=2)
     
-    #p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_name} | {string}"
     p.title.align = "center"
@@ -54,6 +53,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
     zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
     p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     # plot data
     hover_renderers = []
@@ -92,7 +92,6 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     p.hover.renderers = hover_renderers
     
     if plot_info.loc["unit"][0] == "%":
-       # print(plot_info.loc["label"][0])
         if plot_info.loc["label"][0] == 'Noise':
             p.y_range = Range1d(-150, 150)
         elif plot_info.loc["label"][0] == 'FPGA baseline':
