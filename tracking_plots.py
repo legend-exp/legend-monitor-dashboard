@@ -9,7 +9,9 @@ import pickle as pkl
 import shelve
 import bisect
 
-from bokeh.models import Span, Label, Title, Range1d
+import numexpr as ne
+
+from bokeh.models import Span, Label, Title, Range1d, Band, ColumnDataSource
 from bokeh.palettes import Category10, Category20
 from bokeh.plotting import figure, show
 
@@ -30,9 +32,9 @@ def plot_energy(path, run_dict, det, plot, colour, period):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
     configs = LegendMetadata(path = prod_config["paths"]["chan_map"])
-    
+    qbb_adc = None
     for run in run_dict:
-
+        
         chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
         channel = chmap[det].daq.rawid
 
@@ -43,19 +45,30 @@ def plot_energy(path, run_dict, det, plot, colour, period):
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            cals.append(hit_pars_dict[f"ch{channel:07}"]["operations"]["cuspEmax_ctc_cal"]["parameters"]["a"]*20000 +\
-                       hit_pars_dict[f"ch{channel:07}"]["operations"]["cuspEmax_ctc_cal"]["parameters"]["b"])
+            hit_dict = hit_pars_dict[f"ch{channel:07}"]["pars"]["operations"]["cuspEmax_ctc_cal"]
+            if qbb_adc is None:
+                def find_qbb_adc(val):
+                    return ne.evaluate(
+                            "abs("+"cuspEmax_ctc*a +b"+"-2039)",
+                            local_dict=dict({"cuspEmax_ctc":val}, **{"a":.1, "b":0})
+                        ) 
+                qbb_adc = minimize(find_qbb_adc, 20000)["x"][0]
+            out_data = ne.evaluate(
+                f"{hit_dict['expression']}",
+                local_dict=dict({"cuspEmax_ctc":qbb_adc}, **hit_dict["parameters"])
+            ) 
+            cals.append(out_data)
             times.append(run_dict[run]["timestamp"])
         except:
             pass
     if len(cals)>0:
         cals =np.array(cals)
         plot.step([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                    100*(cals-cals[0])/cals[0],
+                    (cals-cals[0]),
                legend_label=det, mode="after", line_width=2, line_color = colour)
 
         plot.circle([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                    100*(cals-cals[0])/cals[0],
+                    (cals-cals[0]),
                 legend_label=det, fill_color="white", size=8, color = colour)
 
     return plot
@@ -74,12 +87,15 @@ def plot_energy_res(path, run_dict, det, plot, colour, period, at="Qbb"):
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit_results.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            reses.append(hit_pars_dict[f"ch{channel:07}"]["ecal"]["cuspEmax_ctc_cal"][f"{at}_fwhm"])
+            if at == "Qbb":
+                reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["eres_linear"][f"Qbb_fwhm_in_keV"])
+            elif at == "2.6":
+                reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -119,27 +135,46 @@ def plot_aoe_mean(path, run_dict, det, plot, colour, period):
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit_results.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            means.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["mean"][0])
-            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["mean_errs"][0])
-            reses.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["res"][0])
-            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["res_errs"][0])
+            means.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["mean"])
+            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["mean_err"])
+            reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["res"])
+            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["res_err"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
     means=np.array(means)
     reses=np.array(reses)
     plot.step([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                (means-means[0])/reses,
+                100*(means-means[0])/reses,
            legend_label=det, mode="after", line_width=2, line_color = colour)
 
     plot.circle([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
                 100*(means-means[0])/reses,
             legend_label=det, fill_color="white", size=8, color = colour)
+    
+    df = pd.DataFrame({"x":[(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
+                          "lower": [-40 for value in times],
+                          "upper":[40 for value in times] })
+
+    source = ColumnDataSource(df)
+    band = Band(base="x", lower="lower", upper="upper", source=source,
+                fill_alpha=0.01, fill_color="yellow")
+    plot.add_layout(band)
+        
+    df2 = pd.DataFrame({"x":[(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
+                          "lower": [-20 for value in times],
+                          "upper":[20 for value in times] })
+
+    source2 = ColumnDataSource(df2)
+    band2 = Band(base="x", lower="lower", upper="upper", source=source2,
+                fill_alpha=0.02, fill_color="green")
+    plot.add_layout(band2)
+    plot.y_range = Range1d(-100, 100)
 
     return plot
 
@@ -161,26 +196,61 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period):
 
         hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
         hit_pars_path = os.path.join(hit_pars_file_path, 
-                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit_results.json')
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
 
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            means.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["mean"][0])
-            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["mean_errs"][0])
-            reses.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["res"][0])
-            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["aoe"]["1000-1300keV"]["res_errs"][0])
+            means.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["mean"])
+            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["mean_err"])
+            reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["res"])
+            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["res_err"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
     means=np.array(means)
     reses=np.array(reses)
     plot.step([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                100*(reses-reses[0])/reses[0],
+                (reses),
            legend_label=det, mode="after", line_width=2, line_color = colour)
 
     plot.circle([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                100*(reses-reses[0])/reses[0],
+                (reses),
+            legend_label=det, fill_color="white", size=8, color = colour)
+
+    return plot
+
+def plot_aoe_cut(path, run_dict, det, plot, colour, period):
+
+    prod_config = os.path.join(path,"config.json")
+    prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
+    configs = LegendMetadata(path = prod_config["paths"]["chan_map"])
+    
+    cuts= []
+    times=[]
+    for run in run_dict:
+
+        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
+        channel = chmap[det].daq.rawid
+
+        hit_pars_file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
+        hit_pars_path = os.path.join(hit_pars_file_path, 
+                        f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.json')
+
+        with open(hit_pars_path,"r")as r:
+            hit_pars_dict = json.load(r)
+        try:
+            cuts.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["low_cut"])
+            times.append(run_dict[run]["timestamp"])
+        except:
+            pass
+    cuts=np.array(cuts)
+    plot.step([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
+                (cuts),
+           legend_label=det, mode="after", line_width=2, line_color = colour)
+
+    plot.circle([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
+                (cuts),
             legend_label=det, fill_color="white", size=8, color = colour)
 
     return plot
@@ -246,11 +316,11 @@ def plot_ctc_const(path, run_dict, det, plot, colour, period):
             pass
     values=np.array(values)
     plot.step([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                (values-values[0]),
+                (values),
            legend_label=det, mode="after", line_width=2, line_color = colour)
 
     plot.circle([(datetime.strptime(value, '%Y%m%dT%H%M%SZ')) for value in times],
-                (values-values[0]),
+                (values),
             legend_label=det, fill_color="white", size=8, color = colour)
 
 
@@ -274,10 +344,10 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
     colours = cc.palette['glasbey_category10'][:100]
     
     for i, det in enumerate(string_dets[string]):
-        try:
-            plot_func(path, run_dict, det, p, colours[i], period)
-        except:
-            pass
+        #try:
+        plot_func(path, run_dict, det, p, colours[i], period)
+#         except:
+#             pass
 
     
     for run in run_dict:
@@ -297,7 +367,7 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
     p.yaxis.axis_label_text_font_size = "20px"
     
     if plot_func == plot_energy:
-        p.yaxis.axis_label ="% Shift of keV conversion of 20kADC"
+        p.yaxis.axis_label ="Shift of Qbb in keV "
     elif plot_func == plot_energy_res_Qbb:
         p.yaxis.axis_label = "FWHM at Qbb"
     elif plot_func == plot_energy_res_2614:
@@ -305,7 +375,9 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
     elif plot_func == plot_aoe_mean:
         p.yaxis.axis_label = "% Shift of A/E mean"
     elif plot_func == plot_aoe_sig:
-        p.yaxis.axis_label = "% Shift of A/E sigma"
+        p.yaxis.axis_label = "Shift of A/E Resolution"
+    elif plot_func == plot_aoe_sig:
+        p.yaxis.axis_label = "Shift of A/E Low Cut"
     elif plot_func == plot_tau:
         p.yaxis.axis_label = "% Shift PZ const"
     elif plot_func == plot_ctc_const:
@@ -314,4 +386,4 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     
-    return pn.pane.Bokeh(p, sizing_mode="stretch_width")
+    return p

@@ -62,8 +62,8 @@ class monitoring(param.Parameterized):
     
     optimisation_plots = ["trap_kernel", "zac_kernel", "cusp_kernel", "trap_acq", "zac_acq", "cusp_acq"]
     
-    _options = {'cuspEmax_ctc': cal_plots , 'zacEmax_ctc': cal_plots,
-            'trapEmax_ctc': cal_plots , 'trapTmax': cal_plots, "Baseline": baseline_plots,
+    _options = {'cuspEmax_ctc_cal': cal_plots , 'zacEmax_ctc_cal': cal_plots,
+            'trapEmax_ctc_cal': cal_plots , 'trapTmax_cal': cal_plots, "Baseline": baseline_plots,
             "A/E": aoe_plots, "Tau": tau_plots, "Optimisation": optimisation_plots}
         
     plot_types_summary_dict = {
@@ -524,7 +524,7 @@ class monitoring(param.Parameterized):
             fig.set_canvas(new_manager.canvas)
             fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
         elif self.parameter == "Tau":
-            fig = self.dsp_dict[self.plot_type_details]
+            fig = self.dsp_dict["tau"][self.plot_type_details]
             dummy = plt.figure()
             new_manager = dummy.canvas.manager
             new_manager.canvas.figure = fig

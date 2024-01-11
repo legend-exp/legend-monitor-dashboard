@@ -141,16 +141,16 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
     path = os.path.join(file_path, 
-                        f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                        f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     with open(path, 'r') as r:
-        all_res = json.load(r)
+        all_res = json.load(r)["results"]
         
     res = {}
     for det in cmap:
         if cmap[det].system == "geds":
             try:
-                res[cmap[det]['daq']['rawid']] = all_res[f"ch{cmap[det].daq.rawid:07}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+                res[cmap[det]['daq']['rawid']] = all_res[f"ch{cmap[det].daq.rawid:07}"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
             except:
                 res[cmap[det]['daq']['rawid']] = 0
     
@@ -174,7 +174,7 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
     
     file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
     path = os.path.join(file_path, 
-                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     with open(path, 'r') as r:
         all_res = json.load(r)
@@ -203,7 +203,25 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                res[detector] = all_res[f"ch{channel:03}"]["ecal"]
+                det_dict = all_res[f"ch{channel:03}"]["results"]["ecal"]["ecal"]
+                res[detector] = {'cuspEmax_ctc_cal': {'Qbb_fwhm': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_in_keV"], 
+                                                'Qbb_fwhm_err': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_err_in_keV"], 
+                                                '2.6_fwhm': det_dict["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0], 
+                                                '2.6_fwhm_err': det_dict["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][1], 
+                                                'm0': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["parameters"]["a"], 
+                                                'm1': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["parameters"]["b"]}, 
+                            'zacEmax_ctc_cal': {'Qbb_fwhm': det_dict["zacEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_in_keV"], 
+                                                'Qbb_fwhm_err': det_dict["zacEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_err_in_keV"], 
+                                                '2.6_fwhm': det_dict["zacEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0], 
+                                                '2.6_fwhm_err': det_dict["zacEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][1], 
+                                                'm0': det_dict["zacEmax_ctc_cal"]["eres_linear"]["parameters"]["a"], 
+                                                'm1': det_dict["zacEmax_ctc_cal"]["eres_linear"]["parameters"]["b"]}, 
+                            'trapEmax_ctc_cal': {'Qbb_fwhm': det_dict["trapEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_in_keV"], 
+                                                'Qbb_fwhm_err': det_dict["trapEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_err_in_keV"], 
+                                                '2.6_fwhm': det_dict["trapEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0], 
+                                                '2.6_fwhm_err': det_dict["trapEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][1], 
+                                                'm0': det_dict["trapEmax_ctc_cal"]["eres_linear"]["parameters"]["a"], 
+                                                'm1': det_dict["trapEmax_ctc_cal"]["eres_linear"]["parameters"]["b"]}}
             except:
                 res[detector] = default
     
@@ -315,7 +333,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                             f'cal/{period}/{run}', 
-                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -332,7 +350,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     for i,channel in enumerate(channels):
         idxs = np.zeros(len(peaks),dtype=bool)
         try:
-            fitted_peaks = res[f"ch{channel:07}"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
+            fitted_peaks = res[f"ch{channel:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
             if not isinstance(fitted_peaks,list):
                 fitted_peaks = [fitted_peaks]
             for j,peak in enumerate(peaks):
@@ -394,7 +412,7 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                             f'cal/{period}/{run}', 
-                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -411,7 +429,7 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
     for i,channel in enumerate(channels):
         idxs = np.ones(len(checks), dtype=bool)
         try:
-            aoe_dict = res[f"ch{channel:07}"]["aoe"]
+            aoe_dict = res[f"ch{channel:07}"]["results"]["ecal"]["aoe"]
             if np.isnan(aoe_dict["1000-1300keV"]["mean"][0]) ==False:
                 idxs[0]=1
             if np.isnan(np.array(aoe_dict["Mean_pars"])).all() ==False :
@@ -487,7 +505,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                             f'cal/{period}/{run}', 
-                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -499,7 +517,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                nfits[detector] =res[f"ch{channel:07}"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
+                nfits[detector] =res[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
             except:
                 nfits[detector] =np.nan
     
@@ -578,7 +596,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                              f'cal/{period}/{run}', 
-                             f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                             f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     
     with open(file_path, 'r') as r:
@@ -623,7 +641,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
             detector = channel_map[channel]["name"]
 
             try:  
-                aoe_res[detector] = all_res[f"ch{channel:07}"]["aoe"]
+                aoe_res[detector] = all_res[f"ch{channel:07}"]["results"]["ecal"]["aoe"]
             except:
                 aoe_res[detector] = default
 
@@ -1010,7 +1028,7 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
     return p
     
 def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run_dict, 
-                        key="String", energy_param = "cuspEmax_ctc"):
+                        key="String", energy_param = "cuspEmax_ctc_cal"):
     
     p = figure(width=700, height=600, y_axis_type="log", tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Spectra | {string}"
@@ -1022,7 +1040,6 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run
     
     for i,channel in enumerate(channels):
         try:
-
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
             p.step(plot_dict_chan[energy_param]["spectrum"]["bins"], 
                     plot_dict_chan[energy_param]["spectrum"]["counts"], 
@@ -1106,8 +1123,8 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
             en = plot_dict_chan[energy_param][parameter]["energy"]
             en_spread = plot_dict_chan[energy_param][parameter]["spread"]
             mean = np.nanmean(en[~np.isnan(en)][:10])
-            en_mean = 100*(en-mean)/mean
-            en_shift =  100*en_spread/en_mean
+            en_mean = (en-mean)#/mean
+            en_shift =  en_spread#/en_mean
             
             p.line([datetime.fromtimestamp(time) for time in plot_dict_chan[energy_param][parameter]["time"]], 
                     en_mean, 
@@ -1120,20 +1137,20 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
 
     p.xaxis.axis_label = f"Time (UTC), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = "Energy Shift (%)"
+    p.yaxis.axis_label = "Energy Shift (keV)"
     p.yaxis.axis_label_text_font_size = "16px"
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     return p
 
 def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, string, run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc"):
+                                    key="String", energy_param = "cuspEmax_ctc_cal"):
     
     return plot_stability(plot_dict, chan_dict, channels, string, "2614_stability", run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc")
+                                    key="String", energy_param = "cuspEmax_ctc_cal")
     
 
 def plot_pulser_stability_channels2d(plot_dict, chan_dict, channels, string, run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc"):
+                                    key="String", energy_param = "cuspEmax_ctc_cal"):
     return plot_stability(plot_dict, chan_dict, channels, string, "pulser_stability", run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc")
+                                    key="String", energy_param = "cuspEmax_ctc_cal")
