@@ -13,35 +13,35 @@ import pandas as pd
 import os
 import pickle as pkl
 
-
+from bokeh.models import DatetimeTickFormatter
 
 def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_name, resample_unit, string, run, period, run_dict, channel_map, abs_unit, data_sc, sc_param):
     # change column names to detector names
-    data_string.columns           = ["{}_val".format(channel_map[ch]["name"]) for ch in data_string.columns]
+    data_string.columns = ["{}_val".format(channel_map[ch]["name"]) for ch in data_string.columns]
     
     # create plot colours
     len_colours = len(data_string.columns)
     colours = color_palette("hls", len_colours).as_hex() 
 
-    
     # add mean values for hover feature
     data_string_mean.columns      = [channel_map[ch]["name"] for ch in data_string_mean.columns]
     for col in data_string_mean.columns:
         data_string[col] = data_string_mean[col][0]
+    
+    # add two hours to x values with if condition
+    if data_string.index[0].utcoffset() != pd.Timedelta(hours=2): # only add timedelta if still in UTC
+        data_string.index += pd.Timedelta(hours=2)
     
     p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_name} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.hover.formatters = {'$x': 'datetime', '$snap_y': 'printf', "@$name": 'printf'}
-    p.hover.tooltips = [( 'Time',   '$x{%F %H:%M:%S}'),
+    p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Use the formatted CET time from the DataFrame
                         (f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]})", '$snap_y{%0.2f}'),
                         (f"Mean {plot_info.loc['label'][0]} ({abs_unit})", '@$name{0.2f}'),
-                        ("Detector", "$name")
-                        ]
-
+                        ("Detector", "$name")]
     p.hover.mode = 'vline'
-
 
     # plot data
     hover_renderers = []
@@ -58,8 +58,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
             l = p.line('datetime', f"{det}_val", source=data_string_resampled, color=colours[i], legend_label=det, name=det, line_width=2.5)
             p.line('datetime', f"{det}_val", source=data_string, color=colours[i], legend_label=det, name=det, line_width=2.5, alpha=0.2)
             hover_renderers.append(l)
-            
-    
+
     # draw horizontal line at thresholds from plot info if available
 #     if plot_info.loc["lower_lim_var"][0] != 'None' and plot_info.loc["unit"][0] == "%":
 #         lower_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["lower_lim_var"][0]),
@@ -70,13 +69,14 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
 #         p.add_layout(lower_lim_var)
 #         p.add_layout(upper_lim_var)
     
-    # legend setups etc...
+    # legend setups etc...                                                         
     p.legend.location = "bottom_left"
     p.legend.click_policy="hide"
-    p.xaxis.axis_label = f"Time (UTC), starting: {data_string.index[0].strftime('%d/%m/%Y %H:%M:%S')}"
+    p.xaxis.axis_label = f"Time (CET), starting: {data_string.index[0].strftime('%d/%m/%Y %H:%M:%S')}" #change of string
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = f"{plot_info.loc['label'][0]} [{plot_info.loc['unit'][0]}]"
     p.yaxis.axis_label_text_font_size = "20px"
+    p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
     p.hover.renderers = hover_renderers
     
     if plot_info.loc["unit"][0] == "%":
