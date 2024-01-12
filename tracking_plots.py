@@ -9,9 +9,13 @@ import pickle as pkl
 import shelve
 import bisect
 
-from bokeh.models import Span, Label, Title, Range1d
+from bokeh.models import Span, Label, Title, Range1d, ColumnDataSource, CustomJS, Div, FactorRange, HoverTool, Range1d, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool
 from bokeh.palettes import Category10, Category20
 from bokeh.plotting import figure, show
+
+from bokeh.core.properties import field
+from bokeh.io import show
+from bokeh.layouts import column, row
 
 import colorcet as cc
 
@@ -266,10 +270,16 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
             dets.append(chmap[chan]["name"])
         string_dets[stri] = dets
         
-    p = figure(width=1000, height=400, x_axis_type="datetime", tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1000, height=400, x_axis_type="datetime", tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict[list(run_dict)[0]]['experiment']}-{period} | Cal. Tracking | {plot_type} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     colours = cc.palette['glasbey_category10'][:100]
     

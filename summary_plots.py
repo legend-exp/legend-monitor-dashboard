@@ -12,7 +12,11 @@ import matplotlib
 from bokeh.models import Span, Label, Title, Range1d, Grid, FixedTicker
 from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, CustomJSTickFormatter, Legend, LegendItem, PrintfTickFormatter
+from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, CustomJSTickFormatter, Legend, LegendItem, PrintfTickFormatter, CustomJS, Div, FactorRange, HoverTool, Range1d, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool
+
+from bokeh.core.properties import field
+from bokeh.io import show
+from bokeh.layouts import column, row
 
 import colorcet as cc
 
@@ -213,10 +217,16 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
             except:
                 res[detector] = default
     
-    p = figure(width=1400, height=600, y_range=(1, 5), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1400, height=600, y_range=(1, 5), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | {at} Energy Resolution"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     label_res = [r if 'String' not in r else "" for r in list(res)]
 
@@ -353,10 +363,16 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
             pass
     
     
-    p = figure(width=1400, height=300, y_range=(0, 7), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1400, height=300, y_range=(0, 7), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     label_res = [f"{chmap[channel]['name']}" for channel in channels]
     p.image(image=[grid], x=0, y=0, dw=len(channels), dh=len(peaks), palette=["red", "orange","green"], alpha=0.7)
@@ -445,10 +461,16 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
                 grid[:,i]=0
             pass
     
-    p = figure(width=1400, height=300, y_range=(0, 5), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1400, height=300, y_range=(0, 5), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E status"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     label_res = [f"{chmap[channel]['name']}" for channel in channels]
     p.image(image=[grid], x=0, y=0, dw=len(channels), dh=len(checks), palette=["red", "orange", "green"], alpha=0.7)
@@ -509,10 +531,16 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
             except:
                 nfits[detector] =np.nan
     
-    p = figure(width=1400, height=600, y_range=(1, 70), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1400, height=600, y_range=(1, 70), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E fits"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     label_res = [r if 'String' not in r else "" for r in list(nfits)]
 
@@ -662,10 +690,16 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
             elif len(list(aoe_res[detector])) < 10:
                 aoe_res[detector] = default
     
-    p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E Survival Fractions"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     label_res = [r if 'String' not in r else "" for r in list(aoe_res)]
 
@@ -784,10 +818,16 @@ def plot_pz_consts(run, run_dict, path, period, key="String", download=False):
             except:
                 taus[det] =np.nan
     
-    p = figure(width=1400, height=600, y_range=(350, 800), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1400, height=600, y_range=(350, 800), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Pole Zero Constants"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     label_res = [r if 'String' not in r else "" for r in list(taus)]
 
@@ -911,10 +951,16 @@ def plot_alpha(run, run_dict, path, period, key="String", download=False):
                 cusp_alpha[det]=np.nan
                 zac_alpha[det]=np.nan
 
-    p = figure(width=1400, height=600, y_range=(-1, 4), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1400, height=600, y_range=(-1, 4), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Charge Trapping Constants"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     label_res = [r if 'String' not in r else "" for r in list(cusp_alpha)]
 
@@ -983,11 +1029,17 @@ def plot_alpha(run, run_dict, path, period, key="String", download=False):
 
 def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key="String"):
 
-    p = figure(width=700, height=600, y_axis_type="log", tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=700, height=600, y_axis_type="log",  tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
     
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
+
     len_colours = len(channels)
     colours = cc.palette['glasbey_category10'][:len_colours]
     
@@ -1018,11 +1070,17 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
 def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run_dict, 
                         key="String", energy_param = "cuspEmax_ctc"):
     
-    p = figure(width=700, height=600, y_axis_type="log", tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime', tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Spectra | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
     
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
+
     len_colours = len(channels)
     colours = cc.palette['glasbey_category10'][:len_colours]
     
@@ -1052,10 +1110,16 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
                         key="String"):
     
     times = None
-    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Baseline Stability | {string}"
     p.title.align = "center"
     p.title.text_font_size = "15px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
     
     len_colours = len(channels)
     colours = cc.palette['glasbey_category10'][:len_colours]
@@ -1108,7 +1172,14 @@ def plot_baseline_stability(plot_dict, chan_dict, channels, string, run, period,
 def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, period, run_dict, 
                                 key="String", energy_param = "cuspEmax_ctc"):
     times = None
-    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=700, height=600, x_axis_type='datetime', tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
+
     if parameter == "2614_stability":
         p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Stability | {string}"
     else:

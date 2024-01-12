@@ -38,7 +38,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
     if data_string.index[0].utcoffset() != pd.Timedelta(hours=2): # only add timedelta if still in UTC
         data_string.index += pd.Timedelta(hours=2)
     
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_name} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -150,7 +150,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
 
 
 def phy_plot_histogram(data_string, plot_info, plot_type, resample_unit, string, run, period, run_dict, channels, channel_map):
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'][0]} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -161,6 +161,12 @@ def phy_plot_histogram(data_string, plot_info, plot_type, resample_unit, string,
                         ]
 
     p.hover.mode = 'vline'
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     len_colours = len(data_string.columns)
     if len_colours > 19:

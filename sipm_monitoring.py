@@ -13,6 +13,11 @@ import pandas as pd
 import panel as pn
 import pytz
 from bokeh.models import DatetimeTickFormatter
+from bokeh.core.properties import field
+from bokeh.io import show
+from bokeh.layouts import column, row
+from bokeh.models import (ColumnDataSource, CustomJS, Div, FactorRange, HoverTool,
+                          Range1d, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool)
 
 def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period, run_dict):
 
@@ -20,7 +25,7 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
     if data_barrel.index[0].utcoffset() != pd.Timedelta(hours=2):
         data_barrel.index += pd.Timedelta(hours=2)
 
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | SiPM | Light Intensity | {barrel}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -30,6 +35,12 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
                         ( 'Channel', '$name')]
 
     p.hover.mode = 'vline'
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     len_colours = len(data_barrel.columns)
     colours = cc.palette['glasbey_category10'][:len_colours]
@@ -55,7 +66,7 @@ def sipm_plot_vsTime(data_barrel, barrel, resample_unit, name_dict, run, period,
 
 
 def sipm_plot_histogram(data_barrel, barrel, resample_unit, name_dict, run, period, run_dict):
-    p = figure(width=1000, height=600, y_axis_type="log", x_range = (0, 3), tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1000, height=600, y_axis_type="log", x_range = (0, 3), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | SiPM | Light Intensity | {barrel}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -64,6 +75,12 @@ def sipm_plot_histogram(data_barrel, barrel, resample_unit, name_dict, run, peri
                         ( 'Channel', '$name')]
 
     p.hover.mode = 'vline'
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     len_colours = len(data_barrel.columns)
     colours = cc.palette['glasbey_category10'][:len_colours]

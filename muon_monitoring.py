@@ -17,6 +17,13 @@ from bokeh.models import LogScale
 from bokeh.palettes import Category10
 from bokeh.models import Legend, LegendItem
 from bokeh.models import Title
+
+from bokeh.core.properties import field
+from bokeh.io import show
+from bokeh.layouts import column, row
+from bokeh.models import (ColumnDataSource, CustomJS, Div, FactorRange, HoverTool,
+                          Range1d, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool)
+
 import matplotlib as mpl
 
 from datetime import datetime, timedelta
@@ -68,7 +75,7 @@ def muon_plot_spp(arrays_dict, run, period, run_dict, plot_type):
     y_data = arrays_dict['mean_sigma']
     dots=[]
     # Create a figure object
-    p = figure(title="SPP gaussian", width=1000, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(title="SPP gaussian", width=1000, height=600, tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.tooltips = [( 'Pulse Height (LSB)', '$x'),
                         ('σ of SPP', '$y'),
                         ('Channel'  , '$name')]
@@ -77,6 +84,12 @@ def muon_plot_spp(arrays_dict, run, period, run_dict, plot_type):
     p.title.text_font_size = "25px"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label_text_font_size = "20px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
     
     # Set the x and y axis labels and limits
     p.xaxis.axis_label = 'Pulse height (LSB)'
@@ -110,12 +123,18 @@ def muon_plot_calshift(x_data, y_data, run, period, run_dict, plot_type): #ueber
     # add a timedelta of 2 hours to convert from UTC to CET
     two_hours = timedelta(hours=2)
     x_data += two_hours
-    p = figure(title='Calibration mean shift', x_axis_label='Date', y_axis_label='Mean Shift [LSB]', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(title='Calibration mean shift', x_axis_label='Date', y_axis_label='Mean Shift [LSB]', width=1000, height=600, tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Should now correctly display CET timezone
                     ('Mean Shift (LSB)',  '$y'),
                     ('Channel', '$name')]
 # ...
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
+
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Calibration Mean Shift"
     p.title.align = "center"
     p.title.text_font_size = "25px"
@@ -174,7 +193,7 @@ def muon_plot_totalRates_hourly(arrays_dict, period, run, run_dict):
     x_data = arrays_dict['duration']
     y_data = arrays_dict['red_rates']
 
-    p = figure(x_range=(0, max(x_data)/3600), width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(x_range=(0, max(x_data)/3600), width=1000, height=600, tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.tooltips = [( 'Time (H)', '$x'),
                         ('Rate (Hz)', '$y'),
                         ('Channel'  , '$name')]
@@ -186,6 +205,13 @@ def muon_plot_totalRates_hourly(arrays_dict, period, run, run_dict):
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Rate (Hz)"
     p.yaxis.axis_label_text_font_size = "20px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
+
     steps=[]
     legend_list = []
     for chan in range(53):
@@ -214,7 +240,7 @@ def muon_plot_totalRates_daily(arrays_dict, period, run, run_dict):
     # add a timedelta of two hours to the first entry which is the starting time
     x_label = x_data[0] + timedelta(hours=2)
 
-    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Use the formatted CET
                         ('Rate (Hz)', '$snap_y'),
@@ -228,6 +254,12 @@ def muon_plot_totalRates_daily(arrays_dict, period, run, run_dict):
     p.yaxis.axis_label = "Rate (Hz)"
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
     
     legend_list = []
 
@@ -286,7 +318,7 @@ def muon_plot_ratesPillBox(arrays_dict, period, run, run_dict):
     # same steps as in the function above
     x_label = x_data[0] + timedelta(hours=2)
 
-    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Use the formatted CET
                         ('Rate (Hz)', '$y'),
@@ -300,6 +332,12 @@ def muon_plot_ratesPillBox(arrays_dict, period, run, run_dict):
     p.yaxis.axis_label = "Rate (Hz)"
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     renderers = {}
     for chan in range(0,10):
@@ -353,7 +391,7 @@ def muon_plot_ratesFloor(arrays_dict, period, run, run_dict):
 
     x_label = x_data[0] + timedelta(hours=2)
 
-    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Use the formatted CET
                         ('Rate (Hz)', '$y'),
@@ -361,6 +399,12 @@ def muon_plot_ratesFloor(arrays_dict, period, run, run_dict):
     p.hover.mode = 'vline'
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Red. Daily Rates over Time for Floor PMTs"
     
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
+
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.xaxis.axis_label = f"Time (CET), starting: {x_label.strftime('%d/%m/%Y %H:%M:%S')}"
@@ -420,13 +464,19 @@ def muon_plot_ratesWall(arrays_dict, period, run, run_dict):
 
     x_label = x_data[0] + timedelta(hours=2)
 
-    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan,ywheel_zoom,box_zoom,yzoom_in,yzoom_out,hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(x_axis_type='datetime', width=1000, height=600, tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.hover.formatters = {'$x': 'datetime'}
     p.hover.tooltips = [( 'Time', '$x{%F %H:%M:%S CET}'),
                         ('Rate (Hz)', '$y'),
                         ('Channel'  , '$name')]
     p.hover.mode = 'vline'
-    
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
+
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Muon | Red. Daily Rates over Time for Wall PMTs"
     p.title.align = "center"
     p.title.text_font_size = "25px"
