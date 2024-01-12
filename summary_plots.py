@@ -14,10 +14,6 @@ from bokeh.palettes import Category10, Category20, Turbo256
 from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource, LabelSet, LinearColorMapper, BasicTicker, ColorBar, FixedTicker, CustomJSTickFormatter, Legend, LegendItem, PrintfTickFormatter, CustomJS, Div, FactorRange, HoverTool, Range1d, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool
 
-from bokeh.core.properties import field
-from bokeh.io import show
-from bokeh.layouts import column, row
-
 import colorcet as cc
 
 import datetime as dtt

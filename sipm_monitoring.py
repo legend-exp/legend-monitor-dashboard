@@ -13,9 +13,6 @@ import pandas as pd
 import panel as pn
 import pytz
 from bokeh.models import DatetimeTickFormatter
-from bokeh.core.properties import field
-from bokeh.io import show
-from bokeh.layouts import column, row
 from bokeh.models import (ColumnDataSource, CustomJS, Div, FactorRange, HoverTool,
                           Range1d, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool)
 

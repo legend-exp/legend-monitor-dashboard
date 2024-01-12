@@ -16,11 +16,8 @@ from bokeh.models.formatters import LogTickFormatter
 from bokeh.models import LogScale
 from bokeh.palettes import Category10
 from bokeh.models import Legend, LegendItem
-from bokeh.models import Title
+from bokeh.models import Title#
 
-from bokeh.core.properties import field
-from bokeh.io import show
-from bokeh.layouts import column, row
 from bokeh.models import (ColumnDataSource, CustomJS, Div, FactorRange, HoverTool,
                           Range1d, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool)
 

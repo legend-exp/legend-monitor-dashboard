@@ -13,10 +13,6 @@ from bokeh.models import Span, Label, Title, Range1d, ColumnDataSource, CustomJS
 from bokeh.palettes import Category10, Category20
 from bokeh.plotting import figure, show
 
-from bokeh.core.properties import field
-from bokeh.io import show
-from bokeh.layouts import column, row
-
 import colorcet as cc
 
 import datetime as dtt
