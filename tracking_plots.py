@@ -20,6 +20,8 @@ import colorcet as cc
 import datetime as dtt
 from  datetime import datetime
 
+from scipy.optimize import minimize
+
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
 

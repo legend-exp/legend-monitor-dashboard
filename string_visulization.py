@@ -160,7 +160,8 @@ def get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict, ΔR = 160,
     ), xlabels
 
 
-def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title = "LEGEND detector monitoring", palette = inferno(256), ticker = None, formatter = None):
+def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title = "LEGEND detector monitoring", palette = inferno(256), ticker = None, formatter = None,
+                        colour_max=None, colour_min = None):
     source.data["y_label"] = list(map(lambda i: display_dict[i], source.data["ch"]))
     tooltips = [
     ("Detector Name", "@dn"),
@@ -180,7 +181,14 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title 
 
     # handle colors according to display_dict
     values = list(filter(lambda v: v is not None, display_dict.values()))
-    minvalue = min(values); maxvalue = max(values)
+    if colour_min is None:
+        minvalue = min(values) 
+    else:
+        minvalue = colour_min
+    if colour_max is None:
+        maxvalue = max(values)
+    else:
+        maxvalue = colour_max
     color_mapper = LinearColorMapper(palette=palette, low=minvalue, high=maxvalue)
     colors = list(map(lambda v : 'white' if v is None or math.isnan(v) else palette[int((v - minvalue)/(maxvalue-minvalue) * (len(palette) - 1))], display_dict.values()))
     source.data["color"] = colors

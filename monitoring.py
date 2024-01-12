@@ -15,7 +15,7 @@ import h5py
 from pathlib import Path
 
 import datetime as dtt
-from  datetime import datetime, timedelta
+from  datetime import datetime, timedelta, date
 
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
@@ -73,6 +73,7 @@ class monitoring(param.Parameterized):
                         "FEP Counts": plot_counts, 
                         "FWHM Qbb": plot_energy_resolutions_Qbb, 
                         "FWHM FEP": plot_energy_resolutions_2614,
+                        "Energy Residuals": plot_energy_residuals,
                         "A/E Status": plot_aoe_status,
                         "Valid. A/E": plot_no_fitted_aoe_slices,
                         "A/E SF":get_aoe_results, 
@@ -86,6 +87,7 @@ class monitoring(param.Parameterized):
     
     plot_types_tracking_dict = {"Energy Calib. Const.": plot_energy,"FWHM Qbb": plot_energy_res_Qbb, 
                                 "FWHM FEP": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
+                                "A/E Cut": plot_aoe_cut,
                                 "A/E Sigma": plot_aoe_sig, "Tau": plot_tau,  "Alpha": plot_ctc_const}
     
     channel = param.Selector(default = 0, objects = [0])
@@ -214,7 +216,8 @@ class monitoring(param.Parameterized):
 
             self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
                                     datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
-            self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+            self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
+                                datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
 
 
     @param.depends("run", watch=True)
@@ -236,8 +239,16 @@ class monitoring(param.Parameterized):
     @param.depends("date_range", watch=True)
     def _get_run_dict(self):
         valid_from = [datetime.timestamp(datetime.strptime(self.run_dict[entry]["timestamp"], '%Y%m%dT%H%M%SZ')) for entry in self.run_dict]
-        pos1 = bisect.bisect_right(valid_from, datetime.timestamp(self.date_range[0]))
-        pos2 = bisect.bisect_left(valid_from, datetime.timestamp(self.date_range[-1]))
+        if isinstance(self.date_range[0] , date):
+            low_range = datetime.timestamp(datetime.combine(self.date_range[0], datetime.min.time()))
+        else:
+            low_range = datetime.timestamp(self.date_range[0])
+        if isinstance(self.date_range[0] , date):
+            high_range = datetime.timestamp(datetime.combine(self.date_range[1], datetime.min.time()))
+        else:
+            high_range = datetime.timestamp(self.date_range[1])
+        pos1 = bisect.bisect_right(valid_from, low_range)
+        pos2 = bisect.bisect_left(valid_from, high_range)
         if pos1 < 0:
             pos1 = 0
         if pos2 >= len(self.run_dict):

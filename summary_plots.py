@@ -151,7 +151,7 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
         if cmap[det].system == "geds":
             try:
                 raw_id = cmap[det]['daq']['rawid']
-                fep_counts = all_res[f"ch{cmap[det].daq.rawid:07}"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+                fep_counts = all_res[f"ch{cmap[det].daq.rawid:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
                 mass = cmap[det]['production']['mass_in_g']
                 mass_in_kg = mass * 0.001
                 counts_per_kg = fep_counts / mass_in_kg  # calculate counts per kg
@@ -163,7 +163,8 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
     display_dict = res
     ctitle = 'FEP Counts per kg'
     palette = plasma(256) #alternatively use viridis palette = viridis(256)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts per kg")
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts per kg",
+    colour_max = 5000)
 
 def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb", download=False):
     
@@ -323,6 +324,148 @@ def plot_energy_resolutions_Qbb(run, run_dict, path, period, key="String", downl
 
 def plot_energy_resolutions_2614(run, run_dict, path, period, key="String", download=False):
     return plot_energy_resolutions(run, run_dict, path, period, key=key, at="2.6", download=download)
+
+def plot_energy_residuals(run, run_dict, path, period, key="String", filter_param="cuspEmax_ctc_cal", download=False):
+    
+    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
+    
+    prod_config = os.path.join(path,"config.json")
+    prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
+    cfg_file = prod_config["paths"]["chan_map"]
+    configs = LegendMetadata(path = cfg_file)
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
+    channels = [field for field in chmap if chmap[field]["system"]=="geds"]
+    
+    off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
+    
+    file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
+    path = os.path.join(file_path, 
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
+    
+    peaks = [2614.5, 583.191, 2103.53]
+    filters = ["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"]
+    
+    with open(path, 'r') as r:
+        all_res = json.load(r)
+        
+    default_peaks = {f"{peak}":np.nan for peak in peaks}
+    default_peaks.update({f"{peak}_err":np.nan for peak in peaks})
+    default = {filt: default_peaks.copy()  for filt in filters}
+    res = {}
+    for stri in strings:
+        res[stri]=copy.deepcopy(default)
+        for channel in strings[stri]:
+            detector = channel_map[channel]["name"]
+            res[detector] = copy.deepcopy(default)
+            try:
+                det_dict = all_res[f"ch{channel:07}"]["results"]["ecal"]["ecal"]
+                for filt in filters:
+                    cal_dict = all_res[f"ch{channel:07}"]["pars"]["operations"]["cuspEmax_ctc_cal"]
+                    for peak in peaks:
+                        try:
+                            cal_mu = ne.evaluate(
+                                f"{cal_dict['expression']}",
+                                local_dict=dict({"cuspEmax_ctc":det_dict["cuspEmax_ctc_cal"]["pk_fits"][f"{peak}"]["parameters_in_ADC"]["mu"]}, 
+                                                **cal_dict["parameters"])
+                            )
+                            cal_err = ne.evaluate(
+                                f"{cal_dict['expression']}",
+                                local_dict=dict({"cuspEmax_ctc":det_dict["cuspEmax_ctc_cal"]["pk_fits"][f"{peak}"]["uncertainties_in_ADC"]["mu"]+\
+                                                det_dict["cuspEmax_ctc_cal"]["pk_fits"][f"{peak}"]["parameters_in_ADC"]["mu"]}, 
+                                                **cal_dict["parameters"])
+                            )-cal_mu
+                            res[detector][filt][f"{peak}"] = cal_mu-peak
+                            res[detector][filt][f"{peak}_err"] = cal_err
+                        except:
+                            pass
+            except:
+                pass
+
+    
+    p = figure(width=1400, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Residuals"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+
+    label_res = [r if 'String' not in r else "" for r in list(res)]
+
+    df_plot = pd.DataFrame()
+    df_plot["label_res"]  = label_res
+
+    for filter_type in filters:
+        for peak in peaks:
+
+            x_plot, y_plot, y_plot_err = (np.arange(1, len(list(res))+1, 1), 
+            [res[det][filter_type][f"{peak}"] for det in res], [res[det][filter_type][f"{peak}_err"] for det in res])
+
+            err_xs = []
+            err_ys = []
+
+            for x, y, yerr in zip(x_plot, y_plot, y_plot_err):
+                err_xs.append((x, x))
+                err_ys.append((np.nan_to_num(y - yerr), np.nan_to_num(y + yerr)))
+
+
+            df_plot[f"x_{filter_type.split('_')[0]}_{int(peak)}"]          = np.nan_to_num(x_plot)
+            df_plot[f"y_{filter_type.split('_')[0]}_{int(peak)}"]          = np.nan_to_num(y_plot)
+            df_plot[f"y_{filter_type.split('_')[0]}_{int(peak)}_err"]      = np.nan_to_num(y_plot_err)
+            df_plot[f"err_xs_{filter_type.split('_')[0]}_{int(peak)}"]     = err_xs
+            df_plot[f"err_ys_{filter_type.split('_')[0]}_{int(peak)}"]     = err_ys
+
+    if download:
+        return df_plot, f"{run_dict['experiment']}-{period}-{run}_Qbb_energy_residuals.csv"
+        
+    for peak, peak_color in zip(peaks, ["blue", "green", "red"]):
+
+        if peak == peaks[0]:
+            hover_renderer = p.circle(x=f"x_{filter_type.split('_')[0]}_{int(peak)}", y=f"y_{filter_type.split('_')[0]}_{int(peak)}", 
+                                      source=df_plot, color=peak_color, size=7, line_alpha=0,
+                legend_label = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV', 
+                name = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV'
+                )
+        else:
+            p.circle(x=f"x_{filter_type.split('_')[0]}_{int(peak)}", y=f"y_{filter_type.split('_')[0]}_{int(peak)}", source=df_plot, 
+                     color=peak_color, size=7, line_alpha=0,
+                legend_label = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV', 
+                name = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV'
+                )
+        p.multi_line(xs=f"err_xs_{filter_type.split('_')[0]}_{int(peak)}", ys=f"err_ys_{filter_type.split('_')[0]}_{int(peak)}", 
+                     source=df_plot, color=peak_color,
+                legend_label = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV', 
+                name = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV'
+                )
+
+
+    p.legend.location = "bottom_right"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = "detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = 'peak residuals (keV)'
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Energy Resolution"
+    p.yaxis.axis_label_text_font_size = "20px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = np.arange(1, len(list(res))+1, 1)
+    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_text_font_style = "bold"
+
+    for stri in strings:
+        loc=np.where(np.array(list(res))==stri)[0][0]
+        string_span = Span(location=loc+1, dimension='height',
+                    line_color='black', line_width=3)
+        string_span_label = Label(x=loc+1.5, y=1.1, text=stri, text_font_size='10pt', text_color='blue')
+        p.add_layout(string_span_label)
+        p.add_layout(string_span)
+        
+    p.hover.tooltips = [( 'Detector',   '@label_res'),
+                        ( '2614',  f"@y_{filter_type.split('_')[0]}_2614{{0.00}} +- @y_{filter_type.split('_')[0]}_2614_err{{0.00}} keV"),
+                        ( 'SEP',  f"@y_{filter_type.split('_')[0]}_2103{{0.00}} +- @y_{filter_type.split('_')[0]}_2103_err{{0.00}} keV"),
+                        ( '583',  f"@y_{filter_type.split('_')[0]}_583{{0.00}} +- @y_{filter_type.split('_')[0]}_583_err{{0.00}} keV")
+                        ]
+    p.hover.mode = 'vline'
+    p.hover.renderers = [hover_renderer]
+    
+    return p
 
 def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     
@@ -653,7 +796,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
 
             if len(list(aoe_res[detector])) == 10:
                 aoe_res[detector].update({
-                                'Low_side_sfs': {
+                                'low_side_sfs': {
                                     '1592.5': {
                                         'sf': np.nan, 
                                         'sf_err': np.nan}, 
@@ -696,7 +839,9 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
 
     for peak_type in peak_types:
 
-        x_plot, y_plot, y_plot_err = np.arange(1, len(list(aoe_res))+1, 1), [float(aoe_res[det]["Low_side_sfs"][peak_type]["sf"]) for det in aoe_res], [float(aoe_res[det]["Low_side_sfs"][peak_type]["sf_err"]) for det in aoe_res]
+        x_plot, y_plot, y_plot_err = np.arange(1, len(list(aoe_res))+1, 1), 
+        [float(aoe_res[det]["low_side_sfs"][peak_type]["sf"]) for det in aoe_res], [
+            float(aoe_res[det]["low_side_sfs"][peak_type]["sf_err"]) for det in aoe_res]
 
         err_xs = []
         err_ys = []
