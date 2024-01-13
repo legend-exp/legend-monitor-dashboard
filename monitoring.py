@@ -86,7 +86,9 @@ class monitoring(param.Parameterized):
                         }
     
     plot_types_tracking_dict = {"Energy Calib. Const.": plot_energy,"FWHM Qbb": plot_energy_res_Qbb, 
-                                "FWHM FEP": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
+                                "FWHM FEP": plot_energy_res_2614,
+                                "Energy Residuals": plot_energy_residuals_period,  
+                                "A/E Mean": plot_aoe_mean,
                                 "A/E Cut": plot_aoe_cut,
                                 "A/E Sigma": plot_aoe_sig, "Tau": plot_tau,  "Alpha": plot_ctc_const}
     
@@ -303,7 +305,12 @@ class monitoring(param.Parameterized):
     @param.depends("period", "date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
         figure = None
-        figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], self.string, self.period, self.plot_type_tracking, key=self.sort_by)
+        if self.plot_type_tracking is not "Energy Residuals":
+            figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], 
+            self.string, self.period, self.plot_type_tracking, key=self.sort_by)
+        else:
+            figure = plot_energy_residuals_period(self._get_run_dict(), self.path,  
+                                                self.period, key=self.sort_by)  
         return figure
     
     @param.depends("run", "muon_plots_cal")
@@ -401,7 +408,7 @@ class monitoring(param.Parameterized):
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         figure=None
-        if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E Status", "Tau", 
+        if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","Energy Residuals","A/E Status", "Tau", 
                                         "CT Alpha", "Valid. E", "Valid. A/E", "A/E SF"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 

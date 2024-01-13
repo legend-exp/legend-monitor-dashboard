@@ -8,6 +8,9 @@ import shelve
 import bisect
 import seaborn as sns
 import matplotlib
+import copy
+
+import numexpr as ne
 
 from bokeh.models import Span, Label, Title, Range1d, Grid, FixedTicker
 from bokeh.palettes import Category10, Category20, Turbo256
@@ -360,18 +363,18 @@ def plot_energy_residuals(run, run_dict, path, period, key="String", filter_para
             try:
                 det_dict = all_res[f"ch{channel:07}"]["results"]["ecal"]["ecal"]
                 for filt in filters:
-                    cal_dict = all_res[f"ch{channel:07}"]["pars"]["operations"]["cuspEmax_ctc_cal"]
+                    cal_dict = all_res[f"ch{channel:07}"]["pars"]["operations"][filt]
                     for peak in peaks:
                         try:
                             cal_mu = ne.evaluate(
                                 f"{cal_dict['expression']}",
-                                local_dict=dict({"cuspEmax_ctc":det_dict["cuspEmax_ctc_cal"]["pk_fits"][f"{peak}"]["parameters_in_ADC"]["mu"]}, 
+                                local_dict=dict({filt.replace("_cal",""):det_dict[filt]["pk_fits"][str(peak)]["parameters_in_ADC"]["mu"]}, 
                                                 **cal_dict["parameters"])
                             )
                             cal_err = ne.evaluate(
                                 f"{cal_dict['expression']}",
-                                local_dict=dict({"cuspEmax_ctc":det_dict["cuspEmax_ctc_cal"]["pk_fits"][f"{peak}"]["uncertainties_in_ADC"]["mu"]+\
-                                                det_dict["cuspEmax_ctc_cal"]["pk_fits"][f"{peak}"]["parameters_in_ADC"]["mu"]}, 
+                                local_dict=dict({filt.replace("_cal",""):det_dict[filt]["pk_fits"][str(peak)]["uncertainties_in_ADC"]["mu"]+\
+                                                det_dict[filt]["pk_fits"][str(peak)]["parameters_in_ADC"]["mu"]}, 
                                                 **cal_dict["parameters"])
                             )-cal_mu
                             res[detector][filt][f"{peak}"] = cal_mu-peak
@@ -413,7 +416,7 @@ def plot_energy_residuals(run, run_dict, path, period, key="String", filter_para
             df_plot[f"err_ys_{filter_type.split('_')[0]}_{int(peak)}"]     = err_ys
 
     if download:
-        return df_plot, f"{run_dict['experiment']}-{period}-{run}_Qbb_energy_residuals.csv"
+        return df_plot, f"{run_dict['experiment']}-{period}-{run}_energy_residuals.csv"
         
     for peak, peak_color in zip(peaks, ["blue", "green", "red"]):
 
@@ -441,7 +444,7 @@ def plot_energy_residuals(run, run_dict, path, period, key="String", filter_para
     p.xaxis.axis_label = "detector"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = 'peak residuals (keV)'
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Energy Resolution"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Residuals"
     p.yaxis.axis_label_text_font_size = "20px"
 
     p.xaxis.major_label_orientation = np.pi/2
