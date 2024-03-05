@@ -96,9 +96,9 @@ def plot_energy_res(path, run_dict, det, plot, colour, period, at="Qbb"):
             hit_pars_dict = json.load(r)
         try:
             if at == "Qbb":
-                reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["eres_linear"][f"Qbb_fwhm_in_keV"])
+                reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["cuspEmax_ctc_cal"]["eres_linear"][f"Qbb_fwhm_in_keV"])
             elif at == "2.6":
-                reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0])
+                reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -143,10 +143,10 @@ def plot_aoe_mean(path, run_dict, det, plot, colour, period):
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            means.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["mean"])
-            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["mean_err"])
-            reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["res"])
-            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["res_err"])
+            means.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"]["mean"])
+            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"]["mean_err"])
+            reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"]["res"])
+            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"]["res_err"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -204,10 +204,10 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period):
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            means.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["mean"])
-            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["mean_err"])
-            reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["res"])
-            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["1000-1300keV"]["0"]["res_err"])
+            means.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"]["mean"])
+            mean_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"]["mean_err"])
+            reses.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"]["res"])
+            res_errs.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"]["res_err"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -243,7 +243,7 @@ def plot_aoe_cut(path, run_dict, det, plot, colour, period):
         with open(hit_pars_path,"r")as r:
             hit_pars_dict = json.load(r)
         try:
-            cuts.append(hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["low_cut"])
+            cuts.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["low_cut"])
             times.append(run_dict[run]["timestamp"])
         except:
             pass
@@ -432,7 +432,7 @@ def plot_energy_residuals_period(run_dict, path, period, key="String", download=
                     detector = channel_map[channel]["name"]
                     try:
                         hit_dict = hit_pars_dict[f"ch{channel:07}"]["pars"]["operations"]["cuspEmax_ctc_cal"]
-                        res_dict = hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]
+                        res_dict = hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"]["cuspEmax_ctc_cal"]
                         out_data = ne.evaluate(
                             f"{hit_dict['expression']}",
                             local_dict=dict({"cuspEmax_ctc":res_dict["pk_fits"][str(peak)]["parameters_in_ADC"]["mu"]}, **hit_dict["parameters"])

@@ -154,7 +154,7 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
         if cmap[det].system == "geds":
             try:
                 raw_id = cmap[det]['daq']['rawid']
-                fep_counts = all_res[f"ch{cmap[det].daq.rawid:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+                fep_counts = all_res[f"ch{cmap[det].daq.rawid:07}"]["results"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
                 mass = cmap[det]['production']['mass_in_g']
                 mass_in_kg = mass * 0.001
                 counts_per_kg = fep_counts / mass_in_kg  # calculate counts per kg
@@ -167,7 +167,7 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
     ctitle = 'FEP Counts per kg'
     palette = plasma(256) #alternatively use viridis palette = viridis(256)
     return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts per kg",
-    colour_max = 5000)
+    colour_max = 5000, colour_min=1000)
 
 def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb", download=False):
     
@@ -213,7 +213,7 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                det_dict = all_res[f"ch{channel:03}"]["results"]["ecal"]["ecal"]
+                det_dict = all_res[f"ch{channel:03}"]["results"]["ecal"]
                 res[detector] = {'cuspEmax_ctc_cal': {'Qbb_fwhm': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_in_keV"], 
                                                 'Qbb_fwhm_err': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_err_in_keV"], 
                                                 '2.6_fwhm': det_dict["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0], 
@@ -361,7 +361,7 @@ def plot_energy_residuals(run, run_dict, path, period, key="String", filter_para
             detector = channel_map[channel]["name"]
             res[detector] = copy.deepcopy(default)
             try:
-                det_dict = all_res[f"ch{channel:07}"]["results"]["ecal"]["ecal"]
+                det_dict = all_res[f"ch{channel:07}"]["results"]["ecal"]
                 for filt in filters:
                     cal_dict = all_res[f"ch{channel:07}"]["pars"]["operations"][filt]
                     for peak in peaks:
@@ -502,7 +502,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     for i,channel in enumerate(channels):
         idxs = np.zeros(len(peaks),dtype=bool)
         try:
-            fitted_peaks = res[f"ch{channel:07}"]["results"]["ecal"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
+            fitted_peaks = res[f"ch{channel:07}"]["results"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
             if not isinstance(fitted_peaks,list):
                 fitted_peaks = [fitted_peaks]
             for j,peak in enumerate(peaks):
@@ -581,17 +581,17 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
     for i,channel in enumerate(channels):
         idxs = np.ones(len(checks), dtype=bool)
         try:
-            aoe_dict = res[f"ch{channel:07}"]["results"]["ecal"]["aoe"]
-            if np.isnan(aoe_dict["1000-1300keV"]["mean"][0]) ==False:
+            aoe_dict = res[f"ch{channel:07}"]["results"]["aoe"]
+            if np.isnan(aoe_dict["1000-1300keV"]["0"]["mean"]) ==False:
                 idxs[0]=1
-            if np.isnan(np.array(aoe_dict["Mean_pars"])).all() ==False :
+            if np.isnan(np.array([value for key, value in aoe_dict["correction_fit_results"]["mean_fits"]["pars"].items()])).all() ==False :
                 idxs[1]=1
-            if np.isnan(aoe_dict["Low_cut"]) ==False:
+            if np.isnan(aoe_dict["low_cut"]) == False:
                 idxs[2]=1
-            if isinstance(aoe_dict["Low_side_sfs"],float):
+            if isinstance(aoe_dict["low_side_sfs"],float):
                 pass
             else:
-                sfs = [float(dic["sf"]) for peak,dic in aoe_dict["Low_side_sfs"].items()]
+                sfs = [float(dic["sf"]) for peak,dic in aoe_dict["low_side_sfs"].items()]
                 if np.isnan(np.array(sfs)).all() ==False :
                     idxs[3]=1
             if isinstance(aoe_dict["2_side_sfs"],float):
@@ -669,7 +669,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                nfits[detector] =res[f"ch{channel:07}"]["results"]["ecal"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
+                nfits[detector] =res[f"ch{channel:07}"]["results"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
             except:
                 nfits[detector] =np.nan
     
@@ -758,16 +758,16 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
                                 'Cal_energy_param': 'cuspEmax_ctc', 
                                 'dt_param': 'dt_eff', 
                                 'rt_correction': False, 
-                                'Mean_pars': [np.nan, np.nan], 
-                                'Sigma_pars': [np.nan, np.nan], 
-                                'Low_cut': np.nan, 'High_cut': np.nan, 
-                                'Low_side_sfs': {
+                                'mean_pars': [np.nan, np.nan], 
+                                'sigma_pars': [np.nan, np.nan], 
+                                'low_cut': np.nan, 'high_cut': np.nan, 
+                                'low_side_sfs': {
                                     '1592.5': {
                                         'sf': np.nan, 
                                         'sf_err': np.nan}, 
                                     '1620.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                    '2039': {'sf': np.nan, 
+                                    '2039.0': {'sf': np.nan, 
                                             'sf_err': np.nan}, 
                                     '2103.53': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
@@ -778,7 +778,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
                                                 'sf_err': np.nan}, 
                                     '1620.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                    '2039': {'sf': np.nan, 
+                                    '2039.0': {'sf': np.nan, 
                                             'sf_err': np.nan}, 
                                     '2103.53': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
@@ -793,38 +793,14 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
             detector = channel_map[channel]["name"]
 
             try:  
-                aoe_res[detector] = all_res[f"ch{channel:07}"]["results"]["ecal"]["aoe"]
-            except:
-                aoe_res[detector] = default
-
-            if len(list(aoe_res[detector])) == 10:
-                aoe_res[detector].update({
-                                'low_side_sfs': {
-                                    '1592.5': {
-                                        'sf': np.nan, 
-                                        'sf_err': np.nan}, 
-                                    '1620.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '2039': {'sf': np.nan, 
-                                            'sf_err': np.nan}, 
-                                    '2103.53': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '2614.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}}, 
-                                '2_side_sfs': {
-                                    '1592.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '1620.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '2039': {'sf': np.nan, 
-                                            'sf_err': np.nan}, 
-                                    '2103.53': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '2614.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}}})  
-
-            elif len(list(aoe_res[detector])) < 10:
-                aoe_res[detector] = default
+                aoe_res[detector] = all_res[f"ch{channel:07}"]["results"]["aoe"]
+                if len(aoe_res[detector]) ==0:
+                    raise KeyError
+            except KeyError:
+                aoe_res[detector] = default.copy()
+    
+    print(aoe_res["V02160A"])
+    print(aoe_res["P00698B"])
     
     p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E Survival Fractions"
@@ -836,15 +812,19 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
     df_plot = pd.DataFrame()
     df_plot["label_res"]  = label_res
 
-    peak_types = ["1592.5", "1620.5", "2039", "2103.53", "2614.5"]
+    peak_types = ["1592.5", "1620.5", "2039.0", "2103.53", "2614.5"]
     peak_names = ['Tl DEP', 'Bi FEP', "CC @ Qbb", 'Tl SEP', 'Tl FEP']
     peak_colors = ["blue", "orange", "green", "red", "purple"]
 
     for peak_type in peak_types:
-
-        x_plot, y_plot, y_plot_err = np.arange(1, len(list(aoe_res))+1, 1), 
+        for det in aoe_res:
+            print(det)
+            print(aoe_res[det]["low_side_sfs"][peak_type]["sf"])
+        #try:
+        x_plot, y_plot, y_plot_err = (np.arange(1, len(list(aoe_res))+1, 1), 
         [float(aoe_res[det]["low_side_sfs"][peak_type]["sf"]) for det in aoe_res], [
-            float(aoe_res[det]["low_side_sfs"][peak_type]["sf_err"]) for det in aoe_res]
+            float(aoe_res[det]["low_side_sfs"][peak_type]["sf_err"]) for det in aoe_res])
+        
 
         err_xs = []
         err_ys = []
