@@ -190,7 +190,18 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title 
     else:
         maxvalue = colour_max
     color_mapper = LinearColorMapper(palette=palette, low=minvalue, high=maxvalue)
-    colors = list(map(lambda v : 'white' if v is None or math.isnan(v) else palette[int((v - minvalue)/(maxvalue-minvalue) * (len(palette) - 1))], display_dict.values()))
+    
+    def convert_value_to_colour(v):
+        if v is None or math.isnan(v) or v==0:
+            return "white"
+        elif v>maxvalue:
+            return palette[-1]
+        elif v<maxvalue:
+            return palette[0]
+        else:
+            return palette[int((v - minvalue)/(maxvalue-minvalue) * (len(palette) - 1))]
+    
+    colors = list(map(convert_value_to_colour, display_dict.values()))
     source.data["color"] = colors
     
     # plot detector geometries with respective colors
