@@ -477,176 +477,176 @@ class monitoring(param.Parameterized):
         print(f"Time to get summary plot: {time.time()-start_time}")
         return figure
     
-    @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_resampled", "phy_units", "phy_plots_sc_vals", watch=True)
-    def _get_phy_data(self):
-        start_time = time.time()
-        data_file     = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf'
-        data_file_sc  = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-slow_control.hdf'
-        
-        if not os.path.exists(data_file):
-            print(f"Time to get phy data: {time.time()-start_time}")
-            self.phy_data_df = []
-            return            
-        print(1)
-        # get filekeys to check if key exists
-        with h5py.File(data_file, 'r') as f:
-            filekeys = list(f.keys())
-        print(2)
-        # load plot info for current plot value and get all data from selected string
-        phy_data_key     = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
-        if "pulser" in phy_data_key:
-            if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
-                self.phy_data_df = pd.DataFrame()
-                print(f"Time to get phy data: {time.time()-start_time}")
-                return 
-            self.phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key.split('_pulser')[0]}_info")
-            if "Diff" in phy_data_key:
-                self.phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
-            else:
-                self.phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
-        else:
-            if f"{phy_data_key}_info" not in filekeys: 
-                self.phy_data_df = pd.DataFrame()
-                print(f"Time to get phy data: {time.time()-start_time}")
-                return 
-            self.phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
-        print(3)
-        
-        # self.phy_abs_unit = self.phy_plot_info.loc["unit"][0]
-        
-        # load dataframe for current plot value and get all data from selected string
-        if self.phy_units == "Relative":
-            if f"{phy_data_key}_var" not in filekeys: 
-                self.phy_data_df = pd.DataFrame()
-                print(f"Time to get phy data: {time.time()-start_time}")
-                return
-            self.phy_data_df                    = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
-            self.phy_plot_info.loc["unit"][0]   = "%"
-        else:
-            if phy_data_key not in filekeys:
-                self.phy_data_df = pd.DataFrame()
-                print(f"Time to get phy data: {time.time()-start_time}")
-                return
-            self.phy_data_df = pd.read_hdf(data_file, key=phy_data_key)
-        print(4)
-        
-        # load mean values
-        if f"{phy_data_key}_mean" not in filekeys:
-            self.phy_data_df = pd.DataFrame()
-            print(f"Time to get phy data: {time.time()-start_time}")
-            return
-        self.phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
-        print(5)
-        
-        # get sc data if selected
-        # if self.phy_plots_sc and self.phy_units == "Relative" and os.path.exists(data_file_sc):
-        if self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals] and os.path.exists(data_file_sc):
-            self.data_sc = pd.read_hdf(data_file_sc, self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals])
-            self._phy_sc_plotted = True
-        else:
-            self.data_sc = pd.DataFrame()
-            self._phy_sc_plotted = False
-        return 
-    
-    @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals", watch=True)
-    def _get_phy_plot(self):
-        # Create empty plot inc ase of errors
-        start_time = time.time()
-        p = figure(width=1000, height=600)
-        p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
-        p.title.align = "center"
-        p.title.text_font_size = "25px"
-            
-        # return empty plot if no data exists for run
-        if self.phy_data_df.empty:
-            print(f"Time to get phy plot: {time.time()-start_time}")
-            self.phy_pane.object = p
-        else:
-            channels = self.strings_dict[self.string]
-            # check if channel selection actually exists in data
-            channels            = [ch for ch in channels if ch in self.phy_data_df.columns and ch in self.phy_data_df_mean.columns]
-            phy_data_df         = self.phy_data_df[channels]
-            phy_data_df_mean    = self.phy_data_df_mean[channels]
-            
-            # plot data
-            p = self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, self.phy_plot_info, self.phy_plots_types, self.phy_plots,f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, self.phy_abs_unit, self.phy_data_sc, self.phy_plots_sc_vals)
-            print(f"Time to get phy plot: {time.time()-start_time}")
-            self.phy_pane.object = p
-            
-        
-        # self.phy_channels = self.strings_dict[self.string]
-        
-    @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals")
-    def view_phy(self):
-        return self.phy_pane
-        
-    # @pn.io.profile('clustering', engine='pyinstrument')
-    # @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals")
-    # def view_phy(self):
+    # @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_resampled", "phy_units", "phy_plots_sc_vals", watch=True)
+    # def _get_phy_data(self):
     #     start_time = time.time()
     #     data_file     = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf'
     #     data_file_sc  = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-slow_control.hdf'
         
-    #     # Create empty plot inc ase of errors
-    #     p = figure(width=1000, height=600)
-    #     p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
-    #     p.title.align = "center"
-    #     p.title.text_font_size = "25px"
-        
-    #     # return empty plot if no data exists for run
     #     if not os.path.exists(data_file):
-    #         print(f"Time to get phy plot: {time.time()-start_time}")
-    #         return p
-        
+    #         print(f"Time to get phy data: {time.time()-start_time}")
+    #         self.phy_data_df = []
+    #         return            
+    #     print(1)
     #     # get filekeys to check if key exists
     #     with h5py.File(data_file, 'r') as f:
     #         filekeys = list(f.keys())
-            
-    #     # load dataframe for current plot value and get all data from selected string
-    #     channels = self.strings_dict[self.string]
-    #     phy_data_key            = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
+    #     print(2)
+    #     # load plot info for current plot value and get all data from selected string
+    #     phy_data_key     = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
     #     if "pulser" in phy_data_key:
-    #         if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys: return p
-    #         phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key.split('_pulser')[0]}_info")
+    #         if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
+    #             self.phy_data_df = pd.DataFrame()
+    #             print(f"Time to get phy data: {time.time()-start_time}")
+    #             return 
+    #         self.phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key.split('_pulser')[0]}_info")
     #         if "Diff" in phy_data_key:
-    #             phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
+    #             self.phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
     #         else:
-    #             phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
+    #             self.phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
     #     else:
-    #         if f"{phy_data_key}_info" not in filekeys: return p
-    #         phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
-    #     abs_unit                = phy_plot_info.loc["unit"][0]
+    #         if f"{phy_data_key}_info" not in filekeys: 
+    #             self.phy_data_df = pd.DataFrame()
+    #             print(f"Time to get phy data: {time.time()-start_time}")
+    #             return 
+    #         self.phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+    #     print(3)
         
+    #     # self.phy_abs_unit = self.phy_plot_info.loc["unit"][0]
+        
+    #     # load dataframe for current plot value and get all data from selected string
     #     if self.phy_units == "Relative":
-    #         if f"{phy_data_key}_var" not in filekeys: return p
-    #         phy_data_df                    = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
-    #         phy_plot_info.loc["unit"][0]   = "%"
+    #         if f"{phy_data_key}_var" not in filekeys: 
+    #             self.phy_data_df = pd.DataFrame()
+    #             print(f"Time to get phy data: {time.time()-start_time}")
+    #             return
+    #         self.phy_data_df                    = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
+    #         self.phy_plot_info.loc["unit"][0]   = "%"
     #     else:
-    #         if phy_data_key not in filekeys: return p
-    #         phy_data_df             = pd.read_hdf(data_file, key=phy_data_key)
+    #         if phy_data_key not in filekeys:
+    #             self.phy_data_df = pd.DataFrame()
+    #             print(f"Time to get phy data: {time.time()-start_time}")
+    #             return
+    #         self.phy_data_df = pd.read_hdf(data_file, key=phy_data_key)
+    #     print(4)
         
     #     # load mean values
-    #     if f"{phy_data_key}_mean" not in filekeys: return p
-    #     phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
+    #     if f"{phy_data_key}_mean" not in filekeys:
+    #         self.phy_data_df = pd.DataFrame()
+    #         print(f"Time to get phy data: {time.time()-start_time}")
+    #         return
+    #     self.phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
+    #     print(5)
         
     #     # get sc data if selected
     #     # if self.phy_plots_sc and self.phy_units == "Relative" and os.path.exists(data_file_sc):
     #     if self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals] and os.path.exists(data_file_sc):
-    #         data_sc = pd.read_hdf(data_file_sc, self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals])
+    #         self.data_sc = pd.read_hdf(data_file_sc, self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals])
     #         self._phy_sc_plotted = True
     #     else:
-    #         data_sc = pd.DataFrame()
+    #         self.data_sc = pd.DataFrame()
     #         self._phy_sc_plotted = False
-    #     # check if channel selection actually exists in data
-    #     channels            = [ch for ch in channels if ch in phy_data_df.columns and ch in phy_data_df_mean.columns]
-    #     phy_data_df         = phy_data_df[channels]
-    #     phy_data_df_mean    = phy_data_df_mean[channels]
+    #     return 
+    
+    # @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals", watch=True)
+    # def _get_phy_plot(self):
+    #     # Create empty plot inc ase of errors
+    #     start_time = time.time()
+    #     p = figure(width=1000, height=600)
+    #     p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
+    #     p.title.align = "center"
+    #     p.title.text_font_size = "25px"
+            
+    #     # return empty plot if no data exists for run
+    #     if self.phy_data_df.empty:
+    #         print(f"Time to get phy plot: {time.time()-start_time}")
+    #         self.phy_pane.object = p
+    #     else:
+    #         channels = self.strings_dict[self.string]
+    #         # check if channel selection actually exists in data
+    #         channels            = [ch for ch in channels if ch in self.phy_data_df.columns and ch in self.phy_data_df_mean.columns]
+    #         phy_data_df         = self.phy_data_df[channels]
+    #         phy_data_df_mean    = self.phy_data_df_mean[channels]
+            
+    #         # plot data
+    #         p = self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, self.phy_plot_info, self.phy_plots_types, self.phy_plots,f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, self.phy_abs_unit, self.phy_data_sc, self.phy_plots_sc_vals)
+    #         print(f"Time to get phy plot: {time.time()-start_time}")
+    #         self.phy_pane.object = p
+            
         
-    #     # plot data
-    #     p = self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, phy_plot_info, self.phy_plots_types, self.phy_plots,f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, asb_unit, data_sc, self.phy_plots_sc_vals)
-    #     print(f"Time to get phy plot: {time.time()-start_time}")
-    #     self.bokeh_pane.object = p
-    #     return p
+    #     # self.phy_channels = self.strings_dict[self.string]
+        
+    # @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals")
+    # def view_phy(self):
+    #     return self.phy_pane
+        
+    # @pn.io.profile('clustering', engine='pyinstrument')
+    @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals")
+    def view_phy(self):
+        start_time = time.time()
+        data_file     = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf'
+        data_file_sc  = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-slow_control.hdf'
+        
+        # Create empty plot inc ase of errors
+        p = figure(width=1000, height=600)
+        p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
+        p.title.align = "center"
+        p.title.text_font_size = "25px"
+        
+        # return empty plot if no data exists for run
+        if not os.path.exists(data_file):
+            print(f"Time to get phy plot: {time.time()-start_time}")
+            return p
+        
+        # get filekeys to check if key exists
+        with h5py.File(data_file, 'r') as f:
+            filekeys = list(f.keys())
+            
+        # load dataframe for current plot value and get all data from selected string
+        channels = self.strings_dict[self.string]
+        phy_data_key            = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
+        if "pulser" in phy_data_key:
+            if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys: return p
+            phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key.split('_pulser')[0]}_info")
+            if "Diff" in phy_data_key:
+                phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
+            else:
+                phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
+        else:
+            if f"{phy_data_key}_info" not in filekeys: return p
+            phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+        abs_unit                = phy_plot_info.loc["unit"][0]
+        
+        if self.phy_units == "Relative":
+            if f"{phy_data_key}_var" not in filekeys: return p
+            phy_data_df                    = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
+            phy_plot_info.loc["unit"][0]   = "%"
+        else:
+            if phy_data_key not in filekeys: return p
+            phy_data_df             = pd.read_hdf(data_file, key=phy_data_key)
+        
+        # load mean values
+        if f"{phy_data_key}_mean" not in filekeys: return p
+        phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
+        
+        # get sc data if selected
+        # if self.phy_plots_sc and self.phy_units == "Relative" and os.path.exists(data_file_sc):
+        if self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals] and os.path.exists(data_file_sc):
+            data_sc = pd.read_hdf(data_file_sc, self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals])
+            self._phy_sc_plotted = True
+        else:
+            data_sc = pd.DataFrame()
+            self._phy_sc_plotted = False
+        # check if channel selection actually exists in data
+        channels            = [ch for ch in channels if ch in phy_data_df.columns and ch in phy_data_df_mean.columns]
+        phy_data_df         = phy_data_df[channels]
+        phy_data_df_mean    = phy_data_df_mean[channels]
+        
+        # plot data
+        p = self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, phy_plot_info, self.phy_plots_types, self.phy_plots,f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, abs_unit, data_sc, self.phy_plots_sc_vals)
+        print(f"Time to get phy plot: {time.time()-start_time}")
+        # self.bokeh_pane.object = p
+        return p
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):
@@ -678,6 +678,7 @@ class monitoring(param.Parameterized):
     @param.depends("channel", watch=True)
     def update_channel_plot_dict(self):
         start_time = time.time()
+        print(self.channel)
         with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             self.plot_dict_ch = shelf[self.channel[:9]]
         with shelve.open(self.plot_dict.replace("hit","dsp"), 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
@@ -743,7 +744,6 @@ class monitoring(param.Parameterized):
                 new_manager.canvas.figure = fig
                 fig.set_canvas(new_manager.canvas)
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
-        print(f"Time to get details plot: {time.time()-start_time}")
         return fig_pane
     
     @param.depends("run", "channel")
