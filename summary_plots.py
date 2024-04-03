@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import pickle as pkl
 import shelve
 import bisect
-import seaborn as sns
 import matplotlib
 import copy
 
@@ -94,16 +93,19 @@ def plot_status(run, run_dict, path, source, xlabels, period, key = None):
     
     dets, strings, positions = build_string_array(cmap)
     
-    display_dict = {cmap[i]['daq']['rawid'] : 1 if status_map[i]["processable"] == True and status_map[i]["usability"] == 'on' else 0
-        for i in dets}
-    palette = ('red', 'green')
-    ctitle = 'Working Detector'
-    ticker = FixedTicker(ticks=[0.25,0.75], tags = ['Non-Working', 'Working'])
+    color_dict = {'on': 2, 'off': 0, 'ac': 1}
+    display_dict = {cmap[i]['daq']['rawid'] : color_dict[status_map[cmap[i]['name']]['usability']] for i in dets}
+    
+    # display_dict = {cmap[i]['daq']['rawid'] : 1 if status_map[i]["processable"] == True and status_map[i]["usability"] == 'on' else 0
+    #     for i in dets}
+    palette = ('red', 'orange', 'green')
+    ctitle = 'Detector Status'
+    ticker = FixedTicker(ticks=[0.3, 1.0, 1.7], tags = ['red', 'orange', 'green'])
     formatter = CustomJSTickFormatter(code="""
-        var mapping = {0.25: "Non-Working", 0.75: "Working"};
+        var mapping = {0.3: "off", 1.0: "ac", 1.7: "on"};
         return mapping[tick];
     """)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | Detector Status")
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | Detector Status", boolean_scale=True)
 
 def build_counts_map(chan_map, data):
     dets, strings, positions = build_string_array(chan_map)
@@ -167,7 +169,7 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
     ctitle = 'FEP Counts per kg'
     palette = plasma(256) #alternatively use viridis palette = viridis(256)
     return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts per kg",
-    colour_max = 5000, colour_min=1000)
+    colour_max = 10000, colour_min=1000)
 
 def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb", download=False):
     
