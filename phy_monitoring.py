@@ -147,7 +147,7 @@ def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_na
 
 
 def phy_plot_histogram(data_string, plot_info, plot_type, resample_unit, string, run, period, run_dict, channels, channel_map):
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
+    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,box_zoom,ywheel_zoom,hover,reset,save", output_backend="webgl", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'][0]} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"

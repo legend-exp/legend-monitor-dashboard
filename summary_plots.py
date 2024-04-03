@@ -393,10 +393,17 @@ def plot_energy_residuals(run, run_dict, path, period, key="String", filter_para
                 pass
 
     
-    p = figure(width=1400, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p = figure(width=1400, height=600, tools="pan,box_zoom,ywheel_zoom,hover,reset,save",  active_scroll='ywheel_zoom')
+
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Residuals"
     p.title.align = "center"
     p.title.text_font_size = "25px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     label_res = [r if 'String' not in r else "" for r in list(res)]
 
