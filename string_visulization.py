@@ -160,7 +160,8 @@ def get_plot_source_and_xlabels(chan_dict, channel_map, strings_dict, ΔR = 160,
     ), xlabels
 
 
-def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title = "LEGEND detector monitoring", palette = inferno(256), ticker = None, formatter = None):
+def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title = "LEGEND detector monitoring", palette = inferno(256), ticker = None, formatter = None,
+                        colour_max=None, colour_min=None, boolean_scale=False):
     source.data["y_label"] = list(map(lambda i: display_dict[i], source.data["ch"]))
     tooltips = [
     ("Detector Name", "@dn"),
@@ -180,9 +181,29 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title 
 
     # handle colors according to display_dict
     values = list(filter(lambda v: v is not None, display_dict.values()))
-    minvalue = min(values); maxvalue = max(values)
+    if colour_min is None:
+        minvalue = min(values) 
+    else:
+        minvalue = colour_min
+    if colour_max is None:
+        maxvalue = max(values)
+    else:
+        maxvalue = colour_max
     color_mapper = LinearColorMapper(palette=palette, low=minvalue, high=maxvalue)
-    colors = list(map(lambda v : 'white' if v is None or math.isnan(v) else palette[int((v - minvalue)/(maxvalue-minvalue) * (len(palette) - 1))], display_dict.values()))
+    
+    def convert_value_to_colour(v):
+        if boolean_scale:
+            return palette[int(v)]
+        if v is None or math.isnan(v) or v==0:
+            return "white"
+        elif v>maxvalue:
+            return palette[-1]
+        elif v<maxvalue:
+            return palette[0]
+        else:
+            return palette[int((v - minvalue)/(maxvalue-minvalue) * (len(palette) - 1))]
+    
+    colors = list(map(convert_value_to_colour, display_dict.values()))
     source.data["color"] = colors
     
     # plot detector geometries with respective colors
@@ -213,16 +234,16 @@ def create_detector_plot(source, display_dict, xlabels, ctitle = "", plot_title 
 
 
 def plot_visu_usability(source, chan_dict, channel_map, xlabels):
-    color_dict = {'on': 1, 'off': 0}
+    color_dict = {'on': 2, 'off': 0, 'ac': 1}
     display_dict = {i : color_dict[chan_dict[channel_map[i]['name']]['usability']] for i in source.data['ch']}
-    palette = ('red', 'green')
+    palette = ('red', 'orange', 'green')
     ctitle = 'Usability'
-    ticker = FixedTicker(ticks=[0.25,0.75], tags = ['off', 'on'])
+    ticker = FixedTicker(ticks=[0.3, 1.0, 1.7], tags = ['red', 'orange', 'green'])
     formatter = CustomJSTickFormatter(code="""
-        var mapping = {0.25: "off", 0.75: "on"};
+        var mapping = {0.3: "off", 1.0: "ac", 1.7: "on"};
         return mapping[tick];
     """)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter)
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, boolean_scale=True)
 
 def plot_visu_processable(source, chan_dict, channel_map, xlabels):
     color_dict = {True: 1, False: 0}
@@ -234,7 +255,7 @@ def plot_visu_processable(source, chan_dict, channel_map, xlabels):
         var mapping = {0.25: "True", 0.75: "False"};
         return mapping[tick];
     """)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter)
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, boolean_scale=True)
 
 
 def plot_visu_mass(source, chan_dict, channel_map, xlabels):

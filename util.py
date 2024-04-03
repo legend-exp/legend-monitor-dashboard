@@ -41,11 +41,11 @@ sort_dict = {"String":{"out_key":"{key}:{k:02}",
 def gen_run_dict(path):
     prod_config = os.path.join(path,"config.json")
     prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
-    par_file = os.path.join(prod_config["paths"]["par"], 'validity.jsonl')
+    par_file = os.path.join(prod_config["paths"]["par_hit"], 'validity.jsonl')
     run_dict = {}
     with open(par_file, 'r') as file:
         for json_str in file:
-            experiment, period,  run, _,_,_  = json.loads(json_str)["apply"][0].split("-")
+            experiment, period,  run, _,_,_  = json.loads(json_str)["apply"][0].split("/")[-1].split("-")
             timestamp = json.loads(json_str)["valid_from"]
             if os.path.isfile(os.path.join(prod_config["paths"]["par_hit"], f"cal/{period}/{run}/",
                                            f"{experiment}-{period}-{run}-cal-{timestamp}-par_hit.json")):

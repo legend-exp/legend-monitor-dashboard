@@ -15,7 +15,7 @@ import h5py
 from pathlib import Path
 
 import datetime as dtt
-from  datetime import datetime, timedelta
+from  datetime import datetime, timedelta, date
 
 from legendmeta import LegendMetadata
 from legendmeta.catalog import Props
@@ -37,12 +37,11 @@ from src.string_visulization import *
 from src.sipm_monitoring import *
 from src.muon_monitoring import *
 
+# calibration plots 
+plt.rcParams['font.size'] = 10
+plt.rcParams['figure.figsize'] = (16, 6)
+plt.rcParams['figure.dpi'] = 100
 class monitoring(param.Parameterized):
-    
-    # calibration plots 
-    plt.rcParams['font.size'] = 10
-    plt.rcParams['figure.figsize'] = (16, 6)
-    plt.rcParams['figure.dpi'] = 100
     
     cal_plots = ['2614_timemap',
                 'peak_fits',
@@ -54,7 +53,9 @@ class monitoring(param.Parameterized):
                 "logged_spectrum",
                 "peak_track"]
     
-    aoe_plots = ['dt_deps', 'compt_bands_nocorr', 'band_fits', 'mean_fit', 'sigma_fit', 'compt_bands_corr', 'surv_fracs', 'PSD_spectrum', 'psd_sf']
+    aoe_plots = ['plot_dt_dep', 'compt_bands_uncorrected', 
+    'mean_fit', 'sigma_fit', 'compt_bands_corrected', 'cut_fit', 'classifier',
+    'survival_fractions', 'spectrum', 'sf_v_energy']
 
     baseline_plots= ["baseline_timemap" ]
     
@@ -62,8 +63,8 @@ class monitoring(param.Parameterized):
     
     optimisation_plots = ["trap_kernel", "zac_kernel", "cusp_kernel", "trap_acq", "zac_acq", "cusp_acq"]
     
-    _options = {'cuspEmax_ctc': cal_plots , 'zacEmax_ctc': cal_plots,
-            'trapEmax_ctc': cal_plots , 'trapTmax': cal_plots, "Baseline": baseline_plots,
+    _options = {'cuspEmax_ctc_cal': cal_plots , 'zacEmax_ctc_cal': cal_plots,
+            'trapEmax_ctc_cal': cal_plots , 'trapTmax_cal': cal_plots, "Baseline": baseline_plots,
             "A/E": aoe_plots, "Tau": tau_plots, "Optimisation": optimisation_plots}
         
     plot_types_summary_dict = {
@@ -73,6 +74,7 @@ class monitoring(param.Parameterized):
                         "FEP Counts": plot_counts, 
                         "FWHM Qbb": plot_energy_resolutions_Qbb, 
                         "FWHM FEP": plot_energy_resolutions_2614,
+                        "Energy Residuals": plot_energy_residuals,
                         "A/E Status": plot_aoe_status,
                         "Valid. A/E": plot_no_fitted_aoe_slices,
                         "A/E SF":get_aoe_results, 
@@ -85,7 +87,10 @@ class monitoring(param.Parameterized):
                         }
     
     plot_types_tracking_dict = {"Energy Calib. Const.": plot_energy,"FWHM Qbb": plot_energy_res_Qbb, 
-                                "FWHM FEP": plot_energy_res_2614, "A/E Mean": plot_aoe_mean,
+                                "FWHM FEP": plot_energy_res_2614,
+                                "Energy Residuals": plot_energy_residuals_period,  
+                                "A/E Mean": plot_aoe_mean,
+                                "A/E Cut": plot_aoe_cut,
                                 "A/E Sigma": plot_aoe_sig, "Tau": plot_tau,  "Alpha": plot_ctc_const}
     
     channel = param.Selector(default = 0, objects = [0])
@@ -177,7 +182,16 @@ class monitoring(param.Parameterized):
         self.period = list(self.periods)[-1]
        # self.period = 'p04'
         
-        # create inital dataframes        
+        # create inital dataframes
+        self.phy_channels = []
+        self.phy_data_df       = pd.DataFrame()
+        self.phy_data_df_mean  = pd.DataFrame()
+        self.phy_abs_unit = ""
+        self.phy_plot_info = None
+        self.phy_data_sc = pd.DataFrame()
+        self.phy_pane = pn.pane.Bokeh(figure(width=1000, height=600), sizing_mode='scale_width')
+        
+        
         self.muon_data_dict = {}
         
         self.sipm_data_df = pd.DataFrame()
@@ -187,6 +201,7 @@ class monitoring(param.Parameterized):
         self.meta_visu_xlabels     = {}
         self.meta_visu_chan_dict   = {}
         self.meta_visu_channel_map = {}
+
         
         # get avaliable periods and runs
         self._get_period_data()
@@ -195,6 +210,7 @@ class monitoring(param.Parameterized):
         
     @param.depends("period", watch=True)
     def _get_period_data(self):
+        start_time = time.time()
         if self.startup_bool:
             print("Startup procedure, skip _get_period_data")
             self.startup_bool = False
@@ -214,11 +230,13 @@ class monitoring(param.Parameterized):
 
             self.param["date_range"].bounds = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
                                     datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
-            self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
+            self.date_range = (datetime.strptime(self.periods[start_period][start_run]["timestamp"],'%Y%m%dT%H%M%SZ')-dtt.timedelta(minutes = 100), 
+                                datetime.strptime(self.periods[end_period][end_run]["timestamp"],'%Y%m%dT%H%M%SZ')+dtt.timedelta(minutes = 110))
 
 
     @param.depends("run", watch=True)
     def _get_muon_data(self):
+        start_time = time.time()
         data_file = f"{self.muon_path}/generated/plt/phy/{self.period}/dsp/{self.run}/dashboard_period_{self.period}_run_{self.run}.shelve"
         if not os.path.exists(data_file +'.dat'):
             self.muon_data_dict = {}
@@ -231,13 +249,23 @@ class monitoring(param.Parameterized):
                     # Add a new key-value pair to the dictionary
                     arrays_dict[key] = np.array(f[key])
                 
-                self.muon_data_dict = arrays_dict    
+                self.muon_data_dict = arrays_dict
+        print(f"Time to get muon data: {time.time()-start_time}")
             
     @param.depends("date_range", watch=True)
     def _get_run_dict(self):
+        start_time = time.time()
         valid_from = [datetime.timestamp(datetime.strptime(self.run_dict[entry]["timestamp"], '%Y%m%dT%H%M%SZ')) for entry in self.run_dict]
-        pos1 = bisect.bisect_right(valid_from, datetime.timestamp(self.date_range[0]))
-        pos2 = bisect.bisect_left(valid_from, datetime.timestamp(self.date_range[-1]))
+        if isinstance(self.date_range[0] , date):
+            low_range = datetime.timestamp(datetime.combine(self.date_range[0], datetime.min.time()))
+        else:
+            low_range = datetime.timestamp(self.date_range[0])
+        if isinstance(self.date_range[0] , date):
+            high_range = datetime.timestamp(datetime.combine(self.date_range[1], datetime.max.time()))
+        else:
+            high_range = datetime.timestamp(self.date_range[1])
+        pos1 = bisect.bisect_right(valid_from, low_range)
+        pos2 = bisect.bisect_left(valid_from, high_range)
         if pos1 < 0:
             pos1 = 0
         if pos2 >= len(self.run_dict):
@@ -245,10 +273,12 @@ class monitoring(param.Parameterized):
         valid_idxs = np.arange(pos1, pos2, 1)
         valid_keys = np.array(list(self.run_dict))[valid_idxs]
         out_dict = {key:self.run_dict[key] for key in valid_keys}
+        print(f"Time to get run dict: {time.time()-start_time}")
         return out_dict
     
     @param.depends("run", watch=True)
     def _get_metadata(self):
+        start_time = time.time()
         try:
             chan_dict, channel_map = self.chan_dict, self.channel_map
             
@@ -288,20 +318,29 @@ class monitoring(param.Parameterized):
             # self.meta_visu_chan_dict, self.meta_visu_channel_map = chan_dict, channel_map
         except:
             pass
+        print(f"Time to get metadata: {time.time()-start_time}")
 
     @param.depends("period", "date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
+        start_time = time.time()
         figure = None
-        figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], self.string, self.period, self.plot_type_tracking, key=self.sort_by)
+        if self.plot_type_tracking != "Energy Residuals":
+            figure = plot_tracking(self._get_run_dict(), self.path, self.plot_types_tracking_dict[self.plot_type_tracking], 
+            self.string, self.period, self.plot_type_tracking, key=self.sort_by)
+        else:
+            figure = plot_energy_residuals_period(self._get_run_dict(), self.path,  
+                                                self.period, key=self.sort_by)  
         return figure
     
     @param.depends("run", "muon_plots_cal")
     def view_muon_cal(self):
+        start_time = time.time()
         if not bool(self.muon_data_dict):
             p = figure(width=1000, height=600)
             p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
+            print(f"Time to get muon cal plot: {time.time()-start_time}")
             return p
 
         if self.muon_plots_cal == "Cal. SPP Shift":
@@ -315,39 +354,54 @@ class monitoring(param.Parameterized):
                 # Reshape the x_data and y_data arrays
                 x_data = np.array([[dtt.datetime.strptime(date_str, '%Y_%m_%d') for date_str in row] for row in x_data_str])
                 
-                return self.muon_plots_cal_dict[self.muon_plots_cal](x_data, y_data, self.run, self.period, self.run_dict[self.run], self.muon_plots_cal)
+                p = self.muon_plots_cal_dict[self.muon_plots_cal](x_data, y_data, self.run, self.period, self.run_dict[self.run], self.muon_plots_cal)
+                print(f"Time to get muon cal plot: {time.time()-start_time}")
+                return p
         else:
-            return self.muon_plots_cal_dict[self.muon_plots_cal](self.muon_data_dict, self.run, self.period, self.run_dict[self.run], self.muon_plots_cal)
+            p = self.muon_plots_cal_dict[self.muon_plots_cal](self.muon_data_dict, self.run, self.period, self.run_dict[self.run], self.muon_plots_cal)
+            print(f"Time to get muon cal plot: {time.time()-start_time}")
+            return p
 
     @param.depends("run", "muon_plots_mon")
     def view_muon_mon(self):
+        start_time = time.time()
         if not bool(self.muon_data_dict):
             p = figure(width=1000, height=600)
             p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
+            print(f"Time to get muon mon plot: {time.time()-start_time}")
             return p
         if self.muon_plots_mon == "Integral Light":
-            return pn.pane.Matplotlib(self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run, self.run_dict[self.run]), sizing_mode="scale_width")
-        return self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run, self.run_dict[self.run])
+            p = pn.pane.Matplotlib(self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run, self.run_dict[self.run]), sizing_mode="scale_width")
+            print(f"Time to get muon mon plot: {time.time()-start_time}")
+            return p
+        p = self.muon_plots_mon_dict[self.muon_plots_mon](self.muon_data_dict, self.period, self.run, self.run_dict[self.run])
+        print(f"Time to get muon mon plot: {time.time()-start_time}")
+        return p
 
     @param.depends("sort_by", watch=True)
     def update_strings(self):
+        start_time = time.time()
         self.strings_dict, self.chan_dict, self.channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sort_by)
 
         self.param["string"].objects = list(self.strings_dict)
         self.string = f"{list(self.strings_dict)[0]}"
+        print(f"Time to update strings: {time.time()-start_time}")
         
     @param.depends("sipm_sort_by", watch=True)
     def update_barrels(self):
+        start_time = time.time()
         self.sipm_out_dict, self.sipm_chmap = sorter(self.path, self.run_dict[self.run]["timestamp"], key=self.sipm_sort_by, spms=True)
         
         self.param["sipm_barrel"].objects = list(self.sipm_out_dict)
         self.sipm_barrel = f"{list(self.sipm_out_dict)[0]}"
         
+        print(f"Time to update barrels: {time.time()-start_time}")
         
     @param.depends("run", watch=True)
     def _get_sipm_data(self):
+        start_time = time.time()
         data_file = self.sipm_path + f'{self.period}_{self.run}_spmmon.hdf'
         if not os.path.exists(data_file):
             self.sipm_data_df = pd.DataFrame()
@@ -360,10 +414,11 @@ class monitoring(param.Parameterized):
         for val in self.sipm_chmap.values():
             self.sipm_name_dict[val['daq']['rawid']] = val['name']
         self.update_barrels()
+        print(f"Time to get sipm data: {time.time()-start_time}")
         
     @param.depends("run", "sort_by", "plot_types_download")
     def download_summary_files(self):
-        
+        start_time = time.time()
         download_file, download_filename = self.plot_types_summary_dict[self.plot_types_download](self.run, 
                                             self.run_dict[self.run], 
                                             self.path, self.period, key=self.sort_by, download=True)
@@ -371,26 +426,33 @@ class monitoring(param.Parameterized):
         if not os.path.exists(self.tmp_path + download_filename):
             download_file.to_csv(self.tmp_path + download_filename, index=False)
             print(download_file, self.tmp_path)
-        return pn.widgets.FileDownload(self.tmp_path + download_filename, filename=download_filename,
+        ret = pn.widgets.FileDownload(self.tmp_path + download_filename, filename=download_filename,
                                 button_type='success', embed=False, name="Click to download 'csv'", width=350)
+        print(f"Time to download summary files: {time.time()-start_time}")
+        return ret
     
     @param.depends("run", "sipm_sort_by", "sipm_resampled", "sipm_barrel", "sipm_plot_style")
     def view_sipm(self):
+        start_time = time.time()
         if self.sipm_data_df.empty:
             p = figure(width=1000, height=600)
             p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
             p.title.align = "center"
             p.title.text_font_size = "25px"
+            print(f"Time to get sipm plot: {time.time()-start_time}")
             return p
         else:
             data_barrel = self.sipm_data_df[[f'ch{channel}' for channel in self.sipm_out_dict[self.sipm_barrel] if f'ch{channel}' in self.sipm_data_df.columns]]
             meta_barrel = {}
-            return self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, f"{self.sipm_resampled}min", self.sipm_name_dict, self.run, self.period, self.run_dict[self.run])
+            p = self.sipm_plot_style_dict[self.sipm_plot_style](data_barrel, self.sipm_barrel, f"{self.sipm_resampled}min", self.sipm_name_dict, self.run, self.period, self.run_dict[self.run])
+            print(f"Time to get sipm plot: {time.time()-start_time}")
+            return p
         
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
+        start_time = time.time()
         figure=None
-        if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","A/E Status", "Tau", 
+        if self.plot_type_summary in ["FWHM Qbb", "FWHM FEP","Energy Residuals","A/E Status", "Tau", 
                                         "CT Alpha", "Valid. E", "Valid. A/E", "A/E SF"]:
             figure = self.plot_types_summary_dict[self.plot_type_summary](self.run, 
                                             self.run_dict[self.run], 
@@ -412,10 +474,116 @@ class monitoring(param.Parameterized):
         else:
             figure = figure()
         
+        print(f"Time to get summary plot: {time.time()-start_time}")
         return figure
     
+    # @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_resampled", "phy_units", "phy_plots_sc_vals", watch=True)
+    # def _get_phy_data(self):
+    #     start_time = time.time()
+    #     data_file     = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf'
+    #     data_file_sc  = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-slow_control.hdf'
+        
+    #     if not os.path.exists(data_file):
+    #         print(f"Time to get phy data: {time.time()-start_time}")
+    #         self.phy_data_df = []
+    #         return            
+    #     print(1)
+    #     # get filekeys to check if key exists
+    #     with h5py.File(data_file, 'r') as f:
+    #         filekeys = list(f.keys())
+    #     print(2)
+    #     # load plot info for current plot value and get all data from selected string
+    #     phy_data_key     = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
+    #     if "pulser" in phy_data_key:
+    #         if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
+    #             self.phy_data_df = pd.DataFrame()
+    #             print(f"Time to get phy data: {time.time()-start_time}")
+    #             return 
+    #         self.phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key.split('_pulser')[0]}_info")
+    #         if "Diff" in phy_data_key:
+    #             self.phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
+    #         else:
+    #             self.phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
+    #     else:
+    #         if f"{phy_data_key}_info" not in filekeys: 
+    #             self.phy_data_df = pd.DataFrame()
+    #             print(f"Time to get phy data: {time.time()-start_time}")
+    #             return 
+    #         self.phy_plot_info           = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+    #     print(3)
+        
+    #     # self.phy_abs_unit = self.phy_plot_info.loc["unit"][0]
+        
+    #     # load dataframe for current plot value and get all data from selected string
+    #     if self.phy_units == "Relative":
+    #         if f"{phy_data_key}_var" not in filekeys: 
+    #             self.phy_data_df = pd.DataFrame()
+    #             print(f"Time to get phy data: {time.time()-start_time}")
+    #             return
+    #         self.phy_data_df                    = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
+    #         self.phy_plot_info.loc["unit"][0]   = "%"
+    #     else:
+    #         if phy_data_key not in filekeys:
+    #             self.phy_data_df = pd.DataFrame()
+    #             print(f"Time to get phy data: {time.time()-start_time}")
+    #             return
+    #         self.phy_data_df = pd.read_hdf(data_file, key=phy_data_key)
+    #     print(4)
+        
+    #     # load mean values
+    #     if f"{phy_data_key}_mean" not in filekeys:
+    #         self.phy_data_df = pd.DataFrame()
+    #         print(f"Time to get phy data: {time.time()-start_time}")
+    #         return
+    #     self.phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
+    #     print(5)
+        
+    #     # get sc data if selected
+    #     # if self.phy_plots_sc and self.phy_units == "Relative" and os.path.exists(data_file_sc):
+    #     if self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals] and os.path.exists(data_file_sc):
+    #         self.data_sc = pd.read_hdf(data_file_sc, self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals])
+    #         self._phy_sc_plotted = True
+    #     else:
+    #         self.data_sc = pd.DataFrame()
+    #         self._phy_sc_plotted = False
+    #     return 
+    
+    # @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals", watch=True)
+    # def _get_phy_plot(self):
+    #     # Create empty plot inc ase of errors
+    #     start_time = time.time()
+    #     p = figure(width=1000, height=600)
+    #     p.title.text = title=f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
+    #     p.title.align = "center"
+    #     p.title.text_font_size = "25px"
+            
+    #     # return empty plot if no data exists for run
+    #     if self.phy_data_df.empty:
+    #         print(f"Time to get phy plot: {time.time()-start_time}")
+    #         self.phy_pane.object = p
+    #     else:
+    #         channels = self.strings_dict[self.string]
+    #         # check if channel selection actually exists in data
+    #         channels            = [ch for ch in channels if ch in self.phy_data_df.columns and ch in self.phy_data_df_mean.columns]
+    #         phy_data_df         = self.phy_data_df[channels]
+    #         phy_data_df_mean    = self.phy_data_df_mean[channels]
+            
+    #         # plot data
+    #         p = self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, self.phy_plot_info, self.phy_plots_types, self.phy_plots,f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, self.phy_abs_unit, self.phy_data_sc, self.phy_plots_sc_vals)
+    #         print(f"Time to get phy plot: {time.time()-start_time}")
+    #         self.phy_pane.object = p
+            
+        
+    #     # self.phy_channels = self.strings_dict[self.string]
+        
+    # @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals")
+    # def view_phy(self):
+    #     return self.phy_pane
+        
+    # @pn.io.profile('clustering', engine='pyinstrument')
     @param.depends("run", "string", "sort_by", "phy_plots_types", "phy_plots", "phy_plot_style", "phy_resampled", "phy_units", "phy_plots_sc_vals")
     def view_phy(self):
+        start_time = time.time()
         data_file     = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf'
         data_file_sc  = self.phy_path +  f'/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-slow_control.hdf'
         
@@ -427,6 +595,7 @@ class monitoring(param.Parameterized):
         
         # return empty plot if no data exists for run
         if not os.path.exists(data_file):
+            print(f"Time to get phy plot: {time.time()-start_time}")
             return p
         
         # get filekeys to check if key exists
@@ -474,12 +643,16 @@ class monitoring(param.Parameterized):
         phy_data_df_mean    = phy_data_df_mean[channels]
         
         # plot data
-        return self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, phy_plot_info, self.phy_plots_types, self.phy_plots,f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, abs_unit, data_sc, self.phy_plots_sc_vals)
+        p = self.phy_plot_style_dict[self.phy_plot_style](phy_data_df, phy_data_df_mean, phy_plot_info, self.phy_plots_types, self.phy_plots,f"{self.phy_resampled}min", self.string, self.run, self.period, self.run_dict[self.run], self.channel_map, abs_unit, data_sc, self.phy_plots_sc_vals)
+        print(f"Time to get phy plot: {time.time()-start_time}")
+        # self.bokeh_pane.object = p
+        return p
 
     @param.depends("run", watch=True)
     def update_plot_dict(self):
+        start_time = time.time()
         self.plot_dict = os.path.join(self.prod_config["paths"]["plt"],
-                              f'hit/cal/{self.period}/{self.run}',
+                            f'hit/cal/{self.period}/{self.run}',
                             f'{self.run_dict[self.run]["experiment"]}-{self.period}-{self.run}-cal-{self.run_dict[self.run]["timestamp"]}-plt_hit')
         
         # print(self.run_dict)
@@ -500,32 +673,44 @@ class monitoring(param.Parameterized):
         
         self.update_strings()
         self.update_channel_plot_dict()
+        print(f"Time to update plot dict: {time.time()-start_time}")
 
     @param.depends("channel", watch=True)
     def update_channel_plot_dict(self):
+        start_time = time.time()
+        print(self.channel)
         with shelve.open(self.plot_dict, 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             self.plot_dict_ch = shelf[self.channel[:9]]
         with shelve.open(self.plot_dict.replace("hit","dsp"), 'r', protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             self.dsp_dict = shelf[self.channel[:9]]
-    
+        print(f"Time to update channel plot dict: {time.time()-start_time}")
     
     @param.depends("parameter", watch=True)
     def update_plot_type_details(self):
+        start_time = time.time()
         plots = self._options[self.parameter]
         self.param["plot_type_details"].objects = plots
         self.plot_type_details = plots[0]
+        print(f"Time to update plot type details: {time.time()-start_time}")
 
     @param.depends("run", "channel", "parameter", "plot_type_details")
     def view_details(self):
-        if self.parameter in ["A/E", "Baseline"]:
-            fig = self.plot_dict_ch[self.plot_type_details]
+        if self.parameter == "A/E":
+            fig = self.plot_dict_ch["aoe"][self.plot_type_details]
+            dummy = plt.figure()
+            new_manager = dummy.canvas.manager
+            new_manager.canvas.figure = fig
+            fig.set_canvas(new_manager.canvas)
+            fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
+        elif self.parameter == "Baseline":
+            fig = self.plot_dict_ch["ecal"][self.plot_type_details]
             dummy = plt.figure()
             new_manager = dummy.canvas.manager
             new_manager.canvas.figure = fig
             fig.set_canvas(new_manager.canvas)
             fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
         elif self.parameter == "Tau":
-            fig = self.dsp_dict[self.plot_type_details]
+            fig = self.dsp_dict["tau"][self.plot_type_details]
             dummy = plt.figure()
             new_manager = dummy.canvas.manager
             new_manager.canvas.figure = fig
@@ -540,46 +725,54 @@ class monitoring(param.Parameterized):
             fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
         else:
             if self.plot_type_details == "spectrum" or self.plot_type_details == "logged_spectrum":
-                fig = plot_spectrum(self.plot_dict_ch[self.parameter]["spectrum"], self.channel,
+                fig = plot_spectrum(self.plot_dict_ch["ecal"][self.parameter]["spectrum"], self.channel,
                                     log=False if self.plot_type_details == "spectrum" else True)
                 fig_pane = fig
             elif self.plot_type_details == "survival_frac":
-                fig = plot_survival_frac(self.plot_dict_ch[self.parameter]["survival_frac"])
+                fig = plot_survival_frac(self.plot_dict_ch["ecal"][self.parameter]["survival_frac"])
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             elif self.plot_type_details == "cut_spectrum":
-                fig = plot_cut_spectra(self.plot_dict_ch[self.parameter]["spectrum"])
+                fig = plot_cut_spectra(self.plot_dict_ch["ecal"][self.parameter]["spectrum"])
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             elif self.plot_type_details == "peak_track":
-                fig = track_peaks(self.plot_dict_ch[self.parameter])
+                fig = track_peaks(self.plot_dict_ch["ecal"][self.parameter])
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             else:
-                fig = self.plot_dict_ch[self.parameter][self.plot_type_details]
+                fig = self.plot_dict_ch["ecal"][self.parameter][self.plot_type_details]
                 dummy = plt.figure()
                 new_manager = dummy.canvas.manager
                 new_manager.canvas.figure = fig
                 fig.set_canvas(new_manager.canvas)
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
-
         return fig_pane
     
     @param.depends("run", "channel")
     def get_RunAndChannel(self):
-        return pn.pane.Markdown(f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. Details | Channel {self.channel}")
+        start_time = time.time()
+        ret = pn.pane.Markdown(f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. Details | Channel {self.channel}")
+        print(f"Time to get run and channel: {time.time()-start_time}")
+        return ret
 
     @param.depends("run")
     def view_meta(self):
-        return pn.widgets.Tabulator(self.meta_df, formatters={'Proc.': BooleanFormatter(), 'Usabl.': BooleanFormatter()}, frozen_columns=[0])
+        start_time = time.time()
+        ret = pn.widgets.Tabulator(self.meta_df, formatters={'Proc.': BooleanFormatter(), 'Usabl.': BooleanFormatter()}, frozen_columns=[0])
+        print(f"Time to get meta: {time.time()-start_time}")
+        return ret
     
     @param.depends("run", "meta_visu_plots")
     def view_meta_visu(self):
+        start_time = time.time()
         strings_dict, meta_visu_chan_dict, meta_visu_channel_map = sorter(self.path, self.run_dict[self.run]["timestamp"], key="String")
         meta_visu_source, meta_visu_xlabels = get_plot_source_and_xlabels(meta_visu_chan_dict, meta_visu_channel_map, strings_dict)
         figure = None
         figure = self.meta_visu_plots_dict[self.meta_visu_plots](meta_visu_source, meta_visu_chan_dict, meta_visu_channel_map, meta_visu_xlabels)
+        print(f"Time to get meta visu: {time.time()-start_time}")
         return figure
     
         
     def view_llama(self):
+        start_time = time.time()
         try:
             llama_data = pd.read_csv(self.llama_path + 'monivalues.txt', sep='\s+', dtype={'timestamp': np.int64}, parse_dates=[1])
             llama_data["timestamp"] = pd.to_datetime(llama_data["timestamp"], origin='unix', unit='s')
@@ -589,6 +782,7 @@ class monitoring(param.Parameterized):
             p.title.text = title=f"No current Llama data available."
             p.title.align = "center"
             p.title.text_font_size = "25px"
+            print(f"Time to get llama plot: {time.time()-start_time}")
             return p
         llama_width, llama_height = 1200, 400
         # add two hours to x values to convert from UTC to CET if values still in UTC
@@ -606,9 +800,12 @@ class monitoring(param.Parameterized):
 
         layout = triplet_plot * triplet_plot_error + lightyield_plot * lightyield_plot_error
         layout.opts(width=llama_width, height=llama_height).cols(1)
-        
+        print(f"Time to get llama plot: {time.time()-start_time}")
         return layout
     
     def get_llama_lastUpdate(self):
+        start_time = time.time()
         llama_pathlib = Path(self.llama_path + 'monivalues.txt')
-        return "Last modified: {}".format(pd.to_datetime(llama_pathlib.stat().st_mtime, origin='unix', unit='s'))
+        ret = "Last modified: {}".format(pd.to_datetime(llama_pathlib.stat().st_mtime, origin='unix', unit='s'))
+        print(f"Time to get llama last update: {time.time()-start_time}")
+        return ret

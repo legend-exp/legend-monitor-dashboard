@@ -6,8 +6,10 @@ import matplotlib.pyplot as plt
 import pickle as pkl
 import shelve
 import bisect
-import seaborn as sns
 import matplotlib
+import copy
+
+import numexpr as ne
 
 from bokeh.models import Span, Label, Title, Range1d, Grid, FixedTicker
 from bokeh.palettes import Category10, Category20, Turbo256
@@ -91,16 +93,19 @@ def plot_status(run, run_dict, path, source, xlabels, period, key = None):
     
     dets, strings, positions = build_string_array(cmap)
     
-    display_dict = {cmap[i]['daq']['rawid'] : 1 if status_map[i]["processable"] == True and status_map[i]["usability"] == 'on' else 0
-        for i in dets}
-    palette = ('red', 'green')
-    ctitle = 'Working Detector'
-    ticker = FixedTicker(ticks=[0.25,0.75], tags = ['Non-Working', 'Working'])
+    color_dict = {'on': 2, 'off': 0, 'ac': 1}
+    display_dict = {cmap[i]['daq']['rawid'] : color_dict[status_map[cmap[i]['name']]['usability']] for i in dets}
+    
+    # display_dict = {cmap[i]['daq']['rawid'] : 1 if status_map[i]["processable"] == True and status_map[i]["usability"] == 'on' else 0
+    #     for i in dets}
+    palette = ('red', 'orange', 'green')
+    ctitle = 'Detector Status'
+    ticker = FixedTicker(ticks=[0.3, 1.0, 1.7], tags = ['red', 'orange', 'green'])
     formatter = CustomJSTickFormatter(code="""
-        var mapping = {0.25: "Non-Working", 0.75: "Working"};
+        var mapping = {0.3: "off", 1.0: "ac", 1.7: "on"};
         return mapping[tick];
     """)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | Detector Status")
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, ticker = ticker, formatter = formatter, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | Detector Status", boolean_scale=True)
 
 def build_counts_map(chan_map, data):
     dets, strings, positions = build_string_array(chan_map)
@@ -141,7 +146,7 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
     
     file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
     path = os.path.join(file_path, 
-                        f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                        f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     with open(path, 'r') as r:
         all_res = json.load(r)
@@ -151,7 +156,7 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
         if cmap[det].system == "geds":
             try:
                 raw_id = cmap[det]['daq']['rawid']
-                fep_counts = all_res[f"ch{raw_id:07}"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
+                fep_counts = all_res[f"ch{cmap[det].daq.rawid:07}"]["results"]["ecal"]["cuspEmax_ctc_cal"]["total_fep"]
                 mass = cmap[det]['production']['mass_in_g']
                 mass_in_kg = mass * 0.001
                 counts_per_kg = fep_counts / mass_in_kg  # calculate counts per kg
@@ -163,7 +168,8 @@ def plot_counts(run, run_dict, path, source, xlabels, period, key =None): #FEP c
     display_dict = res
     ctitle = 'FEP Counts per kg'
     palette = plasma(256) #alternatively use viridis palette = viridis(256)
-    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts per kg")
+    return create_detector_plot(source, display_dict, xlabels, ctitle = ctitle, palette = palette, plot_title=f"{run_dict['experiment']}-{period}-{run} | Cal. | FEP Counts per kg",
+    colour_max = 10000, colour_min=1000)
 
 def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb", download=False):
     
@@ -180,7 +186,7 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
     
     file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
     path = os.path.join(file_path, 
-                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     with open(path, 'r') as r:
         all_res = json.load(r)
@@ -209,7 +215,25 @@ def plot_energy_resolutions(run, run_dict, path, period, key="String", at="Qbb",
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                res[detector] = all_res[f"ch{channel:03}"]["ecal"]
+                det_dict = all_res[f"ch{channel:03}"]["results"]["ecal"]
+                res[detector] = {'cuspEmax_ctc_cal': {'Qbb_fwhm': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_in_keV"], 
+                                                'Qbb_fwhm_err': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_err_in_keV"], 
+                                                '2.6_fwhm': det_dict["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0], 
+                                                '2.6_fwhm_err': det_dict["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][1], 
+                                                'm0': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["parameters"]["a"], 
+                                                'm1': det_dict["cuspEmax_ctc_cal"]["eres_linear"]["parameters"]["b"]}, 
+                            'zacEmax_ctc_cal': {'Qbb_fwhm': det_dict["zacEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_in_keV"], 
+                                                'Qbb_fwhm_err': det_dict["zacEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_err_in_keV"], 
+                                                '2.6_fwhm': det_dict["zacEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0], 
+                                                '2.6_fwhm_err': det_dict["zacEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][1], 
+                                                'm0': det_dict["zacEmax_ctc_cal"]["eres_linear"]["parameters"]["a"], 
+                                                'm1': det_dict["zacEmax_ctc_cal"]["eres_linear"]["parameters"]["b"]}, 
+                            'trapEmax_ctc_cal': {'Qbb_fwhm': det_dict["trapEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_in_keV"], 
+                                                'Qbb_fwhm_err': det_dict["trapEmax_ctc_cal"]["eres_linear"]["Qbb_fwhm_err_in_keV"], 
+                                                '2.6_fwhm': det_dict["trapEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][0], 
+                                                '2.6_fwhm_err': det_dict["trapEmax_ctc_cal"]["pk_fits"]["2614.5"]["fwhm_in_keV"][1], 
+                                                'm0': det_dict["trapEmax_ctc_cal"]["eres_linear"]["parameters"]["a"], 
+                                                'm1': det_dict["trapEmax_ctc_cal"]["eres_linear"]["parameters"]["b"]}}
             except:
                 res[detector] = default
     
@@ -312,6 +336,148 @@ def plot_energy_resolutions_Qbb(run, run_dict, path, period, key="String", downl
 def plot_energy_resolutions_2614(run, run_dict, path, period, key="String", download=False):
     return plot_energy_resolutions(run, run_dict, path, period, key=key, at="2.6", download=download)
 
+def plot_energy_residuals(run, run_dict, path, period, key="String", filter_param="cuspEmax_ctc_cal", download=False):
+    
+    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
+    
+    prod_config = os.path.join(path,"config.json")
+    prod_config = Props.read_from(prod_config, subst_pathvar=True)["setups"]["l200"]
+    cfg_file = prod_config["paths"]["chan_map"]
+    configs = LegendMetadata(path = cfg_file)
+    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
+    channels = [field for field in chmap if chmap[field]["system"]=="geds"]
+    
+    off_dets = [field for field in soft_dict if soft_dict[field]["processable"]is False]
+    
+    file_path = os.path.join(prod_config["paths"]["par_hit"],f'cal/{period}/{run}')
+    path = os.path.join(file_path, 
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
+    
+    peaks = [2614.5, 583.191, 2103.53]
+    filters = ["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"]
+    
+    with open(path, 'r') as r:
+        all_res = json.load(r)
+        
+    default_peaks = {f"{peak}":np.nan for peak in peaks}
+    default_peaks.update({f"{peak}_err":np.nan for peak in peaks})
+    default = {filt: default_peaks.copy()  for filt in filters}
+    res = {}
+    for stri in strings:
+        res[stri]=copy.deepcopy(default)
+        for channel in strings[stri]:
+            detector = channel_map[channel]["name"]
+            res[detector] = copy.deepcopy(default)
+            try:
+                det_dict = all_res[f"ch{channel:07}"]["results"]["ecal"]
+                for filt in filters:
+                    cal_dict = all_res[f"ch{channel:07}"]["pars"]["operations"][filt]
+                    for peak in peaks:
+                        try:
+                            cal_mu = ne.evaluate(
+                                f"{cal_dict['expression']}",
+                                local_dict=dict({filt.replace("_cal",""):det_dict[filt]["pk_fits"][str(peak)]["parameters_in_ADC"]["mu"]}, 
+                                                **cal_dict["parameters"])
+                            )
+                            cal_err = ne.evaluate(
+                                f"{cal_dict['expression']}",
+                                local_dict=dict({filt.replace("_cal",""):det_dict[filt]["pk_fits"][str(peak)]["uncertainties_in_ADC"]["mu"]+\
+                                                det_dict[filt]["pk_fits"][str(peak)]["parameters_in_ADC"]["mu"]}, 
+                                                **cal_dict["parameters"])
+                            )-cal_mu
+                            res[detector][filt][f"{peak}"] = cal_mu-peak
+                            res[detector][filt][f"{peak}_err"] = cal_err
+                        except:
+                            pass
+            except:
+                pass
+
+    
+    p = figure(width=1400, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Residuals"
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+
+    label_res = [r if 'String' not in r else "" for r in list(res)]
+
+    df_plot = pd.DataFrame()
+    df_plot["label_res"]  = label_res
+
+    for filter_type in filters:
+        for peak in peaks:
+
+            x_plot, y_plot, y_plot_err = (np.arange(1, len(list(res))+1, 1), 
+            [res[det][filter_type][f"{peak}"] for det in res], [res[det][filter_type][f"{peak}_err"] for det in res])
+
+            err_xs = []
+            err_ys = []
+
+            for x, y, yerr in zip(x_plot, y_plot, y_plot_err):
+                err_xs.append((x, x))
+                err_ys.append((np.nan_to_num(y - yerr), np.nan_to_num(y + yerr)))
+
+
+            df_plot[f"x_{filter_type.split('_')[0]}_{int(peak)}"]          = np.nan_to_num(x_plot)
+            df_plot[f"y_{filter_type.split('_')[0]}_{int(peak)}"]          = np.nan_to_num(y_plot)
+            df_plot[f"y_{filter_type.split('_')[0]}_{int(peak)}_err"]      = np.nan_to_num(y_plot_err)
+            df_plot[f"err_xs_{filter_type.split('_')[0]}_{int(peak)}"]     = err_xs
+            df_plot[f"err_ys_{filter_type.split('_')[0]}_{int(peak)}"]     = err_ys
+
+    if download:
+        return df_plot, f"{run_dict['experiment']}-{period}-{run}_energy_residuals.csv"
+        
+    for peak, peak_color in zip(peaks, ["blue", "green", "red"]):
+
+        if peak == peaks[0]:
+            hover_renderer = p.circle(x=f"x_{filter_type.split('_')[0]}_{int(peak)}", y=f"y_{filter_type.split('_')[0]}_{int(peak)}", 
+                                      source=df_plot, color=peak_color, size=7, line_alpha=0,
+                legend_label = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV', 
+                name = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV'
+                )
+        else:
+            p.circle(x=f"x_{filter_type.split('_')[0]}_{int(peak)}", y=f"y_{filter_type.split('_')[0]}_{int(peak)}", source=df_plot, 
+                     color=peak_color, size=7, line_alpha=0,
+                legend_label = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV', 
+                name = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV'
+                )
+        p.multi_line(xs=f"err_xs_{filter_type.split('_')[0]}_{int(peak)}", ys=f"err_ys_{filter_type.split('_')[0]}_{int(peak)}", 
+                     source=df_plot, color=peak_color,
+                legend_label = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV', 
+                name = f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV'
+                )
+
+
+    p.legend.location = "bottom_right"
+    p.legend.click_policy="hide"
+    p.xaxis.axis_label = "detector"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = 'peak residuals (keV)'
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Residuals"
+    p.yaxis.axis_label_text_font_size = "20px"
+
+    p.xaxis.major_label_orientation = np.pi/2
+    p.xaxis.ticker = np.arange(1, len(list(res))+1, 1)
+    p.xaxis.major_label_overrides = {i: label_res[i-1] for i in range(1, len(label_res)+1, 1)}
+    p.xaxis.major_label_text_font_style = "bold"
+
+    for stri in strings:
+        loc=np.where(np.array(list(res))==stri)[0][0]
+        string_span = Span(location=loc+1, dimension='height',
+                    line_color='black', line_width=3)
+        string_span_label = Label(x=loc+1.5, y=1.1, text=stri, text_font_size='10pt', text_color='blue')
+        p.add_layout(string_span_label)
+        p.add_layout(string_span)
+        
+    p.hover.tooltips = [( 'Detector',   '@label_res'),
+                        ( '2614',  f"@y_{filter_type.split('_')[0]}_2614{{0.00}} +- @y_{filter_type.split('_')[0]}_2614_err{{0.00}} keV"),
+                        ( 'SEP',  f"@y_{filter_type.split('_')[0]}_2103{{0.00}} +- @y_{filter_type.split('_')[0]}_2103_err{{0.00}} keV"),
+                        ( '583',  f"@y_{filter_type.split('_')[0]}_583{{0.00}} +- @y_{filter_type.split('_')[0]}_583_err{{0.00}} keV")
+                        ]
+    p.hover.mode = 'vline'
+    p.hover.renderers = [hover_renderer]
+    
+    return p
+
 def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     
     strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"])
@@ -327,7 +493,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                             f'cal/{period}/{run}', 
-                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -344,7 +510,7 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     for i,channel in enumerate(channels):
         idxs = np.zeros(len(peaks),dtype=bool)
         try:
-            fitted_peaks = res[f"ch{channel:07}"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
+            fitted_peaks = res[f"ch{channel:07}"]["results"]["ecal"]["cuspEmax_ctc_cal"]["fitted_peaks"]
             if not isinstance(fitted_peaks,list):
                 fitted_peaks = [fitted_peaks]
             for j,peak in enumerate(peaks):
@@ -412,7 +578,7 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                             f'cal/{period}/{run}', 
-                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -429,17 +595,17 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
     for i,channel in enumerate(channels):
         idxs = np.ones(len(checks), dtype=bool)
         try:
-            aoe_dict = res[f"ch{channel:07}"]["aoe"]
-            if np.isnan(aoe_dict["1000-1300keV"]["mean"][0]) ==False:
+            aoe_dict = res[f"ch{channel:07}"]["results"]["aoe"]
+            if np.isnan(aoe_dict["1000-1300keV"]["0"]["mean"]) ==False:
                 idxs[0]=1
-            if np.isnan(np.array(aoe_dict["Mean_pars"])).all() ==False :
+            if np.isnan(np.array([value for key, value in aoe_dict["correction_fit_results"]["mean_fits"]["pars"].items()])).all() ==False :
                 idxs[1]=1
-            if np.isnan(aoe_dict["Low_cut"]) ==False:
+            if np.isnan(aoe_dict["low_cut"]) == False:
                 idxs[2]=1
-            if isinstance(aoe_dict["Low_side_sfs"],float):
+            if isinstance(aoe_dict["low_side_sfs"],float):
                 pass
             else:
-                sfs = [float(dic["sf"]) for peak,dic in aoe_dict["Low_side_sfs"].items()]
+                sfs = [float(dic["sf"]) for peak,dic in aoe_dict["low_side_sfs"].items()]
                 if np.isnan(np.array(sfs)).all() ==False :
                     idxs[3]=1
             if isinstance(aoe_dict["2_side_sfs"],float):
@@ -511,7 +677,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                             f'cal/{period}/{run}', 
-                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                            f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     res = {}
     with open(file_path, 'r') as r:
@@ -523,7 +689,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                nfits[detector] =res[f"ch{channel:07}"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
+                nfits[detector] =res[f"ch{channel:07}"]["results"]["aoe"]["correction_fit_results"]["n_of_valid_fits"]
             except:
                 nfits[detector] =np.nan
     
@@ -608,7 +774,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
     
     file_path = os.path.join(prod_config["paths"]["par_hit"], 
                              f'cal/{period}/{run}', 
-                             f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit_results.json')
+                             f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.json')
     
     
     with open(file_path, 'r') as r:
@@ -618,16 +784,16 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
                                 'Cal_energy_param': 'cuspEmax_ctc', 
                                 'dt_param': 'dt_eff', 
                                 'rt_correction': False, 
-                                'Mean_pars': [np.nan, np.nan], 
-                                'Sigma_pars': [np.nan, np.nan], 
-                                'Low_cut': np.nan, 'High_cut': np.nan, 
-                                'Low_side_sfs': {
+                                'mean_pars': [np.nan, np.nan], 
+                                'sigma_pars': [np.nan, np.nan], 
+                                'low_cut': np.nan, 'high_cut': np.nan, 
+                                'low_side_sfs': {
                                     '1592.5': {
                                         'sf': np.nan, 
                                         'sf_err': np.nan}, 
                                     '1620.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                    '2039': {'sf': np.nan, 
+                                    '2039.0': {'sf': np.nan, 
                                             'sf_err': np.nan}, 
                                     '2103.53': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
@@ -638,7 +804,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
                                                 'sf_err': np.nan}, 
                                     '1620.5': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
-                                    '2039': {'sf': np.nan, 
+                                    '2039.0': {'sf': np.nan, 
                                             'sf_err': np.nan}, 
                                     '2103.53': {'sf': np.nan, 
                                                 'sf_err': np.nan}, 
@@ -653,38 +819,14 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
             detector = channel_map[channel]["name"]
 
             try:  
-                aoe_res[detector] = all_res[f"ch{channel:07}"]["aoe"]
-            except:
-                aoe_res[detector] = default
-
-            if len(list(aoe_res[detector])) == 10:
-                aoe_res[detector].update({
-                                'Low_side_sfs': {
-                                    '1592.5': {
-                                        'sf': np.nan, 
-                                        'sf_err': np.nan}, 
-                                    '1620.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '2039': {'sf': np.nan, 
-                                            'sf_err': np.nan}, 
-                                    '2103.53': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '2614.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}}, 
-                                '2_side_sfs': {
-                                    '1592.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '1620.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '2039': {'sf': np.nan, 
-                                            'sf_err': np.nan}, 
-                                    '2103.53': {'sf': np.nan, 
-                                                'sf_err': np.nan}, 
-                                    '2614.5': {'sf': np.nan, 
-                                                'sf_err': np.nan}}})  
-
-            elif len(list(aoe_res[detector])) < 10:
-                aoe_res[detector] = default
+                aoe_res[detector] = all_res[f"ch{channel:07}"]["results"]["aoe"]
+                if len(aoe_res[detector]) ==0:
+                    raise KeyError
+            except KeyError:
+                aoe_res[detector] = default.copy()
+    
+    print(aoe_res["V02160A"])
+    print(aoe_res["P00698B"])
     
     p = figure(width=1400, height=600, y_range=(-5, 100), tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | A/E Survival Fractions"
@@ -702,13 +844,19 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
     df_plot = pd.DataFrame()
     df_plot["label_res"]  = label_res
 
-    peak_types = ["1592.5", "1620.5", "2039", "2103.53", "2614.5"]
+    peak_types = ["1592.5", "1620.5", "2039.0", "2103.53", "2614.5"]
     peak_names = ['Tl DEP', 'Bi FEP', "CC @ Qbb", 'Tl SEP', 'Tl FEP']
     peak_colors = ["blue", "orange", "green", "red", "purple"]
 
     for peak_type in peak_types:
-
-        x_plot, y_plot, y_plot_err = np.arange(1, len(list(aoe_res))+1, 1), [float(aoe_res[det]["Low_side_sfs"][peak_type]["sf"]) for det in aoe_res], [float(aoe_res[det]["Low_side_sfs"][peak_type]["sf_err"]) for det in aoe_res]
+        for det in aoe_res:
+            print(det)
+            print(aoe_res[det]["low_side_sfs"][peak_type]["sf"])
+        #try:
+        x_plot, y_plot, y_plot_err = (np.arange(1, len(list(aoe_res))+1, 1), 
+        [float(aoe_res[det]["low_side_sfs"][peak_type]["sf"]) for det in aoe_res], [
+            float(aoe_res[det]["low_side_sfs"][peak_type]["sf_err"]) for det in aoe_res])
+        
 
         err_xs = []
         err_ys = []
@@ -1064,7 +1212,7 @@ def plot_bls(plot_dict, chan_dict, channels, string, run, period, run_dict, key=
     return p
     
 def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run_dict, 
-                        key="String", energy_param = "cuspEmax_ctc"):
+                        key="String", energy_param = "cuspEmax_ctc_cal"):
     
     p = figure(width=700, height=600, y_axis_type="log", x_axis_type='datetime', tools="pan, box_zoom, ywheel_zoom, hover,reset,save", active_scroll='ywheel_zoom')
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | Energy Spectra | {string}"
@@ -1082,7 +1230,6 @@ def plot_energy_spectra(plot_dict, chan_dict, channels, string, run, period, run
     
     for i,channel in enumerate(channels):
         try:
-
             plot_dict_chan = plot_dict[f"ch{channel:07}"]
             p.step(plot_dict_chan[energy_param]["spectrum"]["bins"], 
                     plot_dict_chan[energy_param]["spectrum"]["counts"], 
@@ -1193,8 +1340,8 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
             en = plot_dict_chan[energy_param][parameter]["energy"]
             en_spread = plot_dict_chan[energy_param][parameter]["spread"]
             mean = np.nanmean(en[~np.isnan(en)][:10])
-            en_mean = 100*(en-mean)/mean
-            en_shift =  100*en_spread/en_mean
+            en_mean = (en-mean)#/mean
+            en_shift =  en_spread#/en_mean
             
             # define if condition such that timedelta only added if still in UTC
             plot_time = plot_dict_chan[energy_param][parameter]["time"][0]
@@ -1227,20 +1374,20 @@ def plot_stability(plot_dict, chan_dict, channels, string, parameter, run, perio
     p.hover.mode = 'vline'
     p.xaxis.axis_label = f"Time (CET), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
     p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = "Energy Shift (%)"
+    p.yaxis.axis_label = "Energy Shift (keV)"
     p.yaxis.axis_label_text_font_size = "16px"
     p.legend.location = "top_left"
     p.legend.click_policy="hide"
     return p
 
 def plot_fep_stability_channels2d(plot_dict, chan_dict, channels, string, run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc"):
+                                    key="String", energy_param = "cuspEmax_ctc_cal"):
     
     return plot_stability(plot_dict, chan_dict, channels, string, "2614_stability", run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc")
+                                    key="String", energy_param = "cuspEmax_ctc_cal")
     
 
 def plot_pulser_stability_channels2d(plot_dict, chan_dict, channels, string, run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc"):
+                                    key="String", energy_param = "cuspEmax_ctc_cal"):
     return plot_stability(plot_dict, chan_dict, channels, string, "pulser_stability", run, period, run_dict,
-                                    key="String", energy_param = "cuspEmax_ctc")
+                                    key="String", energy_param = "cuspEmax_ctc_cal")
