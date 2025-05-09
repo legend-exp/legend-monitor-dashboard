@@ -1,0 +1,7 @@
+paths:
+  cal: /path/to/calibration
+  phy: /path/to/phy
+  sipm: /path/to/sipm
+  muon: /path/to/muon
+  tmp: /path/to/tmp
+  llama: /path/to/llama
