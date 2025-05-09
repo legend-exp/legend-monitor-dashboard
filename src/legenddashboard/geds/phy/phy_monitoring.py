@@ -1,225 +1,157 @@
-from bokeh.models import Span, Label, Title, Range1d, HoverTool, Slope, LinearAxis, ColumnDataSource, CustomJS, Div, FactorRange, HoverTool, Switch, WheelZoomTool, ZoomInTool, ZoomOutTool
-from bokeh.palettes import Category10, Category20, Turbo256
-from bokeh.plotting import figure, show
-
-import colorcet as cc
-from seaborn import color_palette
-
-import shelve
-import matplotlib
-from matplotlib import pyplot as plt
-import numpy as np
+import time
 import pandas as pd
-import os
-import pickle as pkl
+import logging
+from pathlib import Path
+from bokeh.plotting import figure
+import param
+import legenddashboard.geds.phy as phy
+import h5py
 
-from bokeh.models import DatetimeTickFormatter
-from bokeh.core.properties import field
-from bokeh.io import show
-from bokeh.layouts import column, row
+from legenddashboard.base import Monitoring
 
-def phy_plot_vsTime(data_string, data_string_mean, plot_info, plot_type, plot_name, resample_unit, string, run, period, run_dict, channel_map, abs_unit, data_sc, sc_param):
-    # change column names to detector names
-    data_string.columns = ["{}_val".format(channel_map[ch]["name"]) for ch in data_string.columns]
-    
-    # create plot colours
-    len_colours = len(data_string.columns)
-    colours = color_palette("hls", len_colours).as_hex() 
+log = logging.getLogger(__name__)
 
-    # add mean values for hover feature
-    data_string_mean.columns      = [channel_map[ch]["name"] for ch in data_string_mean.columns]
-    for col in data_string_mean.columns:
-        data_string[col] = data_string_mean[col][0]
-    
-    # add two hours to x values with if condition
-    if data_string.index[0].utcoffset() != pd.Timedelta(hours=2): # only add timedelta if still in UTC
-        data_string.index += pd.Timedelta(hours=2)
-    
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,box_zoom,ywheel_zoom,hover,reset,save", output_backend="webgl", active_scroll='ywheel_zoom')
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_name} | {string}"
-    p.title.align = "center"
-    p.title.text_font_size = "25px"
-    p.hover.formatters = {'$x': 'datetime', '$snap_y': 'printf', "@$name": 'printf'}
-    p.hover.tooltips = [('Time', '$x{%F %H:%M:%S CET}'),  # Use the formatted CET time from the DataFrame
-                        (f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]})", '$snap_y{%0.2f}'),
-                        (f"Mean {plot_info.loc['label'][0]} ({abs_unit})", '@$name{0.2f}'),
-                        ("Detector", "$name")]
-    p.hover.mode = 'vline'
+class PhyMonitor(Monitoring):
+    phy_path = param.String("")
+    phy_plots_types = param.ObjectSelector(
+        default=next(iter(phy.phy_plots_types_dict)),
+        objects=list(phy.phy_plots_types_dict),
+        label="Type",
+    )
+    phy_plots = param.ObjectSelector(
+        default=list(phy.phy_plots_vals_dict)[4],
+        objects=list(phy.phy_plots_vals_dict),
+        label="Value",
+    )
+    phy_plot_style = param.ObjectSelector(
+        default=next(iter(phy.phy_plot_style_dict)),
+        objects=list(phy.phy_plot_style_dict),
+        label="Plot Style",
+    )
+    phy_resampled = param.Integer(
+        default=phy.phy_resampled_vals[0],
+        bounds=(phy.phy_resampled_vals[0], phy.phy_resampled_vals[-1]),
+    )
+    phy_units = param.ObjectSelector(
+        default=phy.phy_unit_vals[0], objects=phy.phy_unit_vals, label="Units"
+    )
+    # phy_plots_sc        = param.Boolean(default=False, label="SC")
+    phy_plots_sc_vals = param.ObjectSelector(
+        default=next(iter(phy.phy_plots_sc_vals_dict)),
+        objects=list(phy.phy_plots_sc_vals_dict),
+        label="SC Values",
+    )
 
-    level = 1
-    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
-    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
-    p.add_tools(zoom_in, zoom_out)
-    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
+    @param.depends(
+        "run",
+        "string",
+        "sort_by",
+        "phy_plots_types",
+        "phy_plots",
+        "phy_plot_style",
+        "phy_resampled",
+        "phy_units",
+        "phy_plots_sc_vals",
+    )
+    def update_plots(self):
+        start_time = time.time()
+        data_file = (
+            self.phy_path
+            + f"/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf"
+        )
+        data_file_sc = (
+            self.phy_path
+            + f"/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-slow_control.hdf"
+        )
 
-    # plot data
-    hover_renderers = []
-    if resample_unit == "0min":
-        for i, det in enumerate(data_string_mean):
-            if "mean" in det: continue
-            l = p.line('datetime', f"{det}_val", source=data_string, color=colours[i], legend_label=det, name=det, line_width=2.5)
-            hover_renderers.append(l)
-    else:
-        data_string_resampled = data_string.resample(resample_unit, origin="start").mean()
-        
-        for i, det in enumerate(data_string_mean):
-            if "mean" in det: continue
-            l = p.line('datetime', f"{det}_val", source=data_string_resampled, color=colours[i], legend_label=det, name=det, line_width=2.5)
-            p.line('datetime', f"{det}_val", source=data_string, color=colours[i], legend_label=det, name=det, line_width=2.5, alpha=0.2)
-            hover_renderers.append(l)
+        # Create empty plot inc ase of errors
+        p = figure(width=1000, height=600)
+        p.title.text = f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
+        p.title.align = "center"
+        p.title.text_font_size = "25px"
 
-    # draw horizontal line at thresholds from plot info if available
-#     if plot_info.loc["lower_lim_var"][0] != 'None' and plot_info.loc["unit"][0] == "%":
-#         lower_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["lower_lim_var"][0]),
-#                 line_color='black', line_dash='dashed', line_width=4)
-#         upper_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["upper_lim_var"][0]),
-#                 line_color='black', line_dash='dashed', line_width=4)
+        # return empty plot if no data exists for run
+        if not Path(data_file).exists():
+            log.debug("Time to get phy plot:", extra={"time": time.time() - start_time})
+            return p
 
-#         p.add_layout(lower_lim_var)
-#         p.add_layout(upper_lim_var)
-    
-    # legend setups etc...                                                         
-    p.legend.location = "bottom_left"
-    p.legend.click_policy="hide"
-    p.xaxis.axis_label = f"Time (CET), starting: {data_string.index[0].strftime('%d/%m/%Y %H:%M:%S')}" #change of string
-    p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = f"{plot_info.loc['label'][0]} [{plot_info.loc['unit'][0]}]"
-    p.yaxis.axis_label_text_font_size = "20px"
-    p.xaxis.formatter = DatetimeTickFormatter(days='%Y/%m/%d')
-    p.hover.renderers = hover_renderers
-    
-    if plot_info.loc["unit"][0] == "%":
-        if plot_info.loc["label"][0] == 'Noise':
-            p.y_range = Range1d(-150, 150)
-        elif plot_info.loc["label"][0] == 'FPGA baseline':
-             p.y_range = Range1d(-10, 10)
-        elif plot_info.loc["label"][0] == 'Mean Baseline':
-             p.y_range = Range1d(-10, 10)
-        elif plot_info.loc["label"][0] == 'Gain to Pulser Difference':
-             p.y_range = Range1d(-4, 4)
-        elif plot_info.loc["label"][0] == 'Event Rate':
-             p.y_range = Range1d(-150, 50)
-        elif plot_info.loc["label"][0] == 'Custom A/E (A_max / cuspEmax)':
-             p.y_range = Range1d(-10, 10)
-        else:
-            p.y_range = Range1d(-1, 1)
-    else: #why?
-        if plot_info.loc["label"][0] == 'Noise':
-            p.y_range = Range1d(-150, 150)
-            
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # SLOW CONTROL DATA
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    if not data_sc.empty:
-        y_column2_range = f"{sc_param}_range"
-        y_min = float(data_sc.copy()["value"].min())*(1-0.01)
-        y_max = float(data_sc.copy()["value"].max())*(1+0.01)
-        p.extra_y_ranges = {y_column2_range: Range1d(start=y_min, end=y_max)}
-        
-        unit = data_sc["unit"][0]
-        p.add_layout(LinearAxis(y_range_name=y_column2_range, axis_label=f'{sc_param} [{unit}]', axis_label_text_font_size = "20px"), "right")
+        # get filekeys to check if key exists
+        with h5py.File(data_file, "r") as f:
+            filekeys = list(f.keys())
 
-        time = data_sc["tstamp"]
-        time = pd.to_datetime(time, origin="unix", utc=True)
-        values = data_sc["value"]
-        values = pd.to_numeric(values)
-        values.index = time
-
-        # we use the same resampling of geds data
-        # (use black line to distinguish from geds data)
-        if resample_unit == "0min":
-            p.line(
-                time,
-                values,
-                legend_label=sc_param,
-                y_range_name=y_column2_range,
-                color="black",
-                line_width=2,
+        # load dataframe for current plot value and get all data from selected string
+        channels = self.strings_dict[self.string]
+        phy_data_key = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
+        if "pulser" in phy_data_key:
+            if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
+                return p
+            phy_plot_info = pd.read_hdf(
+                data_file, key=f"{phy_data_key.split('_pulser')[0]}_info"
             )
+            if "Diff" in phy_data_key:
+                phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
+            else:
+                phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
         else:
-            binned_data = values.resample(resample_unit).mean()
-            p.line(time, values, color="black", legend_label=sc_param, y_range_name=y_column2_range, line_width=2, alpha=0.2)
-            p.line(binned_data.index, binned_data.values, color="black", legend_label=sc_param, y_range_name=y_column2_range, line_width=2)
+            if f"{phy_data_key}_info" not in filekeys:
+                return p
+            phy_plot_info = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+        abs_unit = phy_plot_info.loc["unit"][0]
 
+        if self.phy_units == "Relative":
+            if f"{phy_data_key}_var" not in filekeys:
+                return p
+            phy_data_df = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
+            phy_plot_info.loc["unit"][0] = "%"
+        else:
+            if phy_data_key not in filekeys:
+                return p
+            phy_data_df = pd.read_hdf(data_file, key=phy_data_key)
 
-    return p
+        # load mean values
+        if f"{phy_data_key}_mean" not in filekeys:
+            return p
+        phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
 
-
-
-def phy_plot_histogram(data_string, plot_info, plot_type, resample_unit, string, run, period, run_dict, channels, channel_map):
-    p = figure(width=1000, height=600, x_axis_type='datetime', tools="pan,box_zoom,ywheel_zoom,hover,reset,save", output_backend="webgl", active_scroll='ywheel_zoom')
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'][0]} | {string}"
-    p.title.align = "center"
-    p.title.text_font_size = "25px"
-    p.hover.formatters = {'$x': 'printf', '$snap_y': 'printf'}
-    p.hover.tooltips = [(f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]}", '$x{%0.2f}'),
-                        ( 'Counts',   '$snap_y'),
-                        ("Detector", "$name")
-                        ]
-
-    p.hover.mode = 'vline'
-
-    level = 1
-    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5) #set specific zoom factor
-    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
-    p.add_tools(zoom_in, zoom_out)
-    #p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
-
-    len_colours = len(data_string.columns)
-    if len_colours > 19:
-        colours = Turbo256[len_colours]
-    else:
-        colours = Category20[len_colours]
-    
-    for position, data_channel in data_string.groupby("position"):
-        # generate histogram
-        # needed for cuspEmax because with geant outliers not possible to view normal histo
-        hrange = {"keV": [0, 2500]}
-        # take full range if not specified
-        x_min = (hrange[plot_info["unit"]][0] if plot_info["unit"] in hrange else data_channel[plot_info["parameter"]].min())
-        x_max = (hrange[plot_info["unit"]][1] if plot_info["unit"] in hrange else data_channel[plot_info["parameter"]].max())
-
-        # --- bin width
-        # bwidth = {"keV": 2.5}  # what to do with binning???
-        # bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else None
-        # no_bins = int((x_max - x_min) / bin_width) if bin_width else 50
-        # counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=no_bins, range=(x_min, x_max))
-        # bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
-        
-        # --- bin width
-        bwidth = {"keV": 2.5}
-        bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else 1
-
-        # Compute number of bins
-        if bin_width:
-            bin_no = bin_width / 5 if "AoE" not in plot_info["parameter"] else bin_width / 50
-            bin_no = bin_no / 2 if "Corrected" in plot_info["parameter"] else bin_no
-            bin_no = bin_width if "AoE" not in plot_info["parameter"] else bin_no 
-            
-            bin_edges = (
-                np.arange(x_min, x_max + bin_width, bin_no)
-                if plot_info["unit_label"] == "%"
-                else np.arange(x_min, x_max + bin_width, bin_no)
+        # get sc data if selected
+        # if self.phy_plots_sc and self.phy_units == "Relative" and os.path.exists(data_file_sc):
+        if (
+            self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
+            and Path(data_file_sc).exists()
+        ):
+            data_sc = pd.read_hdf(
+                data_file_sc, self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
             )
+            self._phy_sc_plotted = True
         else:
-            bin_edges = 50 
-        counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=bin_edges, range=(x_min, x_max))
-        bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
-        # create plot histo
-        histo_df = pd.DataFrame({"counts": counts_ch, "bins": bins_ch, "position": position, "cc4_id": data_channel['cc4_id'].unique()[0]})
-        # plot    
-        p.line("bins", "counts", source=histo_df, color=colours[position-1], 
-            legend_label=f"{data_channel['name'].unique()[0]}", name=f"ch {data_channel['channel'].unique()[0]}",
-            line_width=2)
-    
+            data_sc = pd.DataFrame()
+            self._phy_sc_plotted = False
+        # check if channel selection actually exists in data
+        channels = [
+            ch
+            for ch in channels
+            if ch in phy_data_df.columns and ch in phy_data_df_mean.columns
+        ]
+        phy_data_df = phy_data_df[channels]
+        phy_data_df_mean = phy_data_df_mean[channels]
 
-            
-
-    p.legend.location = "bottom_left"
-    p.legend.click_policy="hide"
-    p.xaxis.axis_label = f"{plot_info['label']} [{plot_info['unit_label']}]"
-    p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = "Counts"
-    p.yaxis.axis_label_text_font_size = "20px"
-    
-    return p
+        # plot data
+        p = self.phy_plot_style_dict[self.phy_plot_style](
+            phy_data_df,
+            phy_data_df_mean,
+            phy_plot_info,
+            self.phy_plots_types,
+            self.phy_plots,
+            f"{self.phy_resampled}min",
+            self.string,
+            self.run,
+            self.period,
+            self.run_dict[self.run],
+            self.channel_map,
+            abs_unit,
+            data_sc,
+            self.phy_plots_sc_vals,
+        )
+        log.debug("Time to get phy plot:", extra={"time": time.time() - start_time})
+        # self.bokeh_pane.object = p
+        return p
