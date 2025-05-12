@@ -55,6 +55,7 @@ all_detailed_plots = {
     "Optimisation": optimisation_plots,
 }
 
+
 def plot_spectrum(plot_dict, channel, log=False):
     fig = go.Figure()
     bins = plot_dict["bins"]

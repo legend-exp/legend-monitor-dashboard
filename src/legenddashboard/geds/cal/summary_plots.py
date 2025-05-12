@@ -22,10 +22,12 @@ from bokeh.models import (
 from bokeh.plotting import figure
 from dbetto import Props
 from legendmeta import LegendMetadata
+
 from legenddashboard.string_visulization import create_detector_plot
 from legenddashboard.util import sorter
 
 log = logging.getLogger(__name__)
+
 
 def build_string_array(chan_map):
     dets = []

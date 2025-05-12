@@ -9,14 +9,13 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import panel as pn
 import param
-from legenddashboard.base import Monitoring
-import legenddashboard.geds.cal as cal
+
 import legenddashboard.string_visulization as visu
+from legenddashboard.geds import cal
+from legenddashboard.geds.ged_monitoring import GedMonitoring
 from legenddashboard.util import (
-    sort_dict,
     sorter,
 )
-
 
 log = logging.getLogger(__name__)
 
@@ -26,15 +25,7 @@ plt.rcParams["figure.figsize"] = (16, 6)
 plt.rcParams["figure.dpi"] = 100
 
 
-class CalMonitoring(Monitoring):
-
-    channel = param.Selector(default=0, objects=[0])
-    string = param.ObjectSelector(default=1, objects=[i+1 for i in range(11)], allow_refs=True, nested_refs=True)
-    # general selectors
-    sort_by = param.ObjectSelector(
-        default=next(iter(sort_dict)), objects=list(sort_dict)
-    )
-
+class CalMonitoring(GedMonitoring):
     plot_type_tracking = param.ObjectSelector(
         default=list(cal.tracking_plots)[1],
         objects=list(cal.tracking_plots),
@@ -52,32 +43,10 @@ class CalMonitoring(Monitoring):
         default=list(cal.summary_plots)[3],
         objects=list(cal.summary_plots),
     )
-    plot_types_download_dict = ["FWHM Qbb", "FWHM FEP", "A/E", "PZ", "Alpha"]
     plot_types_download = param.Selector(
-        default=plot_types_download_dict[0], objects=plot_types_download_dict
+        objects=["FWHM Qbb", "FWHM FEP", "A/E", "PZ", "Alpha"],
+        default="FWHM Qbb",
     )
-
-    @param.depends("run", "channel")
-    def get_run_and_channel(self):
-        start_time = time.time()
-        ret = pn.pane.Markdown(
-            f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. Details | Channel {self.channel}"
-        )
-        log.debug(
-            "Time to get run and channel:", extra={"time": time.time() - start_time}
-        )
-        return ret
-
-    @param.depends("sort_by", watch=True)
-    def update_strings(self):
-        start_time = time.time()
-        self.strings_dict, self.chan_dict, self.channel_map = sorter(
-            self.base_path, self.run_dict[self.run]["timestamp"], key=self.sort_by
-        )
-
-        self.param["string"].objects = list(self.strings_dict)
-        self.string = f"{next(iter(self.strings_dict))}"
-        log.debug("Time to update strings:", extra={"time": time.time() - start_time})
 
     @param.depends("run", "sort_by", "plot_types_download")
     def download_summary_files(self):
@@ -108,7 +77,7 @@ class CalMonitoring(Monitoring):
             "Time to download summary files:", extra={"time": time.time() - start_time}
         )
         return ret
-    
+
     @param.depends("run", "sort_by", "plot_type_summary", "string")
     def view_summary(self):
         start_time = time.time()
@@ -173,7 +142,6 @@ class CalMonitoring(Monitoring):
         log.debug("Time to get summary plot:", extra={"time": time.time() - start_time})
         return figure
 
-
     @param.depends("period", "date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
         figure = None
@@ -228,7 +196,9 @@ class CalMonitoring(Monitoring):
         with shelve.open(self.plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             self.plot_dict_ch = shelf[self.channel[:9]]
         with shelve.open(
-            str(self.plot_dict).replace("hit", "dsp"), "r", protocol=pkl.HIGHEST_PROTOCOL
+            str(self.plot_dict).replace("hit", "dsp"),
+            "r",
+            protocol=pkl.HIGHEST_PROTOCOL,
         ) as shelf:
             self.dsp_dict = shelf[self.channel[:9]]
         log.debug(
@@ -307,3 +277,176 @@ class CalMonitoring(Monitoring):
             fig.set_canvas(new_manager.canvas)
             fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
         return fig_pane
+
+    def build_detailed_pane(self, logo_path, widget_widths: int = 140):
+        details_ch_param = pn.Param(
+            self.param,
+            widgets={
+                "channel": {"widget_type": pn.widgets.Select, "width": widget_widths}
+            },
+            parameters=["channel"],
+            show_labels=False,
+            show_name=False,
+            sort=True,
+        )
+
+        details_type_param = pn.Param(
+            self.param,
+            widgets={
+                "plot_type_details": {
+                    "widget_type": pn.widgets.Select,
+                    "width": widget_widths,
+                }
+            },
+            # 'plot_type_details': {'widget_type': pn.widgets.RadioButtonGroup, 'button_type': 'success',
+            #         'orientation':"vertical", 'width': widget_widths}},
+            parameters=["plot_type_details"],
+            show_labels=False,
+            show_name=False,
+            sort=True,
+        )
+
+        details_param_currentValue = pn.pane.Markdown(f"## {self.parameter}")
+        details_param = pn.widgets.MenuButton(
+            name="Detailed Plots",
+            button_type="primary",
+            width=widget_widths,
+            items=cal.param.parameter.objects,
+        )
+
+        def update_details_plots(event):
+            self.parameter = event.new
+            details_param_currentValue.object = f"## {event.new}"
+
+        details_param.on_click(update_details_plots)
+
+        return pn.Column(
+            pn.Row(
+                pn.pane.SVG(
+                    logo_path / "Calibration.svg",
+                    height=25,
+                ),
+                details_param,
+            ),
+            pn.Row("## Current Plot:", details_param_currentValue),
+            pn.Row("Channel:", details_ch_param, "Plot type:", details_type_param),
+            self.get_RunAndChannel,
+            self.view_details,
+            name="Cal. Details",
+            sizing_mode="scale_both",
+        )
+
+    def build_summary_pane(self, logo_path, widget_widths: int = 140):
+        summary_param_currentValue = pn.pane.Markdown(f"## {self.plot_type_summary}")
+        summary_param = pn.widgets.MenuButton(
+            name="Summary Plots",
+            button_type="primary",
+            width=widget_widths,
+            items=self.param.plot_type_summary.objects,
+        )
+
+        def update_summary_plots(event):
+            self.plot_type_summary = event.new
+            summary_param_currentValue.object = f"## {event.new}"
+
+        summary_param.on_click(update_summary_plots)
+
+        summary_param_download = pn.Param(
+            self.param,
+            widgets={
+                "plot_types_download": {
+                    "widget_type": pn.widgets.Select,
+                    "width": widget_widths,
+                }
+            },
+            parameters=["plot_types_download"],
+            show_labels=False,
+            show_name=False,
+        )
+        return pn.Column(
+            pn.Row(
+                pn.pane.SVG(
+                    logo_path / "Calibration.svg",
+                    height=25,
+                ),
+                summary_param,
+            ),
+            pn.Row("## Current Plot:", summary_param_currentValue),
+            "Download Raw Data",
+            pn.Row(summary_param_download, self.download_summary_files),
+            pn.pane.Bokeh(self.view_summary, sizing_mode="scale_both"),
+            name="Cal. Summary",
+            sizing_mode="scale_both",
+        )
+
+    def build_tracking_pane(self, logo_path, widget_widths: int = 140):
+        # tracking_range_param = pn.Param(
+        #     self.param,
+        #     widgets={
+        #         "date_range": {
+        #             "widget_type": pn.widgets.DatetimeRangePicker,
+        #             "width": widget_widths,
+        #             "enable_time": False,
+        #             "enable_seconds": False,
+        #         }
+        #     },
+        #     parameters=["date_range"],
+        #     show_labels=False,
+        #     show_name=False,
+        # )
+
+        tracking_param_currentValue = pn.pane.Markdown(f"## {self.plot_type_tracking}")
+        tracking_param = pn.widgets.MenuButton(
+            name="Tracking Plots",
+            button_type="primary",
+            width=widget_widths,
+            items=self.param.plot_type_tracking.objects,
+        )
+
+        def update_tracking_plots(event):
+            self.plot_type_tracking = event.new
+            tracking_param_currentValue.object = f"## {event.new}"
+
+        tracking_param.on_click(update_tracking_plots)
+
+        return pn.Column(
+            pn.Row(
+                pn.pane.SVG(
+                    logo_path / "Calibration.svg",
+                    height=25,
+                ),
+                tracking_param,
+            ),
+            pn.Row("## Current Plot:", tracking_param_currentValue),
+            # pn.Row("Selected time range:", tracking_range_param),
+            self.view_tracking,
+            name="Cal. Tracking",
+            sizing_mode="scale_both",
+        )
+
+    def build_cal_panes(self, logo_path, widget_widths: int = 140):
+        return {
+            "Cal. Summary": self.build_summary_pane(logo_path, widget_widths),
+            "Cal. Details": self.build_detailed_pane(logo_path, widget_widths),
+            "Cal. Tracking": self.build_tracking_pane(logo_path, widget_widths),
+        }
+
+    @classmethod
+    def init_cal_panes(
+        cls,
+        base_path,
+        logo_path,
+        widget_widths: int = 140,
+    ):
+        """
+        Initialize the calibration panes.
+
+        Args:
+            logo_path (str): Path to the logo.
+            widget_widths (int): Width of the widgets.
+
+        Returns:
+            dict: Dictionary containing the calibration panes.
+        """
+        cal_monitor = cls(base_path=base_path)
+        return cal_monitor.build_cal_panes(logo_path, widget_widths)

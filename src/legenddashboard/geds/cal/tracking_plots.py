@@ -23,6 +23,7 @@ from bokeh.plotting import figure
 from dbetto import Props
 from legendmeta import LegendMetadata
 from scipy.optimize import minimize
+
 from legenddashboard.util import sorter
 
 

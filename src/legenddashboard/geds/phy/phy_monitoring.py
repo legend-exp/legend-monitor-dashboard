@@ -1,15 +1,21 @@
-import time
-import pandas as pd
+from __future__ import annotations
+
 import logging
+import time
 from pathlib import Path
-from bokeh.plotting import figure
-import param
-import legenddashboard.geds.phy as phy
+
 import h5py
+import pandas as pd
+import panel as pn
+import param
+from bokeh.models.formatters import PrintfTickFormatter
+from bokeh.plotting import figure
 
 from legenddashboard.base import Monitoring
+from legenddashboard.geds import phy
 
 log = logging.getLogger(__name__)
+
 
 class PhyMonitor(Monitoring):
     phy_path = param.String("")
@@ -41,6 +47,15 @@ class PhyMonitor(Monitoring):
         objects=list(phy.phy_plots_sc_vals_dict),
         label="SC Values",
     )
+
+    # create initial dataframes
+    phy_data_df = pd.DataFrame()
+    phy_data_df_mean = pd.DataFrame()
+    phy_abs_unit = ""
+    phy_plot_info = None
+    phy_data_sc = pd.DataFrame()
+    phy_pane = pn.pane.Bokeh(figure(width=1000, height=600), sizing_mode="scale_width")
+    _phy_sc_plotted = False
 
     @param.depends(
         "run",
@@ -155,3 +170,146 @@ class PhyMonitor(Monitoring):
         log.debug("Time to get phy plot:", extra={"time": time.time() - start_time})
         # self.bokeh_pane.object = p
         return p
+
+    def build_phy_pane(self, logo_path, widget_widths=140):
+        """
+        Build the phy pane with all widgets and plots
+        """
+
+        # physics_style_param = pn.Param(
+        #     self.param,
+        #     widgets={
+        #         "phy_plot_style": {
+        #             "widget_type": pn.widgets.RadioButtonGroup,
+        #             "button_type": "light",
+        #             "orientation": "vertical",
+        #             "width": widget_widths,
+        #         }
+        #     },
+        #     parameters=["phy_plot_style"],
+        #     show_labels=False,
+        #     show_name=False,
+        #     sort=False,
+        # )
+        physics_param_resampled = pn.Param(
+            self.param,
+            widgets={
+                "phy_resampled": {
+                    "widget_type": pn.widgets.IntSlider,
+                    "width": widget_widths,
+                    "format": PrintfTickFormatter(format="%d min"),
+                    "value_throttled": True,
+                },
+            },
+            parameters=["phy_resampled"],
+            show_labels=False,
+            show_name=False,
+            sort=False,
+        )
+        physics_param_units = pn.Param(
+            self.param,
+            widgets={
+                "phy_units": {"widget_type": pn.widgets.RadioBoxGroup, "inline": True}
+            },
+            parameters=["phy_units"],
+            show_labels=False,
+            show_name=False,
+            sort=False,
+        )
+        physics_param_types = pn.Param(
+            self.param,
+            widgets={
+                "phy_plots_types": {
+                    "widget_type": pn.widgets.RadioButtonGroup,
+                    "orientation": "vertical",
+                    "button_type": "primary",
+                    "button_style": "outline",
+                    "width": widget_widths,
+                }
+            },
+            parameters=["phy_plots_types"],
+            show_labels=False,
+            show_name=False,
+            sort=False,
+        )
+
+        physics_param_currentValue = pn.pane.Markdown(f"## {self.phy_plots}")
+        physics_param = pn.widgets.MenuButton(
+            name="HPGe Detectors",
+            button_type="primary",
+            width=widget_widths,
+            items=self.param.phy_plots.objects,
+        )
+
+        def update_phy_plots(event):
+            self.phy_plots = event.new
+            physics_param_currentValue.object = f"## {event.new}"
+
+        physics_param.on_click(update_phy_plots)
+
+        # SC
+        # sc_param_currentValue = pn.pane.Markdown(f"## Not selected or no data available")
+        sc_param = pn.widgets.MenuButton(
+            name="Slow Control",
+            button_type="warning",
+            width=widget_widths,
+            items=self.param.phy_plots_sc_vals.objects,
+        )
+
+        def update_sc_plots(event):
+            self.phy_plots_sc_vals = event.new
+            # if self.phy_plots_sc_vals == "None" or not self._phy_sc_plotted:
+            #         sc_param_currentValue.object = f"## Not selected or no data available"
+            # else:
+            #         sc_param_currentValue.object = f"## {event.new}"
+
+        sc_param.on_click(update_sc_plots)
+
+        phy_gspec = pn.GridSpec(width=3 * widget_widths + 10, max_height=800)
+        phy_gspec[:, 0] = physics_param_types
+        phy_gspec[:, 1] = pn.Spacer(width=5)
+        phy_gspec[0, 2] = pn.widgets.Button(
+            name="Units", button_type="primary", width=widget_widths, disabled=True
+        )
+        phy_gspec[1, 2] = physics_param_units
+        phy_gspec[:, 3] = pn.Spacer(width=5)
+        phy_gspec[0, 4] = pn.widgets.Button(
+            name="Resampled", button_type="primary", width=widget_widths, disabled=True
+        )
+        phy_gspec[1, 4] = physics_param_resampled
+        # phy_gspec[:, 5] = pn.Spacer(width=5)
+        # phy_gspec[0, 6] = pn.widgets.Button(name="Show Slow Control", button_type='danger', width=widget_widths, disabled=True)
+        # phy_gspec[1, 6] = sc_param_selected
+        # pn.Row(physics_param_types, pn.Column("Units", physics_param_units), pn.Column("Resampled", physics_param_resampled), pn.Column("Show Slow Control", sc_param_selected)),
+        # pn.Row(phy_gspec)
+
+        return pn.Column(
+            pn.Row(
+                pn.pane.SVG(
+                    logo_path / "Physics.svg",
+                    height=25,
+                ),
+                physics_param,
+                sc_param,
+            ),
+            pn.Row("## Current Plot:", physics_param_currentValue),
+            # pn.Row("## Current SC Plot:", sc_param_currentValue),
+            pn.Row(phy_gspec),
+            pn.pane.Bokeh(self.view_phy, sizing_mode="scale_width"),
+            name="Phy. Monitoring",
+            sizing_mode="stretch_width",
+        )
+
+    @classmethod
+    def init_cal_panes(
+        cls,
+        base_path,
+        phy_path,
+        logo_path,
+        widget_widths: int = 140,
+    ):
+        phy_monitor = cls(
+            base_path=base_path,
+            phy_path=phy_path,
+        )
+        return phy_monitor.build_phy_pane(logo_path, widget_widths)

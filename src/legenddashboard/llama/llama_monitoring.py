@@ -1,22 +1,21 @@
+from __future__ import annotations
+
+import logging
 import time
+from pathlib import Path
+
+import holoviews as hv
 import numpy as np
 import pandas as pd
-import logging
-from pathlib import Path
-import holoviews as hv
+import panel as pn
+import param
 from bokeh.plotting import figure
-
-from legenddashboard.base import Monitor
 
 log = logging.getLogger(__name__)
 
-class LlamaMonitor(Monitor):
 
-    def __init__(
-        self, base_path, llama_path, name=None
-    ):
-        super().__init__(name=name, path=base_path)
-        self.llama_path = llama_path
+class LlamaMonitoring(param.Parameterized):
+    llama_path = param.String("")
 
     def view_llama(self):
         start_time = time.time()
@@ -115,6 +114,22 @@ class LlamaMonitor(Monitor):
             "Time to get llama last update:", extra={"time": time.time() - start_time}
         )
         return ret
-    
-    def update(self):
-        pass
+
+    def build_llama_pane(self):
+        return pn.Column(
+            "# Llama Monitoring",
+            self.get_llama_lastUpdate,
+            pn.panel(self.view_llama, sizing_mode="scale_both"),
+            name="Llama",
+            sizing_mode="scale_both",
+        )
+
+    @classmethod
+    def init_llama_pane(cls, llama_path: str) -> pn.Column:
+        """
+        Initialize the Llama monitoring pane.
+        :param llama_path: Path to the Llama data directory.
+        :return: A Panel Column containing the Llama monitoring information.
+        """
+        llama_monitor = cls(llama_path=llama_path)
+        return llama_monitor.build_llama_pane()

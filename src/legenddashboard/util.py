@@ -29,7 +29,7 @@ sort_dict = {
 
 def gen_run_dict(path):
     prod_config = Path(path) / "dataflow-config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)#["setups"]["l200"]
+    prod_config = Props.read_from(prod_config, subst_pathvar=True)  # ["setups"]["l200"]
     par_file = Path(prod_config["paths"]["par_hit"]) / "validity.yaml"
     run_dict = {}
     file = Props.read_from(par_file)
@@ -55,14 +55,16 @@ def gen_run_dict(path):
 
 def sorter(path, timestamp, key="String", datatype="cal", spms=False):
     prod_config = Path(path) / "dataflow-config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)#["setups"]["l200"]
+    prod_config = Props.read_from(prod_config, subst_pathvar=True)  # ["setups"]["l200"]
 
     cfg_file = prod_config["paths"]["metadata"]
     configs = LegendMetadata(path=cfg_file)
     chmap = configs.channelmap(timestamp)
 
     det_status_path = prod_config["paths"]["detector_status"]
-    det_status = LegendMetadata(path=det_status_path).statuses.on(timestamp, system=datatype)
+    det_status = LegendMetadata(path=det_status_path).statuses.on(
+        timestamp, system=datatype
+    )
 
     out_dict = {}
     # SiPMs sorting
