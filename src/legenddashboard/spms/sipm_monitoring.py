@@ -52,6 +52,7 @@ class SiPMMonitoring(Monitoring):
             self.run_dict[self.run]["timestamp"],
             key=self.sipm_sort_by,
             spms=True,
+            sort_dets_obj=self.sort_obj,
         )
 
         self.param["sipm_barrel"].objects = list(self.sipm_out_dict)
@@ -81,6 +82,7 @@ class SiPMMonitoring(Monitoring):
             self.run_dict[self.run]["timestamp"],
             key=self.sipm_sort_by,
             spms=True,
+            sort_dets_obj=self.sort_obj,
         )
         self.sipm_name_dict = {}
         for val in self.sipm_chmap.values():
