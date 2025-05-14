@@ -3,37 +3,24 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import matplotlib as mpl
 import panel as pn
-from dbetto import AttrsDict, Props
 
 from legenddashboard.base import Monitoring
 from legenddashboard.geds.cal.cal_monitoring import CalMonitoring
 from legenddashboard.geds.ged_monitoring import GedMonitoring
 from legenddashboard.geds.phy.phy_monitoring import PhyMonitoring
 from legenddashboard.llama.llama_monitoring import LlamaMonitoring
-from legenddashboard.muons.muon_monitoring import MuonMonitoring
+from legenddashboard.muon.muon_monitoring import MuonMonitoring
 from legenddashboard.spms.sipm_monitoring import SiPMMonitoring
-
-# somehow TUM server needs Agg -> needs fix in the future
-mpl.use("Agg")
-
-# use terminal and tabulator extensions, sizing mode stretch enables nicer layout
-pn.extension("terminal")
-pn.extension("tabulator")
-pn.extension("plotly")
-pn.extension("katex", "mathjax")
+from legenddashboard.util import read_config
 
 
 def build_dashboard(
     config: str | dict,
-    logo_path,
     widget_widths: int = 140,
+    disable_page: list[str] | None = None,
 ):
-    if isinstance(config, str | Path):
-        config = AttrsDict(Props.read_from(config))
-    else:
-        config = AttrsDict(config)
+    config = read_config(config)
 
     # path to period data
     data_path = config.base
@@ -78,118 +65,114 @@ def build_dashboard(
         name="L200 Monitoring",
     )
     ged_monitor = GedMonitoring(
-        path=cal_path,
-        base_path=base_monitor.params.base_path,
-        run_dict=base_monitor.params.run_dict,
-        periods=base_monitor.params.periods,
-        period=base_monitor.params.period,
-        run=base_monitor.params.run,
+        base_path=cal_path,
+        run_dict=base_monitor.param.run_dict,
+        periods=base_monitor.param.periods,
+        period=base_monitor.param.period,
+        run=base_monitor.param.run,
         date_range=base_monitor.param.date_range,
         name="L200 Ged Monitoring",
     )
+    sidebar = base_monitor.build_sidebar()
+    l200_monitoring.sidebar.append(ged_monitor.build_sidebar(sidebar_instance=sidebar))
 
-    cal_monitor = CalMonitoring(
-        path=ged_monitor.cal_path,
-        tmp_path=tmp_cal_path,
-        base_path=base_monitor.params.base_path,
-        run_dict=base_monitor.params.run_dict,
-        periods=base_monitor.params.periods,
-        period=base_monitor.params.period,
-        run=base_monitor.params.run,
-        date_range=base_monitor.param.date_range,
-        channel=ged_monitor.param.channel,
-        string=ged_monitor.param.string,
-        sort_by=ged_monitor.param.sort_by,
-        name="L200 Cal Monitoring",
-    )
-    phy_monitor = PhyMonitoring(
-        phy_path=phy_path,
-        base_path=base_monitor.params.base_path,
-        run_dict=base_monitor.params.run_dict,
-        periods=base_monitor.params.periods,
-        period=base_monitor.params.period,
-        run=base_monitor.params.run,
-        date_range=base_monitor.param.date_range,
-        channel=ged_monitor.param.channel,
-        string=ged_monitor.param.string,
-        sort_by=ged_monitor.param.sort_by,
-        name="L200 Phy Monitoring",
-    )
-
-    sipm_monitor = SiPMMonitoring(
-        sipm_path=sipm_path,
-        base_path=base_monitor.params.base_path,
-        run_dict=base_monitor.params.run_dict,
-        periods=base_monitor.params.periods,
-        period=base_monitor.params.period,
-        run=base_monitor.params.run,
-        date_range=base_monitor.param.date_range,
-        name="L200 SiPM Monitoring",
-    )
-
-    muon_monitor = MuonMonitoring(
-        muon_path=muon_path,
-        base_path=base_monitor.params.base_path,
-        run_dict=base_monitor.params.run_dict,
-        periods=base_monitor.params.periods,
-        period=base_monitor.params.period,
-        run=base_monitor.params.run,
-        date_range=base_monitor.param.date_range,
-        name="L200 Muon Monitoring",
-    )
-    llama_monitor = LlamaMonitoring(
-        llama_path=llama_path,
-        name="L200 Llama Monitoring",
-    )
-
-    sidebar = base_monitor.build_sidebar(
-        logo_path=logo_path,
-    )
-    l200_monitoring.sidebar.append(
-        ged_monitor.build_sidebar(logo_path, sidebar_instance=sidebar)
-    )
-
-    cal_panes = cal_monitor.build_cal_panes(
-        logo_path=logo_path,
-        widget_widths=widget_widths,
-    )
-    # cal
-    for pane in cal_panes.values:
-        l200_monitoring.main.append(pane)
-
-    # phy
-    l200_monitoring.main.append(
-        phy_monitor.build_phy_pane(
-            logo_path=logo_path,
+    if "cal" not in disable_page:
+        cal_monitor = CalMonitoring(
+            base_path=cal_path,
+            tmp_path=tmp_cal_path,
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            channel=ged_monitor.param.channel,
+            string=ged_monitor.param.string,
+            sort_by=ged_monitor.param.sort_by,
+            name="L200 Cal Monitoring",
+        )
+        cal_panes = cal_monitor.build_cal_panes(
             widget_widths=widget_widths,
         )
-    )
+        # cal
+        for pane in cal_panes.values():
+            l200_monitoring.main.append(pane)
+    if "phy" not in disable_page:
+        if "cal" not in disable_page:
+            phy_monitor = PhyMonitoring(
+                base_path=cal_path,
+                phy_path=phy_path,
+                run_dict=base_monitor.param.run_dict,
+                periods=base_monitor.param.periods,
+                period=base_monitor.param.period,
+                run=base_monitor.param.run,
+                date_range=base_monitor.param.date_range,
+                channel=ged_monitor.param.channel,
+                string=ged_monitor.param.string,
+                sort_by=ged_monitor.param.sort_by,
+                name="L200 Phy Monitoring",
+            )
+        else:
+            phy_monitor = PhyMonitoring(
+                phy_path=phy_path,
+                base_path=cal_path,
+                run_dict=base_monitor.param.run_dict,
+                periods=base_monitor.param.periods,
+                period=base_monitor.param.period,
+                run=base_monitor.param.run,
+                date_range=base_monitor.param.date_range,
+                name="L200 Phy Monitoring",
+            )
+        l200_monitoring.main.append(
+            phy_monitor.build_phy_pane(
+                widget_widths=widget_widths,
+            )
+        )
+    if "spm" not in disable_page:
+        sipm_monitor = SiPMMonitoring(
+            sipm_path=sipm_path,
+            base_path=cal_path,
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            name="L200 SiPM Monitoring",
+        )
+        l200_monitoring.main.append(
+            sipm_monitor.build_spm_pane(
+                widget_widths=widget_widths,
+            )
+        )
 
-    # spms
-    l200_monitoring.main.append(
-        sipm_monitor.build_phy_pane(
-            logo_path=logo_path,
+    if "muon" not in disable_page:
+        muon_monitor = MuonMonitoring(
+            muon_path=muon_path,
+            base_path=cal_path,
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            name="L200 Muon Monitoring",
+        )
+        muon_panes = muon_monitor.build_muon_panes(
             widget_widths=widget_widths,
         )
-    )
-
-    # muon
-    muon_panes = muon_monitor.build_muon_panes(
-        logo_path=logo_path,
-        widget_widths=widget_widths,
-    )
-    for pane in muon_panes.values:
-        l200_monitoring.main.append(pane)
-
-    # metadata
-    l200_monitoring.main.append(
-        ged_monitor.build_meta_pane(logo_path=logo_path, widget_widths=widget_widths)
-    )
-
-    # llama
-    l200_monitoring.main.append(
-        llama_monitor.build_llama_pane(logo_path=logo_path, widget_widths=widget_widths)
-    )
+        for pane in muon_panes.values():
+            l200_monitoring.main.append(pane)
+    if "meta" not in disable_page:
+        l200_monitoring.main.append(
+            ged_monitor.build_meta_pane(widget_widths=widget_widths)
+        )
+    if "llama" not in disable_page:
+        llama_monitor = LlamaMonitoring(
+            llama_path=llama_path,
+            base_path=cal_path,
+            name="L200 Llama Monitoring",
+        )
+        l200_monitoring.main.append(
+            llama_monitor.build_llama_pane(widget_widths=widget_widths)
+        )
 
     return l200_monitoring
 
@@ -234,19 +217,26 @@ def build_info_pane(info_path):
 
 def run_dashboard() -> None:
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("--config-file", type=str, required=True)
-    argparser.add_argument("--port", type=int, default=9000)
-    argparser.add_argument("--widget-widths", type=int, default=140, required=False)
+    argparser.add_argument("config_file", type=str)
+    argparser.add_argument("-p", "--port", type=int, default=9000)
+    argparser.add_argument(
+        "-w", "--widget_widths", type=int, default=140, required=False
+    )
+    argparser.add_argument(
+        "-d", "--disable_page", nargs="*", required=False, default=[]
+    )
     args = argparser.parse_args()
 
-    logo_path = Path(__file__).parent.parent.parent / "logos"
     info_path = Path(__file__).parent.parent.parent / "information" / "general.md"
 
-    l200_monitoring = build_dashboard(args.config_file, logo_path, args.widget_widths)
+    l200_monitoring = build_dashboard(
+        args.config_file, args.widget_widths, args.disable_page
+    )
 
     l200_monitoring.header.append(
         pn.Row(pn.Spacer(width=120), build_header_logos(), sizing_mode="stretch_width")
     )
 
     l200_monitoring.main.append(pn.Tabs(("Information", build_info_pane(info_path))))
-    l200_monitoring.servable(port=args.port)
+    print("Starting Monitoring Dashboard on port ", args.port)  # noqa: T201
+    pn.serve(l200_monitoring, port=args.port, show=False)

@@ -11,13 +11,14 @@ import param
 from bokeh.models.formatters import PrintfTickFormatter
 from bokeh.plotting import figure
 
-from legenddashboard.base import Monitoring
 from legenddashboard.geds import phy
+from legenddashboard.geds.ged_monitoring import GedMonitoring
+from legenddashboard.util import logo_path
 
 log = logging.getLogger(__name__)
 
 
-class PhyMonitor(Monitoring):
+class PhyMonitoring(GedMonitoring):
     phy_path = param.String("")
     phy_plots_types = param.ObjectSelector(
         default=next(iter(phy.phy_plots_types_dict)),
@@ -171,7 +172,7 @@ class PhyMonitor(Monitoring):
         # self.bokeh_pane.object = p
         return p
 
-    def build_phy_pane(self, logo_path, widget_widths=140):
+    def build_phy_pane(self, widget_widths=140):
         """
         Build the phy pane with all widgets and plots
         """
@@ -305,11 +306,10 @@ class PhyMonitor(Monitoring):
         cls,
         base_path,
         phy_path,
-        logo_path,
         widget_widths: int = 140,
     ):
         phy_monitor = cls(
             base_path=base_path,
             phy_path=phy_path,
         )
-        return phy_monitor.build_phy_pane(logo_path, widget_widths)
+        return phy_monitor.build_phy_pane(widget_widths)

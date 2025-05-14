@@ -21,38 +21,35 @@ from bokeh.models import (
 )
 from bokeh.plotting import figure
 from dbetto import Props
-from legendmeta import LegendMetadata
 from scipy.optimize import minimize
 
 from legenddashboard.util import sorter
 
 
-def plot_energy(path, run_dict, det, plot, colour, period):
+def plot_energy(path, run_dict, det, plot, colour, period, cache_data=None):
     cals = []
     times = []
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    configs = LegendMetadata(path=prod_config["paths"]["chan_map"])
     qbb_adc = None
     for run in run_dict:
-        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.rawid
+        if cache_data is not None and run in cache_data["hit"]:
+            hit_pars_dict = cache_data["hit"][run]
+        else:
+            prod_config = Path(path) / "dataflow-config.yaml"
+            prod_config = Props.read_from(prod_config, subst_pathvar=True)
+            hit_pars_file_path = (
+                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+            )
 
-        hit_pars_file_path = (
-            Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        )
+            hit_pars_path = (
+                Path(hit_pars_file_path)
+                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
+            )
 
-        hit_pars_path = (
-            Path(hit_pars_file_path)
-            / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
-        )
-
-        hit_pars_dict = Props.read_from(hit_pars_path)
+            hit_pars_dict = Props.read_from(hit_pars_path)
+            cache_data["hit"][run] = hit_pars_dict
 
         try:
-            hit_dict = hit_pars_dict[f"ch{channel:07}"]["pars"]["operations"][
-                "cuspEmax_ctc_cal"
-            ]
+            hit_dict = hit_pars_dict[det]["pars"]["operations"]["cuspEmax_ctc_cal"]
             if qbb_adc is None:
 
                 def find_qbb_adc(val):
@@ -81,7 +78,7 @@ def plot_energy(path, run_dict, det, plot, colour, period):
             line_color=colour,
         )
 
-        plot.circle(
+        plot.scatter(
             [(datetime.strptime(value, "%Y%m%dT%H%M%SZ")) for value in times],
             (cals - cals[0]),
             legend_label=det,
@@ -93,39 +90,41 @@ def plot_energy(path, run_dict, det, plot, colour, period):
     return plot
 
 
-def plot_energy_res(path, run_dict, det, plot, colour, period, at="Qbb"):
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    configs = LegendMetadata(path=prod_config["paths"]["chan_map"])
-
+def plot_energy_res(
+    path, run_dict, det, plot, colour, period, at="Qbb", cache_data=None
+):
     reses = []
     times = []
     for run in run_dict:
-        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.rawid
+        if cache_data is not None and run in cache_data["hit"]:
+            hit_pars_dict = cache_data["hit"][run]
+        else:
+            prod_config = Path(path) / "dataflow-config.yaml"
+            prod_config = Props.read_from(prod_config, subst_pathvar=True)
 
-        hit_pars_file_path = (
-            Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        )
-        hit_pars_path = (
-            hit_pars_file_path
-            / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml',
-        )
+            hit_pars_file_path = (
+                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+            )
 
-        hit_pars_dict = Props.read_from(hit_pars_path)
+            hit_pars_path = (
+                hit_pars_file_path
+                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
+            )
 
+            hit_pars_dict = Props.read_from(hit_pars_path)
+            cache_data["hit"][run] = hit_pars_dict
         try:
             if at == "Qbb":
                 reses.append(
-                    hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"][
-                        "cuspEmax_ctc_cal"
-                    ]["eres_linear"]["Qbb_fwhm_in_keV"]
+                    hit_pars_dict[det]["results"]["ecal"]["cuspEmax_ctc_cal"][
+                        "eres_linear"
+                    ]["Qbb_fwhm_in_kev"]
                 )
             elif at == "2.6":
                 reses.append(
-                    hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"][
-                        "cuspEmax_ctc_cal"
-                    ]["pk_fits"]["2614.5"]["fwhm_in_keV"][0]
+                    hit_pars_dict[det]["results"]["ecal"]["cuspEmax_ctc_cal"][
+                        "pk_fits"
+                    ][2614.511]["fwhm_in_kev"]
                 )
             times.append(run_dict[run]["timestamp"])
         except KeyError:
@@ -141,7 +140,7 @@ def plot_energy_res(path, run_dict, det, plot, colour, period, at="Qbb"):
             line_color=colour,
         )
 
-        plot.circle(
+        plot.scatter(
             [(datetime.strptime(value, "%Y%m%dT%H%M%SZ")) for value in times],
             (reses),
             legend_label=det,
@@ -153,63 +152,51 @@ def plot_energy_res(path, run_dict, det, plot, colour, period, at="Qbb"):
     return plot
 
 
-def plot_energy_res_Qbb(path, run_dict, det, plot, colour, period):
-    return plot_energy_res(path, run_dict, det, plot, colour, period, at="Qbb")
+def plot_energy_res_Qbb(path, run_dict, det, plot, colour, period, cache_data=None):
+    return plot_energy_res(
+        path, run_dict, det, plot, colour, period, at="Qbb", cache_data=cache_data
+    )
 
 
-def plot_energy_res_2614(path, run_dict, det, plot, colour, period):
-    return plot_energy_res(path, run_dict, det, plot, colour, period, at="2.6")
+def plot_energy_res_2614(path, run_dict, det, plot, colour, period, cache_data=None):
+    return plot_energy_res(
+        path, run_dict, det, plot, colour, period, at="2.6", cache_data=cache_data
+    )
 
 
-def plot_aoe_mean(path, run_dict, det, plot, colour, period):
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    configs = LegendMetadata(path=prod_config["paths"]["chan_map"])
-
+def plot_aoe_mean(path, run_dict, det, plot, colour, period, cache_data=None):
     means = []
     mean_errs = []
     reses = []
     res_errs = []
     times = []
     for run in run_dict:
-        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.rawid
+        if cache_data is not None and run in cache_data["hit"]:
+            hit_pars_dict = cache_data["hit"][run]
+        else:
+            prod_config = Path(path) / "dataflow-config.yaml"
+            prod_config = Props.read_from(prod_config, subst_pathvar=True)
+            hit_pars_file_path = (
+                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+            )
 
-        hit_pars_file_path = (
-            Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        )
+            hit_pars_path = (
+                hit_pars_file_path
+                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
+            )
 
-        hit_pars_path = (
-            hit_pars_file_path
-            / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml',
-        )
-
-        hit_pars_dict = Props.read_from(hit_pars_path)
-
+            hit_pars_dict = Props.read_from(hit_pars_path)
+            cache_data["hit"][run] = hit_pars_dict
         try:
-            means.append(
-                hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"][
-                    "mean"
-                ]
-            )
-            mean_errs.append(
-                hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"][
-                    "mean_err"
-                ]
-            )
-            reses.append(
-                hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"][
-                    "res"
-                ]
-            )
-            res_errs.append(
-                hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"][
-                    "res_err"
-                ]
-            )
+            det_dict = hit_pars_dict[det]
+
+            means.append(det_dict["results"]["aoe"]["1000-1300keV"][0]["mean"])
+            mean_errs.append(det_dict["results"]["aoe"]["1000-1300keV"][0]["mean_err"])
+            reses.append(det_dict["results"]["aoe"]["1000-1300keV"][0]["res"])
+            res_errs.append(det_dict["results"]["aoe"]["1000-1300keV"][0]["res_err"])
             times.append(run_dict[run]["timestamp"])
         except KeyError:
-            pass
+            continue
     means = np.array(means)
     reses = np.array(reses)
     plot.step(
@@ -221,7 +208,7 @@ def plot_aoe_mean(path, run_dict, det, plot, colour, period):
         line_color=colour,
     )
 
-    plot.circle(
+    plot.scatter(
         [(datetime.strptime(value, "%Y%m%dT%H%M%SZ")) for value in times],
         100 * (means - means[0]) / reses,
         legend_label=det,
@@ -272,51 +259,40 @@ def plot_aoe_mean(path, run_dict, det, plot, colour, period):
     return plot
 
 
-def plot_aoe_sig(path, run_dict, det, plot, colour, period):
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    configs = LegendMetadata(path=prod_config["paths"]["chan_map"])
-
+def plot_aoe_sig(path, run_dict, det, plot, colour, period, cache_data=None):
     means = []
     mean_errs = []
     reses = []
     res_errs = []
     times = []
     for run in run_dict:
-        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.rawid
+        if cache_data is not None and run in cache_data["hit"]:
+            hit_pars_dict = cache_data["hit"][run]
+        else:
+            prod_config = Path(path) / "dataflow-config.yaml"
+            prod_config = Props.read_from(prod_config, subst_pathvar=True)
+            hit_pars_file_path = (
+                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+            )
 
-        hit_pars_file_path = (
-            Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        )
+            hit_pars_path = (
+                hit_pars_file_path
+                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
+            )
 
-        hit_pars_path = (
-            hit_pars_file_path
-            / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml',
-        )
-
-        hit_pars_dict = Props.read_from(hit_pars_path)
+            hit_pars_dict = Props.read_from(hit_pars_path)
+            cache_data["hit"][run] = hit_pars_dict
 
         try:
             means.append(
-                hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"][
-                    "mean"
-                ]
+                hit_pars_dict[det]["results"]["aoe"]["1000-1300keV"][0]["mean"]
             )
             mean_errs.append(
-                hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"][
-                    "mean_err"
-                ]
+                hit_pars_dict[det]["results"]["aoe"]["1000-1300keV"][0]["mean_err"]
             )
-            reses.append(
-                hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"][
-                    "res"
-                ]
-            )
+            reses.append(hit_pars_dict[det]["results"]["aoe"]["1000-1300keV"][0]["res"])
             res_errs.append(
-                hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["1000-1300keV"]["0"][
-                    "res_err"
-                ]
+                hit_pars_dict[det]["results"]["aoe"]["1000-1300keV"][0]["res_err"]
             )
             times.append(run_dict[run]["timestamp"])
         except KeyError:
@@ -332,7 +308,7 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period):
         line_color=colour,
     )
 
-    plot.circle(
+    plot.scatter(
         [(datetime.strptime(value, "%Y%m%dT%H%M%SZ")) for value in times],
         (reses),
         legend_label=det,
@@ -344,30 +320,29 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period):
     return plot
 
 
-def plot_aoe_cut(path, run_dict, det, plot, colour, period):
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    configs = LegendMetadata(path=prod_config["paths"]["chan_map"])
-
+def plot_aoe_cut(path, run_dict, det, plot, colour, period, cache_data=None):
     cuts = []
     times = []
     for run in run_dict:
-        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.rawid
+        if cache_data is not None and run in cache_data["hit"]:
+            hit_pars_dict = cache_data["hit"][run]
+        else:
+            prod_config = Path(path) / "dataflow-config.yaml"
+            prod_config = Props.read_from(prod_config, subst_pathvar=True)
+            hit_pars_file_path = (
+                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+            )
 
-        hit_pars_file_path = (
-            Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        )
+            hit_pars_path = (
+                hit_pars_file_path
+                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
+            )
 
-        hit_pars_path = (
-            hit_pars_file_path
-            / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml',
-        )
-
-        hit_pars_dict = Props.read_from(hit_pars_path)
+            hit_pars_dict = Props.read_from(hit_pars_path)
+            cache_data["hit"][run] = hit_pars_dict
 
         with contextlib.suppress(KeyError):
-            cuts.append(hit_pars_dict[f"ch{channel:07}"]["results"]["aoe"]["low_cut"])
+            cuts.append(hit_pars_dict[det]["results"]["aoe"]["low_cut"])
             times.append(run_dict[run]["timestamp"])
 
     cuts = np.array(cuts)
@@ -380,7 +355,7 @@ def plot_aoe_cut(path, run_dict, det, plot, colour, period):
         line_color=colour,
     )
 
-    plot.circle(
+    plot.scatter(
         [(datetime.strptime(value, "%Y%m%dT%H%M%SZ")) for value in times],
         (cuts),
         legend_label=det,
@@ -392,30 +367,29 @@ def plot_aoe_cut(path, run_dict, det, plot, colour, period):
     return plot
 
 
-def plot_tau(path, run_dict, det, plot, colour, period):
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    configs = LegendMetadata(path=prod_config["paths"]["chan_map"])
-
+def plot_tau(path, run_dict, det, plot, colour, period, cache_data=None):
     values = []
     times = []
     for run in run_dict:
-        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.rawid
+        if cache_data is not None and run in cache_data["dsp"]:
+            dsp_pars_dict = cache_data["dsp"][run]
+        else:
+            prod_config = Path(path) / "dataflow-config.yaml"
+            prod_config = Props.read_from(prod_config, subst_pathvar=True)
+            dsp_pars_file_path = (
+                Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
+            )
 
-        dsp_pars_file_path = (
-            Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
-        )
+            dsp_pars_path = (
+                dsp_pars_file_path
+                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.yaml'
+            )
 
-        dsp_pars_path = (
-            dsp_pars_file_path
-            / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.yaml',
-        )
-
-        dsp_pars_path = Props.read_from(dsp_pars_path)
+            dsp_pars_dict = Props.read_from(dsp_pars_path)
+            cache_data["dsp"][run] = dsp_pars_dict
 
         with contextlib.suppress(KeyError):
-            values.append(float(dsp_pars_path[f"ch{channel:07}"]["pz"]["tau"][:-3]))
+            values.append(float(dsp_pars_dict[det]["pz"]["tau1"][:-3]))
             times.append(run_dict[run]["timestamp"])
 
     values = np.array(values)
@@ -428,7 +402,7 @@ def plot_tau(path, run_dict, det, plot, colour, period):
         line_color=colour,
     )
 
-    plot.circle(
+    plot.scatter(
         [(datetime.strptime(value, "%Y%m%dT%H%M%SZ")) for value in times],
         100 * (values - values[0]) / values[0],
         legend_label=det,
@@ -440,32 +414,29 @@ def plot_tau(path, run_dict, det, plot, colour, period):
     return plot
 
 
-def plot_ctc_const(path, run_dict, det, plot, colour, period):
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    configs = LegendMetadata(path=prod_config["paths"]["chan_map"])
-
+def plot_ctc_const(path, run_dict, det, plot, colour, period, cache_data=None):
     values = []
     times = []
     for run in run_dict:
-        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[det].daq.rawid
+        if cache_data is not None and run in cache_data["dsp"]:
+            dsp_pars_dict = cache_data["dsp"][run]
+        else:
+            prod_config = Path(path) / "dataflow-config.yaml"
+            prod_config = Props.read_from(prod_config, subst_pathvar=True)
+            dsp_pars_file_path = (
+                Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
+            )
+            dsp_pars_path = (
+                dsp_pars_file_path
+                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.yaml'
+            )
 
-        dsp_pars_file_path = (
-            Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
-        )
-        dsp_pars_path = (
-            dsp_pars_file_path
-            / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.yaml',
-        )
-
-        dsp_pars_path = Props.read_from(dsp_pars_path)
+            dsp_pars_dict = Props.read_from(dsp_pars_path)
+            cache_data["dsp"][run] = dsp_pars_dict
 
         with contextlib.suppress(KeyError):
             values.append(
-                dsp_pars_path[f"ch{channel:07}"]["ctc_params"]["cuspEmax_ctc"][
-                    "parameters"
-                ]["a"]
+                dsp_pars_dict[det]["ctc_params"]["cuspEmax_ctc"]["parameters"]["a"]
             )
             times.append(run_dict[run]["timestamp"])
 
@@ -479,7 +450,7 @@ def plot_ctc_const(path, run_dict, det, plot, colour, period):
         line_color=colour,
     )
 
-    plot.circle(
+    plot.scatter(
         [(datetime.strptime(value, "%Y%m%dT%H%M%SZ")) for value in times],
         (values),
         legend_label=det,
@@ -491,9 +462,22 @@ def plot_ctc_const(path, run_dict, det, plot, colour, period):
     return plot
 
 
-def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="String"):
-    strings_dict, soft_dict, chmap = sorter(
-        path, run_dict[next(iter(run_dict))]["timestamp"], key=key
+def plot_tracking(
+    run_dict,
+    path,
+    plot_func,
+    string,
+    period,
+    plot_type,
+    key="String",
+    cache_data=None,
+    sort_dets_obj=None,
+):
+    strings_dict, _, chmap = sorter(
+        path,
+        run_dict[next(iter(run_dict))]["timestamp"],
+        key=key,
+        sort_dets_obj=sort_dets_obj,
     )
     string_dets = {}
     for stri in strings_dict:
@@ -523,9 +507,12 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
 
     colours = cc.palette["glasbey_category10"][:100]
 
+    if cache_data is None or len(cache_data) == 0:
+        cache_data = {"hit": {}, "dsp": {}}
+
     for i, det in enumerate(string_dets[string]):
-        with contextlib.suppress(KeyError):
-            plot_func(path, run_dict, det, p, colours[i], period)
+        # with contextlib.suppress(KeyError):
+        plot_func(path, run_dict, det, p, colours[i], period, cache_data)
 
     for run in run_dict:
         sp = Span(
@@ -572,51 +559,61 @@ def plot_tracking(run_dict, path, plot_func, string, period, plot_type, key="Str
     return p
 
 
-def plot_energy_residuals_period(run_dict, path, period, key="String", download=False):
-    strings, soft_dict, channel_map = sorter(
-        path, run_dict[next(iter(run_dict))]["timestamp"], key=key
+def plot_energy_residuals_period(
+    run_dict,
+    path,
+    period,
+    key="String",
+    download=False,
+    cache_data=None,
+    sort_dets_obj=None,
+):
+    strings, _, _ = sorter(
+        path,
+        run_dict[next(iter(run_dict))]["timestamp"],
+        key=key,
+        sort_dets_obj=sort_dets_obj,
     )
 
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    cfg_file = prod_config["paths"]["chan_map"]
-    configs = LegendMetadata(path=cfg_file)
-
-    peaks = [2614.5, 583.191, 2103.53]
+    peaks = [2614.511, 583.191, 2103.511]
 
     res = {}
 
+    if cache_data is None or len(cache_data) == 0:
+        cache_data = {"hit": {}, "dsp": {}}
+
     for stri in strings:
-        res[stri] = {str(peak): [] for peak in peaks}
-        for channel in strings[stri]:
-            detector = channel_map[channel]["name"]
-            res[detector] = {str(peak): [] for peak in peaks}
+        res[stri] = {peak: [] for peak in peaks}
+        for detector in strings[stri]:
+            res[detector] = {peak: [] for peak in peaks}
 
     for run in run_dict:
-        chmap = configs.channelmaps.on(run_dict[run]["timestamp"])
-        channel = chmap[detector].daq.rawid
+        if cache_data is not None and run in cache_data["hit"]:
+            hit_pars_dict = cache_data["hit"][run]
+        else:
+            prod_config = Path(path) / "dataflow-config.yaml"
+            prod_config = Props.read_from(prod_config, subst_pathvar=True)
+            hit_pars_file_path = (
+                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+            )
 
-        hit_pars_file_path = (
-            Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        )
+            hit_pars_path = (
+                hit_pars_file_path
+                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
+            )
 
-        hit_pars_path = (
-            hit_pars_file_path
-            / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml',
-        )
-
-        hit_pars_dict = Props.read_from(hit_pars_path)
+            hit_pars_dict = Props.read_from(hit_pars_path)
+            cache_data["hit"][run] = hit_pars_dict
 
         for peak in peaks:
             for stri in strings:
-                res[stri][str(peak)].append(np.nan)
-                for channel in strings[stri]:
-                    detector = channel_map[channel]["name"]
+                res[stri][peak].append(np.nan)
+                for detector in strings[stri]:
                     try:
-                        hit_dict = hit_pars_dict[f"ch{channel:07}"]["pars"][
-                            "operations"
-                        ]["cuspEmax_ctc_cal"]
-                        res_dict = hit_pars_dict[f"ch{channel:07}"]["results"]["ecal"][
+                        hit_dict = hit_pars_dict[detector]["pars"]["operations"][
+                            "cuspEmax_ctc_cal"
+                        ]
+                        res_dict = hit_pars_dict[detector]["results"]["ecal"][
                             "cuspEmax_ctc_cal"
                         ]
                         out_data = (
@@ -624,8 +621,8 @@ def plot_energy_residuals_period(run_dict, path, period, key="String", download=
                                 f"{hit_dict['expression']}",
                                 local_dict=dict(
                                     {
-                                        "cuspEmax_ctc": res_dict["pk_fits"][str(peak)][
-                                            "parameters_in_ADC"
+                                        "cuspEmax_ctc": res_dict["pk_fits"][peak][
+                                            "parameters"
                                         ]["mu"]
                                     },
                                     **hit_dict["parameters"],
@@ -633,9 +630,9 @@ def plot_energy_residuals_period(run_dict, path, period, key="String", download=
                             )
                             - peak
                         )
-                        res[detector][str(peak)].append(out_data)
+                        res[detector][peak].append(out_data)
                     except KeyError:
-                        res[detector][str(peak)].append(np.nan)
+                        continue
 
     # p = figure(width=1400, height=600, tools="pan,wheel_zoom,box_zoom,xzoom_in,xzoom_out,hover,reset,save")
     p = figure(
@@ -666,22 +663,16 @@ def plot_energy_residuals_period(run_dict, path, period, key="String", download=
             warnings.simplefilter("ignore", category=RuntimeWarning)
             x_plot, y_plot, y_min, y_max = (
                 np.arange(1, len(list(res)) + 1, 1),
-                [np.nanmean(res[det][str(peak)]) for det in res],
+                [np.nanmean(res[det][peak]) for det in res],
                 [
-                    np.nanmin(res[det][str(peak)])
-                    if len(
-                        np.array(res[det][str(peak)])[~np.isnan(res[det][str(peak)])]
-                    )
-                    > 0
+                    np.nanmin(res[det][peak])
+                    if len(np.array(res[det][peak])[~np.isnan(res[det][peak])]) > 0
                     else np.nan
                     for det in res
                 ],
                 [
-                    np.nanmax(res[det][str(peak)])
-                    if len(
-                        np.array(res[det][str(peak)])[~np.isnan(res[det][str(peak)])]
-                    )
-                    > 0
+                    np.nanmax(res[det][peak])
+                    if len(np.array(res[det][peak])[~np.isnan(res[det][peak])]) > 0
                     else np.nan
                     for det in res
                 ],
@@ -711,26 +702,26 @@ def plot_energy_residuals_period(run_dict, path, period, key="String", download=
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             if peak == peaks[0]:
-                hover_renderer = p.circle(
+                hover_renderer = p.scatter(
                     x=f"x_{int(peak)}",
                     y=f"y_{int(peak)}",
                     source=df_plot,
                     color=peak_color,
                     size=7,
                     line_alpha=0,
-                    legend_label=f'{peak} Average: {np.nanmean([np.nanmean(res[det][f"{peak}"]) for det in res]):.2f}keV',
-                    name=f'{peak} Average: {np.nanmean([np.nanmean(res[det][f"{peak}"]) for det in res]):.2f}keV',
+                    legend_label=f"{peak} Average: {np.nanmean([np.nanmean(res[det][peak]) for det in res]):.2f}keV",
+                    name=f"{peak} Average: {np.nanmean([np.nanmean(res[det][peak]) for det in res]):.2f}keV",
                 )
             else:
-                p.circle(
+                p.scatter(
                     x=f"x_{int(peak)}",
                     y=f"y_{int(peak)}",
                     source=df_plot,
                     color=peak_color,
                     size=7,
                     line_alpha=0,
-                    legend_label=f'{peak} Average: {np.nanmean([np.nanmean(res[det][f"{peak}"]) for det in res]):.2f}keV',
-                    name=f'{peak} Average: {np.nanmean([np.nanmean(res[det][f"{peak}"]) for det in res]):.2f}keV',
+                    legend_label=f"{peak} Average: {np.nanmean([np.nanmean(res[det][peak]) for det in res]):.2f}keV",
+                    name=f"{peak} Average: {np.nanmean([np.nanmean(res[det][peak]) for det in res]):.2f}keV",
                 )
             band = Band(
                 base=f"x_{int(peak)}",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import pickle as pkl
 import shelve
@@ -10,12 +11,10 @@ import matplotlib.pyplot as plt
 import panel as pn
 import param
 
-import legenddashboard.string_visulization as visu
+import legenddashboard.geds.string_visulization as visu
 from legenddashboard.geds import cal
 from legenddashboard.geds.ged_monitoring import GedMonitoring
-from legenddashboard.util import (
-    sorter,
-)
+from legenddashboard.util import logo_path, read_config, sorter
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +25,8 @@ plt.rcParams["figure.dpi"] = 100
 
 
 class CalMonitoring(GedMonitoring):
+    cached_data = param.Dict(default={"hit": {}, "dsp": {}})
+    tmp_path = param.String("/tmp/")
     plot_type_tracking = param.ObjectSelector(
         default=list(cal.tracking_plots)[1],
         objects=list(cal.tracking_plots),
@@ -51,22 +52,24 @@ class CalMonitoring(GedMonitoring):
     @param.depends("run", "sort_by", "plot_types_download")
     def download_summary_files(self):
         start_time = time.time()
-        download_file, download_filename = self.plot_types_summary_dict[
-            self.plot_types_download
-        ](
+        download_file, download_filename = cal.summary_plots[self.plot_types_download](
+            self.prod_config,
             self.run,
             self.run_dict[self.run],
             self.base_path,
             self.period,
             key=self.sort_by,
             download=True,
+            sort_dets_obj=self.sort_obj,
+            cache_data=self.cached_data,
         )
         # log.debug(download_filename)
-        if not (Path(self.tmp_path) / download_filename).exists():
-            download_file.to_csv(self.tmp_path + download_filename, index=False)
-            log.debug(download_file, self.tmp_path)
+        tmp_path = Path(self.tmp_path)
+        if not (tmp_path / download_filename).exists():
+            download_file.to_csv(tmp_path / download_filename, index=False)
+            log.debug(download_file, tmp_path)
         ret = pn.widgets.FileDownload(
-            self.tmp_path + download_filename,
+            tmp_path / download_filename,
             filename=download_filename,
             button_type="success",
             embed=False,
@@ -82,6 +85,11 @@ class CalMonitoring(GedMonitoring):
     def view_summary(self):
         start_time = time.time()
         figure = None
+        if self.cached_data == {}:
+            self.cached_data = {
+                "hit": {},
+                "dsp": {},
+            }
         if self.plot_type_summary in [
             "FWHM Qbb",
             "FWHM FEP",
@@ -93,24 +101,31 @@ class CalMonitoring(GedMonitoring):
             "Valid. A/E",
             "A/E SF",
         ]:
-            figure = self.plot_types_summary_dict[self.plot_type_summary](
+            figure = cal.summary_plots[self.plot_type_summary](
+                self.prod_config,
                 self.run,
                 self.run_dict[self.run],
                 self.base_path,
                 self.period,
                 key=self.sort_by,
+                sort_dets_obj=self.sort_obj,
+                cache_data=self.cached_data,
             )
 
         elif self.plot_type_summary in ["Detector Status", "FEP Counts"]:
             # elif self.plot_type_summary in ["Detector Status"]:
             strings_dict, meta_visu_chan_dict, meta_visu_channel_map = sorter(
-                self.base_path, self.run_dict[self.run]["timestamp"], key="String"
+                self.base_path,
+                self.run_dict[self.run]["timestamp"],
+                key="String",
+                sort_dets_obj=self.sort_obj,
             )
             meta_visu_source, meta_visu_xlabels = visu.get_plot_source_and_xlabels(
                 meta_visu_chan_dict, meta_visu_channel_map, strings_dict
             )
             # self.meta_visu_chan_dict, self.meta_visu_channel_map = chan_dict, channel_map
-            figure = self.plot_types_summary_dict[self.plot_type_summary](
+            figure = cal.summary_plots[self.plot_type_summary](
+                self.prod_config,
                 self.run,
                 self.run_dict[self.run],
                 self.base_path,
@@ -118,6 +133,8 @@ class CalMonitoring(GedMonitoring):
                 meta_visu_xlabels,
                 self.period,
                 key=self.sort_by,
+                sort_dets_obj=self.sort_obj,
+                cache_data=self.cached_data,
             )
         elif self.plot_type_summary in [
             "Baseline Spectrum",
@@ -126,7 +143,8 @@ class CalMonitoring(GedMonitoring):
             "FEP Stability",
             "Pulser Stability",
         ]:
-            figure = self.plot_types_summary_dict[self.plot_type_summary](
+            figure = cal.summary_plots[self.plot_type_summary](
+                self.prod_config,
                 self.common_dict,
                 self.channel_map,
                 self.strings_dict[self.string],
@@ -135,12 +153,21 @@ class CalMonitoring(GedMonitoring):
                 self.period,
                 self.run_dict[self.run],
                 key=self.sort_by,
+                sort_dets_obj=self.sort_obj,
+                cache_data=self.cached_data,
             )
         else:
-            figure = figure()
+            figure = plt.figure()
 
         log.debug("Time to get summary plot:", extra={"time": time.time() - start_time})
         return figure
+
+    @param.depends("period")
+    def _clear_cached_data(self):
+        """
+        Clear the cached data if the period changes.
+        """
+        self.cached_data = {}
 
     @param.depends("period", "date_range", "plot_type_tracking", "string", "sort_by")
     def view_tracking(self):
@@ -149,15 +176,22 @@ class CalMonitoring(GedMonitoring):
             figure = cal.plot_tracking(
                 self._get_run_dict(),
                 self.base_path,
-                self.plot_types_tracking_dict[self.plot_type_tracking],
+                cal.tracking_plots[self.plot_type_tracking],
                 self.string,
                 self.period,
                 self.plot_type_tracking,
                 key=self.sort_by,
+                cache_data=self.cached_data,
+                sort_dets_obj=self.sort_obj,
             )
         else:
             figure = cal.plot_energy_residuals_period(
-                self._get_run_dict(), self.base_path, self.period, key=self.sort_by
+                self._get_run_dict(),
+                self.base_path,
+                self.period,
+                key=self.sort_by,
+                cache_data=self.cached_data,
+                sort_dets_obj=self.sort_obj,
             )
         return figure
 
@@ -179,7 +213,10 @@ class CalMonitoring(GedMonitoring):
             self.common_dict = shelf["common"]
         channels.remove("common")
         self.strings_dict, self.chan_dict, self.channel_map = sorter(
-            self.base_path, self.run_dict[self.run]["timestamp"], "String"
+            self.base_path,
+            self.run_dict[self.run]["timestamp"],
+            "String",
+            sort_dets_obj=self.sort_obj,
         )
 
         self.param["channel"].objects = channels
@@ -209,7 +246,7 @@ class CalMonitoring(GedMonitoring):
     @param.depends("parameter", watch=True)
     def update_plot_type_details(self):
         start_time = time.time()
-        plots = self._options[self.parameter]
+        plots = cal.all_detailed_plots[self.parameter]
         self.param["plot_type_details"].objects = plots
         self.plot_type_details = plots[0]
         log.debug(
@@ -278,7 +315,7 @@ class CalMonitoring(GedMonitoring):
             fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
         return fig_pane
 
-    def build_detailed_pane(self, logo_path, widget_widths: int = 140):
+    def build_detailed_pane(self, widget_widths: int = 140):
         details_ch_param = pn.Param(
             self.param,
             widgets={
@@ -311,7 +348,7 @@ class CalMonitoring(GedMonitoring):
             name="Detailed Plots",
             button_type="primary",
             width=widget_widths,
-            items=cal.param.parameter.objects,
+            items=self.param.parameter.objects,
         )
 
         def update_details_plots(event):
@@ -330,13 +367,13 @@ class CalMonitoring(GedMonitoring):
             ),
             pn.Row("## Current Plot:", details_param_currentValue),
             pn.Row("Channel:", details_ch_param, "Plot type:", details_type_param),
-            self.get_RunAndChannel,
+            self.get_run_and_channel,
             self.view_details,
             name="Cal. Details",
             sizing_mode="scale_both",
         )
 
-    def build_summary_pane(self, logo_path, widget_widths: int = 140):
+    def build_summary_pane(self, widget_widths: int = 140):
         summary_param_currentValue = pn.pane.Markdown(f"## {self.plot_type_summary}")
         summary_param = pn.widgets.MenuButton(
             name="Summary Plots",
@@ -379,7 +416,7 @@ class CalMonitoring(GedMonitoring):
             sizing_mode="scale_both",
         )
 
-    def build_tracking_pane(self, logo_path, widget_widths: int = 140):
+    def build_tracking_pane(self, widget_widths: int = 140):
         # tracking_range_param = pn.Param(
         #     self.param,
         #     widgets={
@@ -424,29 +461,65 @@ class CalMonitoring(GedMonitoring):
             sizing_mode="scale_both",
         )
 
-    def build_cal_panes(self, logo_path, widget_widths: int = 140):
+    def build_cal_panes(self, widget_widths: int = 140):
+        self.update_plot_dict()
         return {
-            "Cal. Summary": self.build_summary_pane(logo_path, widget_widths),
-            "Cal. Details": self.build_detailed_pane(logo_path, widget_widths),
-            "Cal. Tracking": self.build_tracking_pane(logo_path, widget_widths),
+            "Cal. Summary": self.build_summary_pane(widget_widths),
+            "Cal. Details": self.build_detailed_pane(widget_widths),
+            "Cal. Tracking": self.build_tracking_pane(widget_widths),
         }
 
     @classmethod
     def init_cal_panes(
         cls,
         base_path,
-        logo_path,
         widget_widths: int = 140,
     ):
         """
         Initialize the calibration panes.
 
         Args:
-            logo_path (str): Path to the logo.
             widget_widths (int): Width of the widgets.
 
         Returns:
             dict: Dictionary containing the calibration panes.
         """
         cal_monitor = cls(base_path=base_path)
-        return cal_monitor.build_cal_panes(logo_path, widget_widths)
+        return cal_monitor.build_cal_panes(widget_widths)
+
+    @classmethod
+    def display_cal_panes(
+        cls,
+        base_path,
+        notebook=False,
+        widget_widths: int = 140,
+    ):
+        """
+        View the calibration panes.
+
+        Args:
+            widget_widths (int): Width of the widgets.
+
+        Returns:
+            dict: Dictionary containing the calibration panes.
+        """
+        cal_monitor = cls(base_path=base_path, notebook=notebook)
+        sidebar = cal_monitor.build_sidebar()
+        return pn.Row(
+            sidebar, pn.Tabs(*cal_monitor.build_cal_panes(widget_widths).values())
+        )
+
+
+def run_dashboard_cal() -> None:
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("config_file", type=str)
+    argparser.add_argument("-p", "--port", type=int, default=9000)
+    argparser.add_argument(
+        "-w", "--widget_widths", type=int, default=140, required=False
+    )
+    args = argparser.parse_args()
+
+    config = read_config(args.config_file)
+    cal_panes = CalMonitoring.display_cal_panes(config.base, args.widget_widths)
+    print("Starting Cal. Monitoring on port ", args.port)  # noqa: T201
+    pn.serve(cal_panes, port=args.port, show=False)

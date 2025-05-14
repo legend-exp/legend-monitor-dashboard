@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from legenddashboard.muon_plots import (
+from legenddashboard.muon.muon_plots import (
     muon_plot_calshift,
     muon_plot_intlight,
     muon_plot_ratesFloor,

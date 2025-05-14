@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
+import matplotlib as mpl
 import numpy as np
-from dbetto import Props
+import panel as pn
+from dbetto import AttrsDict, Props, TextDB
+from dbetto.catalog import Catalog
 from legendmeta import LegendMetadata
+
+# somehow TUM server needs Agg -> needs fix in the future
+mpl.use("Agg")
+
+# use terminal and tabulator extensions, sizing mode stretch enables nicer layout
+pn.extension("terminal")
+pn.extension("tabulator")
+pn.extension("plotly")
+pn.extension("katex", "mathjax")
+
+logo_path = Path(__file__).parent.parent.parent / "logos"
 
 sort_dict = {
     "String": {
@@ -25,6 +40,63 @@ sort_dict = {
     "Det_Type": {"out_key": "{k}", "primary_key": "type", "secondary_key": "name"},
     "DAQ": {"out_key": None, "primary_key": None, "secondary_key": None},
 }
+
+
+def read_config(config: str | dict) -> AttrsDict:
+    """
+    Parse the config file or dictionary and return an AttrsDict.
+    """
+    if isinstance(config, str | Path):
+        config = AttrsDict(Props.read_from(config))
+    else:
+        config = AttrsDict(config)
+
+    return config.paths
+
+
+class sort_dets:
+    def __init__(self, path):
+        self.cached_chmaps = {}
+        self.cached_det_status = {}
+
+        path = Path(path)
+
+        self.prod_config = path / "dataflow-config.yaml"
+        self.prod_config = Props.read_from(self.prod_config, subst_pathvar=True)
+
+        meta_path = Path(self.prod_config["paths"]["metadata"])
+        chmap_path = Path(self.prod_config["paths"]["chan_map"])
+        chmap_catalog = Catalog.read_from(chmap_path / "channelmaps" / "validity.yaml")
+        chmap_entries = {}
+        meta = LegendMetadata(meta_path, lazy=False)
+        for system in chmap_catalog.entries:
+            chmap_entries[system] = []
+            for entry in chmap_catalog.entries[system]:
+                try:
+                    db = meta.channelmap(
+                        datetime.fromtimestamp(entry.valid_from, tz=UTC), system=system
+                    )
+                    new_entry = Catalog.Entry(entry.valid_from, db)
+                    chmap_entries[system].append(new_entry)
+                except RuntimeError:
+                    continue
+
+        self.chmaps = Catalog(chmap_entries)
+
+        status_path = Path(self.prod_config["paths"]["detector_status"]) / "statuses"
+        status_catalog = Catalog.read_from(status_path / "validity.yaml")
+        status_entries = {}
+        textdb = TextDB(status_path, lazy=False)
+        for system in status_catalog.entries:
+            status_entries[system] = []
+            for entry in status_catalog.entries[system]:
+                db = textdb.on(
+                    datetime.fromtimestamp(entry.valid_from, tz=UTC), system=system
+                )
+                new_entry = Catalog.Entry(entry.valid_from, db)
+                status_entries[system].append(new_entry)
+
+        self.statuses = Catalog(status_entries)
 
 
 def gen_run_dict(path):
@@ -53,18 +125,26 @@ def gen_run_dict(path):
     return run_dict
 
 
-def sorter(path, timestamp, key="String", datatype="cal", spms=False):
-    prod_config = Path(path) / "dataflow-config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)  # ["setups"]["l200"]
+def sorter(
+    path, timestamp, key="String", datatype="cal", spms=False, sort_dets_obj=None
+):
+    if sort_dets_obj is not None:
+        chmap = sort_dets_obj.chmaps.valid_for(timestamp, system=datatype)
+        det_status = sort_dets_obj.statuses.valid_for(timestamp, system=datatype)
+    else:
+        prod_config = Path(path) / "dataflow-config.yaml"
+        prod_config = Props.read_from(
+            prod_config, subst_pathvar=True
+        )  # ["setups"]["l200"]
 
-    cfg_file = prod_config["paths"]["metadata"]
-    configs = LegendMetadata(path=cfg_file)
-    chmap = configs.channelmap(timestamp)
+        cfg_file = prod_config["paths"]["metadata"]
+        configs = LegendMetadata(path=cfg_file)
+        chmap = configs.channelmap(timestamp)
 
-    det_status_path = prod_config["paths"]["detector_status"]
-    det_status = LegendMetadata(path=det_status_path).statuses.on(
-        timestamp, system=datatype
-    )
+        det_status_path = prod_config["paths"]["detector_status"]
+        det_status = LegendMetadata(path=det_status_path, lazy=True).statuses.on(
+            timestamp, system=datatype
+        )
 
     out_dict = {}
     # SiPMs sorting
@@ -88,7 +168,7 @@ def sorter(path, timestamp, key="String", datatype="cal", spms=False):
         for k, entry in sorted(mapping.items()):
             for m, item in sorted(entry.map("daq.card.id", unique=False).items()):
                 out_dict[f"DAQ:Cr{k:02},Ch{m:02}"] = [
-                    item.map("daq.channel")[pos].daq.name
+                    item.map("daq.channel")[pos].name
                     for pos in sorted(item.map("daq.channel"))
                     if item.map("daq.channel")[pos].system == "geds"
                 ]

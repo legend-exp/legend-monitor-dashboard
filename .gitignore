@@ -1,3 +1,10 @@
+# uv
+uv.lock
+
+#testing
+Test.ipynb
+
+
 # ignore data files
 data/
 tmp/

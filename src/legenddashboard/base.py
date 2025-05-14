@@ -14,7 +14,7 @@ from bokeh.io import output_notebook
 from bokeh.resources import INLINE
 from dbetto import Props
 
-from legenddashboard.util import gen_run_dict
+from legenddashboard.util import gen_run_dict, logo_path, sort_dets
 
 log = logging.getLogger(__name__)
 
@@ -24,9 +24,9 @@ class Monitoring(param.Parameterized):
     Base class for monitoring dashboards.
     """
 
-    base_path = param.String("")
-    prod_config = param.Dict({})
-    tier_dict = param.Dict({})
+    base_path = param.String("", allow_refs=True, nested_refs=True)
+    prod_config = param.Dict({}, allow_refs=True, nested_refs=True)
+    tier_dict = param.Dict({}, allow_refs=True, nested_refs=True)
     period = param.Selector(
         default="p00",
         objects=[f"p{i:02}" for i in range(100)],
@@ -60,6 +60,7 @@ class Monitoring(param.Parameterized):
             output_notebook(INLINE)
         self.cached_plots = {}
         self.base_path = base_path
+        self.sort_obj = sort_dets(base_path)
 
         self.startup_bool = True
         super().__init__(**params)
@@ -157,58 +158,53 @@ class Monitoring(param.Parameterized):
         log.debug("Time to get run dict:", extra={"time": time.time() - start_time})
         return out_dict
 
+    def build_sidebar(self):
+        run_param = pn.widgets.MenuButton(
+            name=f"Run {int(self.run[1:]):02d}",
+            button_type="primary",
+            sizing_mode="stretch_width",
+            items=self.param.run.objects,
+        )
 
-def build_sidebar(self, logo_path):
-    run_param = pn.widgets.MenuButton(
-        name=f"Run {int(self.run[1:]):02d}",
-        button_type="primary",
-        sizing_mode="stretch_width",
-        items=self.param.run.objects,
-    )
+        def update_run(event):
+            self.run = event.new
+            run_param.name = f"Run {int(self.run[1:]):02d}"
 
-    def update_run(event):
-        self.run = event.new
-        run_param.name = f"Run {int(self.run[1:]):02d}"
+        run_param.on_click(update_run)
+        # run_param        = pn.Param(self.param, widgets={'run': {'widget_type': pn.widgets.Select, 'width': 100}}, parameters=['run'], show_labels=False, show_name=False, design=Bootstrap)
+        period_param = pn.widgets.MenuButton(
+            name=f"Period {int(self.period[1:]):02d}",
+            button_type="primary",
+            sizing_mode="stretch_width",
+            items=self.param.period.objects,
+        )
 
-    run_param.on_click(update_run)
-    # run_param        = pn.Param(self.param, widgets={'run': {'widget_type': pn.widgets.Select, 'width': 100}}, parameters=['run'], show_labels=False, show_name=False, design=Bootstrap)
-    period_param = pn.widgets.MenuButton(
-        name=f"Period {int(self.period[1:]):02d}",
-        button_type="primary",
-        sizing_mode="stretch_width",
-        items=self.param.period.objects,
-    )
+        def update_period(event):
+            self.period = event.new
+            run_param.items = self.param.run.objects
+            run_param.name = f"Run {int(self.run[1:]):02d}"
+            period_param.name = f"Period {int(self.period[1:]):02d}"
 
-    def update_period(event):
-        self.period = event.new
-        run_param.items = self.param.run.objects
-        run_param.name = f"Run {int(self.run[1:]):02d}"
-        period_param.name = f"Period {int(self.period[1:]):02d}"
+        period_param.on_click(update_period)
 
-    period_param.on_click(update_period)
+        return pn.Column(
+            pn.pane.SVG(
+                logo_path / "Period.svg",
+                height=25,
+            ),
+            period_param,
+            pn.pane.SVG(
+                logo_path / "Run.svg",
+                height=25,
+            ),
+            run_param,
+            sizing_mode="stretch_width",
+        )
 
-    return pn.Column(
-        pn.pane.SVG(
-            logo_path / "Period.svg",
-            height=25,
-        ),
-        period_param,
-        pn.pane.SVG(
-            logo_path / "Run.svg",
-            height=25,
-        ),
-        run_param,
-        pn.pane.SVG(
-            logo_path / "Sort_by.svg",
-            height=25,
-        ),
-    )
+    def build_base(path, notebook=False):
+        monitor = Monitoring(
+            base_path=path,
+            notebook=notebook,
+        )
 
-
-def build_base(path, logo_path, notebook=False):
-    monitor = Monitoring(
-        base_path=path,
-        notebook=notebook,
-    )
-
-    return build_sidebar(monitor, logo_path)
+        return monitor.build_sidebar()

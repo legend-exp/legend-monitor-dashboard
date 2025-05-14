@@ -58,7 +58,7 @@ tracking_plots = {
     "A/E Mean": plot_aoe_mean,
     "A/E Cut": plot_aoe_cut,
     "A/E Sigma": plot_aoe_sig,
-    "Tau": plot_tau,
+    "PZ": plot_tau,
     "Alpha": plot_ctc_const,
 }
 
@@ -73,7 +73,7 @@ summary_plots = {
     "A/E Status": plot_aoe_status,
     "Valid. A/E": plot_no_fitted_aoe_slices,
     "A/E SF": get_aoe_results,
-    "Tau": plot_pz_consts,
+    "PZ": plot_pz_consts,
     "CT Alpha": plot_alpha,
     "Baseline Spectrum": plot_bls,
     "Baseline Stability": plot_baseline_stability,

@@ -14,6 +14,7 @@ from bokeh.plotting import figure
 
 from legenddashboard import muon
 from legenddashboard.base import Monitoring
+from legenddashboard.util import logo_path
 
 log = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ class MuonMonitoring(Monitoring):
         log.debug("Time to get meta:", extra={"time": time.time() - start_time})
         return ret
 
-    def build_muon_cal_pane(self, logo_path, widget_widths=140):
+    def build_muon_cal_pane(self, widget_widths=140):
         muon_cal_param_currentValue = pn.pane.Markdown(f"## {self.muon_plots_cal}")
         muon_cal_param = pn.widgets.MenuButton(
             name="Calibration",
@@ -180,7 +181,7 @@ class MuonMonitoring(Monitoring):
             sizing_mode="scale_both",
         )
 
-    def build_muon_mon_pane(self, logo_path, widget_widths=140):
+    def build_muon_mon_pane(self, widget_widths=140):
         muon_mon_param_currentValue = pn.pane.Markdown(f"## {self.muon_plots_mon}")
         muon_mon_param = pn.widgets.MenuButton(
             name="Monitoring",
@@ -211,12 +212,11 @@ class MuonMonitoring(Monitoring):
 
     def build_muon_panes(
         self,
-        logo_path,
         widget_widths=140,
     ):
         return {
-            "Muon Cal. Plots": self.build_muon_cal_pane(logo_path, widget_widths),
-            "Muon Mon. Plots": self.build_muon_mon_pane(logo_path, widget_widths),
+            "Muon Cal. Plots": self.build_muon_cal_pane(widget_widths),
+            "Muon Mon. Plots": self.build_muon_mon_pane(widget_widths),
         }
 
     @classmethod
@@ -224,7 +224,6 @@ class MuonMonitoring(Monitoring):
         cls,
         base_path,
         muon_path,
-        logo_path,
         widget_widths=140,
     ):
         """
@@ -240,4 +239,4 @@ class MuonMonitoring(Monitoring):
         return cls(
             base_path=base_path,
             muon_path=muon_path,
-        ).build_muon_panes(base_path, logo_path, widget_widths)
+        ).build_muon_panes(base_path, widget_widths)

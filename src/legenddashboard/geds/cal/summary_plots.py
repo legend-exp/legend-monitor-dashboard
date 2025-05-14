@@ -23,7 +23,7 @@ from bokeh.plotting import figure
 from dbetto import Props
 from legendmeta import LegendMetadata
 
-from legenddashboard.string_visulization import create_detector_plot
+from legenddashboard.geds.string_visulization import create_detector_plot
 from legenddashboard.util import sorter
 
 log = logging.getLogger(__name__)
@@ -84,19 +84,33 @@ def build_status_map(chan_map, data):
     return data_array, x_axes, y_axes, annot_array
 
 
-def plot_status(run, run_dict, path, source, xlabels, period, key=None):
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    chmap = LegendMetadata(path=prod_config["paths"]["metadata"])
-
-    cmap = chmap.channelmap(run_dict["timestamp"])
+def plot_status(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    source,
+    xlabels,
+    period,
+    key=None,
+    sort_dets_obj=None,
+    cache_data=None,
+):
+    if sort_dets_obj is not None:
+        statuses = sort_dets_obj.statuses.valid_for(run_dict["timestamp"])
+        cmap = sort_dets_obj.chmaps.valid_for(run_dict["timestamp"])
+    else:
+        chmap = LegendMetadata(path=prod_config["paths"]["chan_map"])
+        cmap = chmap.channelmap(run_dict["timestamp"])
+        status_map = LegendMetadata(
+            path=prod_config["paths"]["detector_status"], lazy=True
+        ).statuses
+        statuses = status_map.on(run_dict["timestamp"])
 
     dets, strings, positions = build_string_array(cmap)
 
     color_dict = {"on": 2, "off": 0, "ac": 1}
-    display_dict = {
-        cmap[i]["daq"]["rawid"]: color_dict[cmap["usability"]] for i in dets
-    }
+    display_dict = {i: color_dict[statuses[i]["usability"]] for i in dets}
 
     # display_dict = {cmap[i]['daq']['rawid'] : 1 if status_map[i]["processable"] == True and status_map[i]["usability"] == 'on' else 0
     #     for i in dets}
@@ -153,37 +167,48 @@ def build_counts_map(chan_map, data):
 
 
 def plot_counts(
-    run, run_dict, path, source, xlabels, period, key=None
+    prod_config,
+    run,
+    run_dict,
+    path,
+    source,
+    xlabels,
+    period,
+    key=None,
+    sort_dets_obj=None,
+    cache_data=None,
 ):  # FEP counts plot
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    chmap = LegendMetadata(path=prod_config["paths"]["metadata"])
+    if sort_dets_obj is not None:
+        cmap = sort_dets_obj.chmaps.valid_for(run_dict["timestamp"])
+    else:
+        chmap = LegendMetadata(path=prod_config["paths"]["metadata"])
+        cmap = chmap.channelmap(run_dict["timestamp"])
 
-    cmap = chmap.channelmap(run_dict["timestamp"])
-
-    file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-    path = (
-        file_path
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
-    )
-
-    all_res = Props.read_from(path)
+    if cache_data is not None and run in cache_data["hit"]:
+        all_res = cache_data["hit"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+        )
+        all_res = Props.read_from(path)
+        cache_data["hit"][run] = all_res
 
     res = {}
     for det in cmap:
         if cmap[det].system == "geds":
             try:
-                raw_id = cmap[det]["daq"]["rawid"]
-                fep_counts = all_res[f"ch{cmap[det].daq.rawid:07}"]["results"]["ecal"][
-                    "cuspEmax_ctc_cal"
-                ]["total_fep"]
+                fep_counts = all_res[det]["results"]["ecal"]["cuspEmax_ctc_cal"][
+                    "total_fep"
+                ]
                 mass = cmap[det]["production"]["mass_in_g"]
                 mass_in_kg = mass * 0.001
                 counts_per_kg = fep_counts / mass_in_kg  # calculate counts per kg
                 round_counts = round(counts_per_kg, 0)
-                res[raw_id] = round_counts
+                res[det] = round_counts
             except KeyError:
-                res[raw_id] = 0
+                res[det] = 0
 
     display_dict = res
     ctitle = "FEP Counts per kg"
@@ -201,20 +226,32 @@ def plot_counts(
 
 
 def plot_energy_resolutions(
-    run, run_dict, path, period, key="String", at="Qbb", download=False
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    at="Qbb",
+    download=False,
+    cache_data=None,
 ):
-    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
-
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-
-    file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-    path = (
-        file_path
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml',
+    strings, soft_dict, channel_map = sorter(
+        path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    all_res = Props.read_from(path)
+    if cache_data is not None and run in cache_data["hit"]:
+        all_res = cache_data["hit"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+        )
+
+        all_res = Props.read_from(path)
+        cache_data["hit"][run] = all_res
 
     default = {
         "cuspEmax_ctc_cal": {
@@ -248,21 +285,21 @@ def plot_energy_resolutions(
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                det_dict = all_res[f"ch{channel:03}"]["results"]["ecal"]
+                det_dict = all_res[detector]["results"]["ecal"]
                 res[detector] = {
                     "cuspEmax_ctc_cal": {
                         "Qbb_fwhm": det_dict["cuspEmax_ctc_cal"]["eres_linear"][
-                            "Qbb_fwhm_in_keV"
+                            "Qbb_fwhm_in_kev"
                         ],
                         "Qbb_fwhm_err": det_dict["cuspEmax_ctc_cal"]["eres_linear"][
-                            "Qbb_fwhm_err_in_keV"
+                            "Qbb_fwhm_err_in_kev"
                         ],
-                        "2.6_fwhm": det_dict["cuspEmax_ctc_cal"]["pk_fits"]["2614.5"][
-                            "fwhm_in_keV"
-                        ][0],
+                        "2.6_fwhm": det_dict["cuspEmax_ctc_cal"]["pk_fits"][2614.511][
+                            "fwhm_in_kev"
+                        ],
                         "2.6_fwhm_err": det_dict["cuspEmax_ctc_cal"]["pk_fits"][
-                            "2614.5"
-                        ]["fwhm_in_keV"][1],
+                            2614.511
+                        ]["fwhm_err_in_kev"],
                         "m0": det_dict["cuspEmax_ctc_cal"]["eres_linear"]["parameters"][
                             "a"
                         ],
@@ -272,17 +309,17 @@ def plot_energy_resolutions(
                     },
                     "zacEmax_ctc_cal": {
                         "Qbb_fwhm": det_dict["zacEmax_ctc_cal"]["eres_linear"][
-                            "Qbb_fwhm_in_keV"
+                            "Qbb_fwhm_in_kev"
                         ],
                         "Qbb_fwhm_err": det_dict["zacEmax_ctc_cal"]["eres_linear"][
-                            "Qbb_fwhm_err_in_keV"
+                            "Qbb_fwhm_err_in_kev"
                         ],
-                        "2.6_fwhm": det_dict["zacEmax_ctc_cal"]["pk_fits"]["2614.5"][
-                            "fwhm_in_keV"
-                        ][0],
+                        "2.6_fwhm": det_dict["zacEmax_ctc_cal"]["pk_fits"][2614.511][
+                            "fwhm_in_kev"
+                        ],
                         "2.6_fwhm_err": det_dict["zacEmax_ctc_cal"]["pk_fits"][
-                            "2614.5"
-                        ]["fwhm_in_keV"][1],
+                            2614.511
+                        ]["fwhm_err_in_kev"],
                         "m0": det_dict["zacEmax_ctc_cal"]["eres_linear"]["parameters"][
                             "a"
                         ],
@@ -292,17 +329,17 @@ def plot_energy_resolutions(
                     },
                     "trapEmax_ctc_cal": {
                         "Qbb_fwhm": det_dict["trapEmax_ctc_cal"]["eres_linear"][
-                            "Qbb_fwhm_in_keV"
+                            "Qbb_fwhm_in_kev"
                         ],
                         "Qbb_fwhm_err": det_dict["trapEmax_ctc_cal"]["eres_linear"][
-                            "Qbb_fwhm_err_in_keV"
+                            "Qbb_fwhm_err_in_kev"
                         ],
-                        "2.6_fwhm": det_dict["trapEmax_ctc_cal"]["pk_fits"]["2614.5"][
-                            "fwhm_in_keV"
-                        ][0],
+                        "2.6_fwhm": det_dict["trapEmax_ctc_cal"]["pk_fits"][2614.511][
+                            "fwhm_in_kev"
+                        ],
                         "2.6_fwhm_err": det_dict["trapEmax_ctc_cal"]["pk_fits"][
-                            "2614.5"
-                        ]["fwhm_in_keV"][1],
+                            2614.511
+                        ]["fwhm_err_in_kev"],
                         "m0": det_dict["trapEmax_ctc_cal"]["eres_linear"]["parameters"][
                             "a"
                         ],
@@ -380,7 +417,7 @@ def plot_energy_resolutions(
         strict=False,
     ):
         if filter_name == "Cusp":
-            hover_renderer = p.circle(
+            hover_renderer = p.scatter(
                 x="x_{}".format(filter_type.split("_")[0]),
                 y="y_{}".format(filter_type.split("_")[0]),
                 source=df_plot,
@@ -391,7 +428,7 @@ def plot_energy_resolutions(
                 name=f'{filter_name} Average: {np.nanmean([res[det][filter_type][f"{at}_fwhm"] for det in res]):.2f}keV',
             )
         else:
-            p.circle(
+            p.scatter(
                 x="x_{}".format(filter_type.split("_")[0]),
                 y="y_{}".format(filter_type.split("_")[0]),
                 source=df_plot,
@@ -454,45 +491,85 @@ def plot_energy_resolutions(
 
 
 def plot_energy_resolutions_Qbb(
-    run, run_dict, path, period, key="String", download=False
-):
-    return plot_energy_resolutions(
-        run, run_dict, path, period, key=key, at="Qbb", download=download
-    )
-
-
-def plot_energy_resolutions_2614(
-    run, run_dict, path, period, key="String", download=False
-):
-    return plot_energy_resolutions(
-        run, run_dict, path, period, key=key, at="2.6", download=download
-    )
-
-
-def plot_energy_residuals(
+    prod_config,
     run,
     run_dict,
     path,
     period,
     key="String",
-    filter_param="cuspEmax_ctc_cal",
+    sort_dets_obj=None,
     download=False,
+    cache_data=None,
 ):
-    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
-
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-
-    file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-    path = (
-        Path(file_path)
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml',
+    return plot_energy_resolutions(
+        prod_config,
+        run,
+        run_dict,
+        path,
+        period,
+        key=key,
+        at="Qbb",
+        sort_dets_obj=sort_dets_obj,
+        download=download,
+        cache_data=cache_data,
     )
 
-    peaks = [2614.5, 583.191, 2103.53]
-    filters = ["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"]
 
-    all_res = Props.read_from(path)
+def plot_energy_resolutions_2614(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    download=False,
+    cache_data=None,
+):
+    return plot_energy_resolutions(
+        prod_config,
+        run,
+        run_dict,
+        path,
+        period,
+        key=key,
+        sort_dets_obj=sort_dets_obj,
+        at="2.6",
+        download=download,
+        cache_data=cache_data,
+    )
+
+
+def plot_energy_residuals(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    filter_param="cuspEmax_ctc_cal",
+    download=False,
+    cache_data=None,
+):
+    strings, soft_dict, channel_map = sorter(
+        path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
+    )
+
+    if cache_data is not None and run in cache_data["hit"]:
+        all_res = cache_data["hit"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+        )
+
+        all_res = Props.read_from(path)
+        cache_data["hit"][run] = all_res
+
+    peaks = [2614.511, 583.191, 2103.511]
+    filters = ["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"]
 
     default_peaks = {f"{peak}": np.nan for peak in peaks}
     default_peaks.update({f"{peak}_err": np.nan for peak in peaks})
@@ -504,43 +581,43 @@ def plot_energy_residuals(
             detector = channel_map[channel]["name"]
             res[detector] = copy.deepcopy(default)
             try:
-                det_dict = all_res[f"ch{channel:07}"]["results"]["ecal"]
+                det_dict = all_res[detector]["results"]["ecal"]
                 for filt in filters:
-                    cal_dict = all_res[f"ch{channel:07}"]["pars"]["operations"][filt]
+                    cal_dict = all_res[detector]["pars"]["operations"][filt]
                     for peak in peaks:
-                        try:
-                            cal_mu = ne.evaluate(
+                        # try:
+                        cal_mu = ne.evaluate(
+                            f"{cal_dict['expression']}",
+                            local_dict=dict(
+                                {
+                                    filt.replace("_cal", ""): det_dict[filt]["pk_fits"][
+                                        peak
+                                    ]["parameters"]["mu"]
+                                },
+                                **cal_dict["parameters"],
+                            ),
+                        )
+                        cal_err = (
+                            ne.evaluate(
                                 f"{cal_dict['expression']}",
                                 local_dict=dict(
                                     {
                                         filt.replace("_cal", ""): det_dict[filt][
                                             "pk_fits"
-                                        ][str(peak)]["parameters_in_ADC"]["mu"]
+                                        ][peak]["uncertainties"]["mu"]
+                                        + det_dict[filt]["pk_fits"][peak]["parameters"][
+                                            "mu"
+                                        ]
                                     },
                                     **cal_dict["parameters"],
                                 ),
                             )
-                            cal_err = (
-                                ne.evaluate(
-                                    f"{cal_dict['expression']}",
-                                    local_dict=dict(
-                                        {
-                                            filt.replace("_cal", ""): det_dict[filt][
-                                                "pk_fits"
-                                            ][str(peak)]["uncertainties_in_ADC"]["mu"]
-                                            + det_dict[filt]["pk_fits"][str(peak)][
-                                                "parameters_in_ADC"
-                                            ]["mu"]
-                                        },
-                                        **cal_dict["parameters"],
-                                    ),
-                                )
-                                - cal_mu
-                            )
-                            res[detector][filt][f"{peak}"] = cal_mu - peak
-                            res[detector][filt][f"{peak}_err"] = cal_err
-                        except KeyError:
-                            pass
+                            - cal_mu
+                        )
+                        res[detector][filt][f"{peak}"] = cal_mu - peak
+                        res[detector][filt][f"{peak}_err"] = cal_err
+                        # except KeyError:
+                        #     pass
             except KeyError:
                 pass
 
@@ -600,7 +677,7 @@ def plot_energy_residuals(
 
     for peak, peak_color in zip(peaks, ["blue", "green", "red"], strict=False):
         if peak == peaks[0]:
-            hover_renderer = p.circle(
+            hover_renderer = p.scatter(
                 x=f"x_{filter_type.split('_')[0]}_{int(peak)}",
                 y=f"y_{filter_type.split('_')[0]}_{int(peak)}",
                 source=df_plot,
@@ -611,7 +688,7 @@ def plot_energy_residuals(
                 name=f'{peak} Average: {np.nanmean([res[det][filter_param][f"{peak}"] for det in res]):.2f}keV',
             )
         else:
-            p.circle(
+            p.scatter(
                 x=f"x_{filter_type.split('_')[0]}_{int(peak)}",
                 y=f"y_{filter_type.split('_')[0]}_{int(peak)}",
                 source=df_plot,
@@ -677,39 +754,53 @@ def plot_energy_residuals(
     return p
 
 
-def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
-    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"])
+def plot_no_fitted_energy_peaks(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    cache_data=None,
+):
+    strings, soft_dict, channel_map = sorter(
+        path, run_dict["timestamp"], sort_dets_obj=sort_dets_obj
+    )
 
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    cfg_file = prod_config["paths"]["chan_map"]
-    configs = LegendMetadata(path=cfg_file)
-    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
+    if sort_dets_obj is not None:
+        chmap = sort_dets_obj.chmaps.valid_for(run_dict["timestamp"])
+    else:
+        cfg_file = prod_config["paths"]["chan_map"]
+        configs = LegendMetadata(path=cfg_file)
+        chmap = configs.channelmaps.on(run_dict["timestamp"])
     channels = [field for field in chmap if chmap[field]["system"] == "geds"]
 
     off_dets = [
-        chmap.map("name")[field].daq.rawid
-        for field in soft_dict
-        if soft_dict[field]["processable"] is False
+        chmap[field] for field in soft_dict if soft_dict[field]["processable"] is False
     ]
 
-    file_path = (
-        Path(prod_config["paths"]["par_hit"])
-        / f"cal/{period}/{run}"
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml',
-    )
+    if cache_data is not None and run in cache_data["hit"]:
+        res = cache_data["hit"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+        )
 
-    res = {}
-    res = Props.read_from(file_path)
+        res = Props.read_from(path)
+        cache_data["hit"][run] = res
 
-    peaks = [583.191, 727.330, 860.564, 1592.53, 1620.50, 2103.53, 2614.50]
+    peaks = [583.191, 727.33, 860.564, 1592.511, 1620.5, 2103.511, 2614.511]
     grid = np.ones((len(peaks), len(channels)))
     for i, channel in enumerate(channels):
         idxs = np.zeros(len(peaks), dtype=bool)
         try:
-            fitted_peaks = res[f"ch{channel:07}"]["results"]["ecal"][
-                "cuspEmax_ctc_cal"
-            ]["fitted_peaks"]
+            fitted_peaks = res[channel]["results"]["ecal"]["cuspEmax_ctc_cal"][
+                "pk_fits"
+            ]
+            fitted_peaks = [pk for pk in fitted_peaks if fitted_peaks["pk"]["validity"]]
             if not isinstance(fitted_peaks, list):
                 fitted_peaks = [fitted_peaks]
             for j, peak in enumerate(peaks):
@@ -786,30 +877,43 @@ def plot_no_fitted_energy_peaks(run, run_dict, path, period, key="String"):
     return p
 
 
-def plot_aoe_status(run, run_dict, path, period, key="String"):
-    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"])
+def plot_aoe_status(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    cache_data=None,
+):
+    strings, soft_dict, channel_map = sorter(
+        path, run_dict["timestamp"], sort_dets_obj=sort_dets_obj
+    )
 
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    cfg_file = prod_config["paths"]["chan_map"]
-    configs = LegendMetadata(path=cfg_file)
-    chmap = configs.channelmaps.on(run_dict["timestamp"]).map("daq.rawid")
+    if sort_dets_obj is not None:
+        chmap = sort_dets_obj.chmaps.valid_for(run_dict["timestamp"])
+    else:
+        cfg_file = prod_config["paths"]["chan_map"]
+        configs = LegendMetadata(path=cfg_file)
+        chmap = configs.channelmaps.on(run_dict["timestamp"])
     channels = [field for field in chmap if chmap[field]["system"] == "geds"]
 
     off_dets = [
-        chmap.map("name")[field].daq.rawid
-        for field in soft_dict
-        if soft_dict[field]["processable"] is False
+        field for field in soft_dict if soft_dict[field]["processable"] is False
     ]
 
-    file_path = (
-        Path(prod_config["paths"]["par_hit"])
-        / f"cal/{period}/{run}"
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml',
-    )
+    if cache_data is not None and run in cache_data["hit"]:
+        res = cache_data["hit"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+        )
 
-    res = {}
-    res = Props.read_from(file_path)
+        res = Props.read_from(path)
+        cache_data["hit"][run] = res
 
     checks = ["Time_corr", "Energy_corr", "Cut_det", "Low_side_sfs", "2_side_sfs"]
 
@@ -817,7 +921,7 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
     for i, channel in enumerate(channels):
         idxs = np.ones(len(checks), dtype=bool)
         try:
-            aoe_dict = res[f"ch{channel:07}"]["results"]["aoe"]
+            aoe_dict = res[channel]["results"]["aoe"]
             if not np.isnan(aoe_dict["1000-1300keV"]["0"]["mean"]):
                 idxs[0] = 1
             if not (
@@ -922,20 +1026,31 @@ def plot_aoe_status(run, run_dict, path, period, key="String"):
     return p
 
 
-def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
-    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
-
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-
-    file_path = (
-        Path(prod_config["paths"]["par_hit"])
-        / f"cal/{period}/{run}"
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+def plot_no_fitted_aoe_slices(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    cache_data=None,
+):
+    strings, soft_dict, channel_map = sorter(
+        path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    res = {}
-    res = Props.read_from(file_path)
+    if cache_data is not None and run in cache_data["hit"]:
+        res = cache_data["hit"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+        )
+
+        res = Props.read_from(path)
+        cache_data["hit"][run] = res
 
     nfits = {}
     for stri in strings:
@@ -943,7 +1058,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
         for channel in strings[stri]:
             detector = channel_map[channel]["name"]
             try:
-                nfits[detector] = res[f"ch{channel:07}"]["results"]["aoe"][
+                nfits[detector] = res[channel]["results"]["aoe"][
                     "correction_fit_results"
                 ]["n_of_valid_fits"]
             except KeyError:
@@ -984,7 +1099,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
         filter_types, filter_names, filter_plot_colors, strict=False
     ):
         if filter_name == "Valid. A/E fits":
-            hover_renderer = p.circle(
+            hover_renderer = p.scatter(
                 x=f"x_{filter_type}",
                 y=filter_type,
                 source=df_plot,
@@ -995,7 +1110,7 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
                 name=filter_name,
             )
         else:
-            p.circle(
+            p.scatter(
                 x=f"x_{filter_type}",
                 y=filter_type,
                 source=df_plot,
@@ -1038,19 +1153,32 @@ def plot_no_fitted_aoe_slices(run, run_dict, path, period, key="String"):
     return p
 
 
-def get_aoe_results(run, run_dict, path, period, key="String", download=False):
-    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
-
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-
-    file_path = (
-        Path(prod_config["paths"]["par_hit"])
-        / f"cal/{period}/{run}"
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+def get_aoe_results(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    download=False,
+    cache_data=None,
+):
+    strings, soft_dict, channel_map = sorter(
+        path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    all_res = Props.read_from(file_path)
+    if cache_data is not None and run in cache_data["hit"]:
+        all_res = cache_data["hit"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
+        )
+
+        all_res = Props.read_from(path)
+        cache_data["hit"][run] = all_res
 
     default = {
         "A/E_Energy_param": "cuspEmax",
@@ -1062,18 +1190,18 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
         "low_cut": np.nan,
         "high_cut": np.nan,
         "low_side_sfs": {
-            "1592.5": {"sf": np.nan, "sf_err": np.nan},
-            "1620.5": {"sf": np.nan, "sf_err": np.nan},
-            "2039.0": {"sf": np.nan, "sf_err": np.nan},
-            "2103.53": {"sf": np.nan, "sf_err": np.nan},
-            "2614.5": {"sf": np.nan, "sf_err": np.nan},
+            1592.5: {"sf": np.nan, "sf_err": np.nan},
+            1620.5: {"sf": np.nan, "sf_err": np.nan},
+            2039.0: {"sf": np.nan, "sf_err": np.nan},
+            2103.53: {"sf": np.nan, "sf_err": np.nan},
+            2614.5: {"sf": np.nan, "sf_err": np.nan},
         },
         "2_side_sfs": {
-            "1592.5": {"sf": np.nan, "sf_err": np.nan},
-            "1620.5": {"sf": np.nan, "sf_err": np.nan},
-            "2039.0": {"sf": np.nan, "sf_err": np.nan},
-            "2103.53": {"sf": np.nan, "sf_err": np.nan},
-            "2614.5": {"sf": np.nan, "sf_err": np.nan},
+            1592.5: {"sf": np.nan, "sf_err": np.nan},
+            1620.5: {"sf": np.nan, "sf_err": np.nan},
+            2039.0: {"sf": np.nan, "sf_err": np.nan},
+            2103.53: {"sf": np.nan, "sf_err": np.nan},
+            2614.5: {"sf": np.nan, "sf_err": np.nan},
         },
     }
 
@@ -1084,7 +1212,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
             detector = channel_map[channel]["name"]
 
             try:
-                aoe_res[detector] = all_res[f"ch{channel:07}"]["results"]["aoe"]
+                aoe_res[detector] = all_res[detector]["results"]["aoe"]
                 if len(aoe_res[detector]) == 0:
                     raise KeyError
             except KeyError:
@@ -1119,7 +1247,7 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
     df_plot = pd.DataFrame()
     df_plot["label_res"] = label_res
 
-    peak_types = ["1592.5", "1620.5", "2039.0", "2103.53", "2614.5"]
+    peak_types = [1592.5, 1620.5, 2039.0, 2103.53, 2614.5]
     peak_names = ["Tl DEP", "Bi FEP", "CC @ Qbb", "Tl SEP", "Tl FEP"]
     peak_colors = ["blue", "orange", "green", "red", "purple"]
 
@@ -1144,11 +1272,13 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
             err_xs.append((x, x))
             err_ys.append((np.nan_to_num(y - yerr), np.nan_to_num(y + yerr)))
 
-        df_plot["x_{}".format(peak_type.split(".")[0])] = np.nan_to_num(x_plot)
-        df_plot["y_{}".format(peak_type.split(".")[0])] = np.nan_to_num(y_plot)
-        df_plot["y_{}_err".format(peak_type.split(".")[0])] = np.nan_to_num(y_plot_err)
-        df_plot["err_xs_{}".format(peak_type.split(".")[0])] = err_xs
-        df_plot["err_ys_{}".format(peak_type.split(".")[0])] = err_ys
+        df_plot["x_{}".format(str(peak_type).split(".")[0])] = np.nan_to_num(x_plot)
+        df_plot["y_{}".format(str(peak_type).split(".")[0])] = np.nan_to_num(y_plot)
+        df_plot["y_{}_err".format(str(peak_type).split(".")[0])] = np.nan_to_num(
+            y_plot_err
+        )
+        df_plot["err_xs_{}".format(str(peak_type).split(".")[0])] = err_xs
+        df_plot["err_ys_{}".format(str(peak_type).split(".")[0])] = err_ys
 
     if download:
         return (
@@ -1159,10 +1289,10 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
     for peak_type, peak_name, peak_color in zip(
         peak_types, peak_names, peak_colors, strict=False
     ):
-        if peak_type == "1592.5":
-            hover_renderer = p.circle(
-                x="x_{}".format(peak_type.split(".")[0]),
-                y="y_{}".format(peak_type.split(".")[0]),
+        if peak_type == 1592.5:
+            hover_renderer = p.scatter(
+                x="x_{}".format(str(peak_type).split(".")[0]),
+                y="y_{}".format(str(peak_type).split(".")[0]),
                 source=df_plot,
                 color=peak_color,
                 size=7,
@@ -1171,9 +1301,9 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
                 name=peak_name,
             )
         else:
-            p.circle(
-                x="x_{}".format(peak_type.split(".")[0]),
-                y="y_{}".format(peak_type.split(".")[0]),
+            p.scatter(
+                x="x_{}".format(str(peak_type).split(".")[0]),
+                y="y_{}".format(str(peak_type).split(".")[0]),
                 source=df_plot,
                 color=peak_color,
                 size=7,
@@ -1182,8 +1312,8 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
                 name=peak_name,
             )
         p.multi_line(
-            xs="err_xs_{}".format(peak_type.split(".")[0]),
-            ys="err_ys_{}".format(peak_type.split(".")[0]),
+            xs="err_xs_{}".format(str(peak_type).split(".")[0]),
+            ys="err_ys_{}".format(str(peak_type).split(".")[0]),
             source=df_plot,
             color=peak_color,
             legend_label=peak_name,
@@ -1229,19 +1359,32 @@ def get_aoe_results(run, run_dict, path, period, key="String", download=False):
     return p
 
 
-def plot_pz_consts(run, run_dict, path, period, key="String", download=False):
-    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
-
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-
-    cal_dict_path = (
-        Path(prod_config["paths"]["par_dsp"])
-        / f"cal/{period}/{run}"
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_dsp.yaml'
+def plot_pz_consts(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    download=False,
+    cache_data=None,
+):
+    strings, soft_dict, channel_map = sorter(
+        path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    cal_dict = Props.read_from(cal_dict_path)
+    if cache_data is not None and run in cache_data["dsp"]:
+        cal_dict = cache_data["hit"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_dsp.yaml'
+        )
+
+        cal_dict = Props.read_from(path)
+        cache_data["dsp"][run] = cal_dict
 
     taus = {}
 
@@ -1250,7 +1393,7 @@ def plot_pz_consts(run, run_dict, path, period, key="String", download=False):
         for channel in strings[stri]:
             det = channel_map[channel]["name"]
             try:
-                taus[det] = float(cal_dict[f"ch{channel:07}"]["pz"]["tau"][:-3]) / 1000
+                taus[det] = float(cal_dict[det]["pz"]["tau1"][:-3]) / 1000
             except KeyError:
                 taus[det] = np.nan
 
@@ -1313,7 +1456,7 @@ def plot_pz_consts(run, run_dict, path, period, key="String", download=False):
     # df_plot = ColumnDataSource(df_plot)
     for pz_type, pz_name, pz_color in zip(pz_types, pz_names, pz_colors, strict=False):
         if pz_type == "pz_constant":
-            hover_renderer = p.circle(
+            hover_renderer = p.scatter(
                 x="x_{}".format(pz_type.split("_")[0]),
                 y="y_{}".format(pz_type.split("_")[0]),
                 source=df_plot,
@@ -1324,7 +1467,7 @@ def plot_pz_consts(run, run_dict, path, period, key="String", download=False):
                 name=pz_name,
             )
         else:
-            p.circle(
+            p.scatter(
                 x="x_{}".format(pz_type.split("_")[0]),
                 y="y_{}".format(pz_type.split("_")[0]),
                 source=df_plot,
@@ -1378,18 +1521,32 @@ def plot_pz_consts(run, run_dict, path, period, key="String", download=False):
     return p
 
 
-def plot_alpha(run, run_dict, path, period, key="String", download=False):
-    strings, soft_dict, channel_map = sorter(path, run_dict["timestamp"], key=key)
-
-    prod_config = Path(path) / "dataflow_config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)
-    cal_dict_path = (
-        Path(prod_config["paths"]["par_dsp"])
-        / f"cal/{period}/{run}"
-        / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_dsp.yaml'
+def plot_alpha(
+    prod_config,
+    run,
+    run_dict,
+    path,
+    period,
+    key="String",
+    sort_dets_obj=None,
+    download=False,
+    cache_data=None,
+):
+    strings, soft_dict, channel_map = sorter(
+        path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    cal_dict = Props.read_from(cal_dict_path)
+    if cache_data is not None and run in cache_data["dsp"]:
+        cal_dict = cache_data["dsp"][run]
+    else:
+        file_path = Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
+        path = (
+            file_path
+            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_dsp.yaml'
+        )
+
+        cal_dict = Props.read_from(path)
+        cache_data["dsp"][run] = cal_dict
 
     trap_alpha = {}
     cusp_alpha = {}
@@ -1403,19 +1560,13 @@ def plot_alpha(run, run_dict, path, period, key="String", download=False):
             det = channel_map[channel]["name"]
             try:
                 trap_alpha[det] = float(
-                    cal_dict[f"ch{channel:07}"]["ctc_params"]["trapEmax_ctc"][
-                        "parameters"
-                    ]["a"]
+                    cal_dict[det]["ctc_params"]["trapEmax_ctc"]["parameters"]["a"]
                 )
                 cusp_alpha[det] = float(
-                    cal_dict[f"ch{channel:07}"]["ctc_params"]["cuspEmax_ctc"][
-                        "parameters"
-                    ]["a"]
+                    cal_dict[det]["ctc_params"]["cuspEmax_ctc"]["parameters"]["a"]
                 )
                 zac_alpha[det] = float(
-                    cal_dict[f"ch{channel:07}"]["ctc_params"]["zacEmax_ctc"][
-                        "parameters"
-                    ]["a"]
+                    cal_dict[det]["ctc_params"]["zacEmax_ctc"]["parameters"]["a"]
                 )
             except KeyError:
                 trap_alpha[det] = np.nan
@@ -1470,7 +1621,7 @@ def plot_alpha(run, run_dict, path, period, key="String", download=False):
         filter_types, filter_names, filter_plot_colors, strict=False
     ):
         if filter_name == "Cusp":
-            hover_renderer = p.circle(
+            hover_renderer = p.scatter(
                 x=f"x_{filter_type}",
                 y=filter_type,
                 source=df_plot,
@@ -1481,7 +1632,7 @@ def plot_alpha(run, run_dict, path, period, key="String", download=False):
                 name=filter_name,
             )
         else:
-            p.circle(
+            p.scatter(
                 x=f"x_{filter_type}",
                 y=filter_type,
                 source=df_plot,
@@ -1530,7 +1681,17 @@ def plot_alpha(run, run_dict, path, period, key="String", download=False):
 
 
 def plot_bls(
-    plot_dict, chan_dict, channels, string, run, period, run_dict, key="String"
+    prod_config,
+    plot_dict,
+    chan_dict,
+    channels,
+    string,
+    run,
+    period,
+    run_dict,
+    key="String",
+    sort_dets_obj=None,
+    cache_data=None,
 ):
     p = figure(
         width=700,
@@ -1558,7 +1719,7 @@ def plot_bls(
 
     for i, channel in enumerate(channels):
         try:
-            plot_dict_chan = plot_dict[f"ch{channel:07}"]
+            plot_dict_chan = plot_dict[channel]
 
             p.step(
                 plot_dict_chan["baseline_spectrum"]["bins"],
@@ -1584,6 +1745,7 @@ def plot_bls(
 
 
 def plot_energy_spectra(
+    prod_config,
     plot_dict,
     chan_dict,
     channels,
@@ -1592,7 +1754,9 @@ def plot_energy_spectra(
     period,
     run_dict,
     key="String",
+    sort_dets_obj=None,
     energy_param="cuspEmax_ctc_cal",
+    cache_data=None,
 ):
     p = figure(
         width=700,
@@ -1621,7 +1785,7 @@ def plot_energy_spectra(
 
     for i, channel in enumerate(channels):
         try:
-            plot_dict_chan = plot_dict[f"ch{channel:07}"]
+            plot_dict_chan = plot_dict[channel]
             p.step(
                 plot_dict_chan[energy_param]["spectrum"]["bins"],
                 plot_dict_chan[energy_param]["spectrum"]["counts"],
@@ -1645,7 +1809,17 @@ def plot_energy_spectra(
 
 
 def plot_baseline_stability(
-    plot_dict, chan_dict, channels, string, run, period, run_dict, key="String"
+    prod_config,
+    plot_dict,
+    chan_dict,
+    channels,
+    string,
+    run,
+    period,
+    run_dict,
+    key="String",
+    sort_dets_obj=None,
+    cache_data=None,
 ):
     times = None
     p = figure(
@@ -1672,13 +1846,13 @@ def plot_baseline_stability(
 
     for i, channel in enumerate(channels):
         try:
-            bl = plot_dict[f"ch{channel:07}"]["baseline_stability"]["baseline"]
-            # bl_spread = plot_dict[f"ch{channel:07}"]["baseline_stability"]["spread"]
+            bl = plot_dict[channel]["baseline_stability"]["baseline"]
+            # bl_spread = plot_dict[channel]["baseline_stability"]["spread"]
             mean = np.nanmean(bl[~np.isnan(bl)][:10])
             bl_mean = 100 * (bl - mean) / mean
 
             # define if condition such that timedelta only added if still in UTC
-            base_time = plot_dict[f"ch{channel:07}"]["baseline_stability"]["time"][0]
+            base_time = plot_dict[channel]["baseline_stability"]["time"][0]
             dt_object_base = datetime.utcfromtimestamp(base_time)
             utc_offset_base = dt_object_base.utcoffset()
 
@@ -1686,9 +1860,7 @@ def plot_baseline_stability(
                 p.line(
                     [
                         (datetime.fromtimestamp(time) + timedelta(hours=2))
-                        for time in plot_dict[f"ch{channel:07}"]["baseline_stability"][
-                            "time"
-                        ]
+                        for time in plot_dict[channel]["baseline_stability"]["time"]
                     ],  # add two hours manually
                     bl_mean,
                     legend_label=f'{chan_dict[channel]["name"]}',
@@ -1699,17 +1871,13 @@ def plot_baseline_stability(
                 if times is None:
                     times = [
                         (datetime.fromtimestamp(t) + timedelta(hours=2))
-                        for t in plot_dict[f"ch{channel:03}"]["baseline_stability"][
-                            "time"
-                        ]
+                        for t in plot_dict[channel]["baseline_stability"]["time"]
                     ]
             if utc_offset_base is not None:
                 p.line(
                     [
                         datetime.fromtimestamp(time)
-                        for time in plot_dict[f"ch{channel:07}"]["baseline_stability"][
-                            "time"
-                        ]
+                        for time in plot_dict[channel]["baseline_stability"]["time"]
                     ],
                     bl_mean,
                     legend_label=f'{chan_dict[channel]["name"]}',
@@ -1747,6 +1915,7 @@ def plot_baseline_stability(
 
 
 def plot_stability(
+    prod_config,
     plot_dict,
     chan_dict,
     channels,
@@ -1756,7 +1925,9 @@ def plot_stability(
     period,
     run_dict,
     key="String",
+    sort_dets_obj=None,
     energy_param="cuspEmax_ctc",
+    cache_data=None,
 ):
     times = None
     p = figure(
@@ -1789,7 +1960,7 @@ def plot_stability(
 
     for i, channel in enumerate(channels):
         try:
-            plot_dict_chan = plot_dict[f"ch{channel:07}"]
+            plot_dict_chan = plot_dict[channel]
 
             en = plot_dict_chan[energy_param][parameter]["energy"]
             # en_spread = plot_dict_chan[energy_param][parameter]["spread"]
@@ -1858,6 +2029,7 @@ def plot_stability(
 
 
 def plot_fep_stability_channels2d(
+    prod_config,
     plot_dict,
     chan_dict,
     channels,
@@ -1866,9 +2038,12 @@ def plot_fep_stability_channels2d(
     period,
     run_dict,
     key="String",
+    sort_dets_obj=None,
     energy_param="cuspEmax_ctc_cal",
+    cache_data=None,
 ):
     return plot_stability(
+        prod_config,
         plot_dict,
         chan_dict,
         channels,
@@ -1877,12 +2052,15 @@ def plot_fep_stability_channels2d(
         run,
         period,
         run_dict,
-        key="String",
-        energy_param="cuspEmax_ctc_cal",
+        key=key,
+        sort_dets_obj=sort_dets_obj,
+        energy_param=energy_param,
+        cache_data=cache_data,
     )
 
 
 def plot_pulser_stability_channels2d(
+    prod_config,
     plot_dict,
     chan_dict,
     channels,
@@ -1891,9 +2069,12 @@ def plot_pulser_stability_channels2d(
     period,
     run_dict,
     key="String",
+    sort_dets_obj=None,
     energy_param="cuspEmax_ctc_cal",
+    cache_data=None,
 ):
     return plot_stability(
+        prod_config,
         plot_dict,
         chan_dict,
         channels,
@@ -1902,6 +2083,8 @@ def plot_pulser_stability_channels2d(
         run,
         period,
         run_dict,
-        key="String",
-        energy_param="cuspEmax_ctc_cal",
+        key=key,
+        sort_dets_obj=sort_dets_obj,
+        energy_param=energy_param,
+        cache_data=cache_data,
     )

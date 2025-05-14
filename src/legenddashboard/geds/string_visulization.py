@@ -217,7 +217,7 @@ def create_detector_plot(
     if palette is None:
         palette = pal.inferno(256)
 
-    source.data["y_label"] = [display_dict[ch] for ch in source.data["ch"]]
+    source.data["y_label"] = [display_dict[ch] for ch in source.data["dn"]]
     tooltips = [
         ("Detector Name", "@dn"),
         ("Channel", "@ch"),
@@ -299,10 +299,7 @@ def create_detector_plot(
 
 def plot_visu_usability(source, chan_dict, channel_map, xlabels):
     color_dict = {"on": 2, "off": 0, "ac": 1}
-    display_dict = {
-        i: color_dict[chan_dict[channel_map[i]["name"]]["usability"]]
-        for i in source.data["ch"]
-    }
+    display_dict = {i: color_dict[chan_dict[i]["usability"]] for i in source.data["dn"]}
     palette = ("red", "orange", "green")
     ctitle = "Usability"
     ticker = FixedTicker(ticks=[0.3, 1.0, 1.7], tags=["red", "orange", "green"])
@@ -327,8 +324,7 @@ def plot_visu_usability(source, chan_dict, channel_map, xlabels):
 def plot_visu_processable(source, chan_dict, channel_map, xlabels):
     color_dict = {True: 1, False: 0}
     display_dict = {
-        i: color_dict[chan_dict[channel_map[i]["name"]]["processable"]]
-        for i in source.data["ch"]
+        i: color_dict[chan_dict[i]["processable"]] for i in source.data["dn"]
     }
     palette = ("red", "green")
     ctitle = "Processable"
@@ -353,7 +349,7 @@ def plot_visu_processable(source, chan_dict, channel_map, xlabels):
 
 def plot_visu_mass(source, chan_dict, channel_map, xlabels):
     display_dict = {
-        i: channel_map[i]["production"]["mass_in_g"] for i in source.data["ch"]
+        i: channel_map[i]["production"]["mass_in_g"] for i in source.data["dn"]
     }
     ctitle = "Mass in g"
     return create_detector_plot(source, display_dict, xlabels, ctitle=ctitle)
@@ -362,7 +358,7 @@ def plot_visu_mass(source, chan_dict, channel_map, xlabels):
 def plot_visu_depletion(source, chan_dict, channel_map, xlabels):
     display_dict = {
         i: channel_map[i]["characterization"]["manufacturer"]["depletion_voltage_in_V"]
-        for i in source.data["ch"]
+        for i in source.data["dn"]
     }
     ctitle = "Depletion voltage in V (manufacturer)"
     palette = pal.viridis(256)
@@ -376,7 +372,7 @@ def plot_visu_operation(source, chan_dict, channel_map, xlabels):
         i: channel_map[i]["characterization"]["manufacturer"][
             "recommended_voltage_in_V"
         ]
-        for i in source.data["ch"]
+        for i in source.data["dn"]
     }
     ctitle = "Operational voltage in V (manufacturer)"
     palette = pal.viridis(256)
@@ -388,11 +384,11 @@ def plot_visu_operation(source, chan_dict, channel_map, xlabels):
 def plot_visu_enrichment(source, chan_dict, channel_map, xlabels):
     def get_enrichment(channel):
         try:
-            ret = channel_map[channel]["production"]["enrichment"] * 100
+            ret = channel_map[channel]["production"]["enrichment"]["val"]
         except KeyError:
             ret = 0.0
         return ret
 
-    display_dict = {i: get_enrichment(i) for i in source.data["ch"]}
+    display_dict = {i: get_enrichment(i) for i in source.data["dn"]}
     ctitle = "Enrichment in %"
     return create_detector_plot(source, display_dict, xlabels, ctitle=ctitle)

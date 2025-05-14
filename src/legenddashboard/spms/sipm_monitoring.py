@@ -12,9 +12,14 @@ from bokeh.plotting import figure
 
 import legenddashboard.spms.sipm_plots as spm
 from legenddashboard.base import Monitoring
-from legenddashboard.util import sorter
+from legenddashboard.util import logo_path, sorter
 
 log = logging.getLogger(__name__)
+
+sipm_plot_style_dict = {
+    "Time": spm.sipm_plot_vsTime,
+    "Histogram": spm.sipm_plot_histogram,
+}
 
 
 class SiPMMonitoring(Monitoring):
@@ -22,12 +27,6 @@ class SiPMMonitoring(Monitoring):
 
     # sipm plots
     # sipm_plots_barrels    = ['InnerBarrel-Top', 'InnerBarrel-Bottom', 'OuterBarrel-Top', 'OuterBarrel-Bottom']
-    sipm_plot_style_dict = param.Dict(
-        {
-            "Time": spm.sipm_plot_vsTime,
-            "Histogram": spm.sipm_plot_histogram,
-        }
-    )
     # sipm_resampled_vals = [1, 5, 10, 30, 60]
 
     sipm_sort_by = param.ObjectSelector(objects=["Barrel"], default="Barrel")
@@ -41,6 +40,7 @@ class SiPMMonitoring(Monitoring):
         default=next(iter(sipm_plot_style_dict)),
         objects=list(sipm_plot_style_dict),
     )
+    sipm_plot_style_dict = param.Dict(sipm_plot_style_dict)
 
     # self._get_sipm_data()
 
@@ -123,7 +123,6 @@ class SiPMMonitoring(Monitoring):
 
     def build_spm_pane(
         self,
-        logo_path,
         widget_widths=140,
     ):
         sipm_param_currentValue = pn.pane.Markdown(f"## {self.sipm_barrel}")
@@ -185,7 +184,6 @@ class SiPMMonitoring(Monitoring):
         cls,
         base_path,
         spm_path,
-        logo_path,
         widget_widths=140,
     ):
         """
@@ -194,4 +192,4 @@ class SiPMMonitoring(Monitoring):
         return cls(
             path=base_path,
             sipm_path=spm_path,
-        ).build_spm_pane(logo_path, widget_widths)
+        ).build_spm_pane(widget_widths)

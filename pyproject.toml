@@ -108,6 +108,7 @@ docs = [
 
 [project.scripts]
 dashboard                = "legenddashboard.dashboard:run_dashboard"
+dashboard-cal                = "legenddashboard.geds.cal.cal_monitoring:run_dashboard_cal"
 
 [tool.setuptools.package-dir]
 "" = "src"

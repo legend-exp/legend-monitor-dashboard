@@ -31,6 +31,16 @@ aoe_plots = [
     "sf_v_energy",
 ]
 
+lq_plots = [
+    "stability",
+    "spectrum",
+    "sf_v_energy",
+    "survival_fractions",
+    "cut_fit",
+    "classifier",
+    "drift_time",
+]
+
 baseline_plots = ["baseline_timemap"]
 
 tau_plots = ["slope", "waveforms"]
@@ -51,7 +61,8 @@ all_detailed_plots = {
     "trapTmax_cal": detailed_plots,
     "Baseline": baseline_plots,
     "A/E": aoe_plots,
-    "Tau": tau_plots,
+    "LQ": lq_plots,
+    "PZ": tau_plots,
     "Optimisation": optimisation_plots,
 }
 
