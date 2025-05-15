@@ -1,0 +1,8 @@
+paths:
+  base: /data2/public/prodenv/prod-blind/tmp-auto
+  cal: /data2/public/prodenv/prod-blind/tmp-auto
+  phy: /path/to/phy
+  sipm: /path/to/sipm
+  muon: /path/to/muon
+  tmp: /tmp
+  llama: /path/to/llama

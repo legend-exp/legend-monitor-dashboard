@@ -1,0 +1,205 @@
+[build-system]
+requires = [
+    "setuptools>=61.2",
+    "setuptools_scm[toml]>=7"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legend_dashboard"
+description = "Python package for processing LEGEND-200 data"
+authors = [
+    {name = "Florian Henkes", email = "florian.henkes@tum.de"},
+    {name = "George Marshall", email = "george.marshall.20@ucl.ac.uk"},
+]
+maintainers = [
+    {name = "The LEGEND Collaboration"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering",
+]
+readme = "README.md"
+requires-python = ">=3.11"
+version = "1.0.0"
+# dynamic = ["version"]
+
+dependencies = [
+    "blosc2",
+    "bokeh>=3.1.1",
+    "colorcet>=3.0.1",
+    "colorlog",
+    "contourpy>=1.0.7",
+    "dbetto>=1.2.3",
+    "gitdb",
+    "gitpython",
+    "greenlet>=2.0.2",
+    "holoviews>=1.16.0",
+    "linkify-it-py>=2.0.2",
+    "markdown>=3.4.3",
+    "markdown-it-py>=2.2.0",
+    "mdit-py-plugins>=0.3.5",
+    "mdurl>=0.1.2",
+    "msgpack>=1.0.5",
+    "numexpr",
+    "numpy>=1.23.5",
+    "pandas>=2.0.1",
+    "panel>=1.0.2",
+    "param>=1.13.0",
+    "psycopg2-binary",
+    "py-cpuinfo>=9.0.0",
+    "pyct>=0.5.0",
+    "pygama>=1.3.2",
+    "pylegendmeta>=1.2.5",
+    "pyqt5-sip>=12.11.0",
+    "python-crontab",
+    "pyviz-comms>=2.2.1",
+    "pywavelets>=1.4.1",
+    "plotly",
+    "scipy",
+    "seaborn",
+    "smmap>=5.0.0",
+    "sqlalchemy>=2.0.14",
+    "tables>=3.8.0",
+    "tqdm",
+    "tzdata==2023.3",
+    "uc-micro-py>=1.0.2",
+    "xmltodict>=0.13.0",
+    "xyzservices==2023.2.0",
+    "jupyter"
+]
+
+# [tool.setuptools_scm]
+# write_to = "src/legenddashboard/_version.py"
+# # This tells setuptools_scm to use this version instead of Git tags
+# # version_scheme = "no-guess-dev"
+# # # Set an explicit fallback version
+# # fallback_version = "1.0.0"
+
+
+
+[project.optional-dependencies]
+# these are needed to run the data production
+test = [
+    "pytest>=6",
+    "pytest-cov>=3",
+]
+dev = [
+    "legend_dashboard[test]",
+    "pre-commit",
+    "jupyter"
+]
+docs = [
+    "sphinx>=7.0",
+    "myst_parser>=0.13",
+    "sphinx_inline_tabs",
+    "sphinx_copybutton",
+    "sphinx_autodoc_typehints",
+    "furo>=2023.08.17",
+]
+
+[project.scripts]
+dashboard                = "legenddashboard.dashboard:run_dashboard"
+dashboard-cal                = "legenddashboard.geds.cal.cal_monitoring:run_dashboard_cal"
+dashboard-phy               = "legenddashboard.geds.phy.phy_monitoring:run_dashboard_phy"
+dashboard-meta                = "legenddashboard.geds.ged_monitoring:run_dashboard_meta"
+dashboard-llama                = "legenddashboard.llama.llama_monitoring:run_dashboard_llama"
+dashboard-spms                = "legenddashboard.spms.sipm_monitoring:run_dashboard_spms"
+dashboard-muon                = "legenddashboard.muon.muon_monitoring:run_dashboard_muon"
+
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"*" = [
+    "*.json",
+]
+
+
+[tool.uv.workspace]
+exclude = ["sync", "information", "dev", "logos"]
+
+[tool.uv]
+default-groups = []
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = [
+  "error",
+]
+log_cli_level = "INFO"
+testpaths = [
+  "tests",
+]
+
+[tool.ruff]
+src = ["src"]
+
+[tool.ruff.lint]
+extend-select = [
+  "ARG",      # flake8-unused-arguments
+  "B",        # flake8-bugbear
+  "C4",       # flake8-comprehensions
+  "EM",       # flake8-errmsg
+  "EXE",      # flake8-executable
+  "G",        # flake8-logging-format
+  "I",        # isort
+  "ICN",      # flake8-import-conventions
+  "NPY",      # NumPy specific rules
+  "PD",       # pandas-vet
+  "PGH",      # pygrep-hooks
+  "PIE",      # flake8-pie
+  "PL",       # pylint
+  "PT",       # flake8-pytest-style
+  "PTH",      # flake8-use-pathlib
+  "RET",      # flake8-return
+  "RUF",      # Ruff-specific
+  "SIM",      # flake8-simplify
+  "T20",      # flake8-print
+  "UP",       # pyupgrade
+  "YTT",      # flake8-2020
+]
+ignore = [
+  "PT011",    # `pytest.raises(ValueError)` is too broad
+  "PLR09",    # Too many <...>
+  "PLR2004",  # Magic value used in comparison
+  "ISC001",   # Conflicts with formatter
+  "ARG001",   # Unused argument we want common interfaces
+]
+isort.required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["T20"]
+"noxfile.py" = ["T20"]
+
+
+[tool.pylint]
+py-version = "3.9"
+ignore-paths = [".*/_version.py"]
+reports.output-format = "colorized"
+similarities.ignore-imports = "yes"
+messages_control.disable = [
+  "design",
+  "fixme",
+  "line-too-long",
+  "missing-module-docstring",
+  "missing-function-docstring",
+  "wrong-import-position",
+  "too-many-nested-blocks"
+]
