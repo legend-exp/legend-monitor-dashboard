@@ -96,6 +96,7 @@ test = [
 dev = [
     "legend_dashboard[test]",
     "pre-commit",
+    "jupyter"
 ]
 docs = [
     "sphinx>=7.0",

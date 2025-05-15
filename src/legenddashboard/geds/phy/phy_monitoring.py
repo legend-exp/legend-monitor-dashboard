@@ -14,8 +14,7 @@ from bokeh.plotting import figure
 
 from legenddashboard.geds import phy
 from legenddashboard.geds.ged_monitoring import GedMonitoring
-from legenddashboard.util import logo_path
-from legenddashboard.util.config import read_config
+from legenddashboard.util import logo_path, read_config
 
 log = logging.getLogger(__name__)
 
