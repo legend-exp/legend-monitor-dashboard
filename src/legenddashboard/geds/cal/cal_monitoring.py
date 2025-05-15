@@ -501,7 +501,7 @@ class CalMonitoring(GedMonitoring):
             widget_widths (int): Width of the widgets.
 
         Returns:
-            dict: Dictionary containing the calibration panes.
+            pn.Row: Row containing the calibration panes.
         """
         cal_monitor = cls(base_path=base_path, notebook=notebook)
         sidebar = cal_monitor.build_sidebar()

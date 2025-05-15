@@ -109,6 +109,12 @@ docs = [
 [project.scripts]
 dashboard                = "legenddashboard.dashboard:run_dashboard"
 dashboard-cal                = "legenddashboard.geds.cal.cal_monitoring:run_dashboard_cal"
+dashboard-phy               = "legenddashboard.geds.phy.phy_monitoring:run_dashboard_phy"
+dashboard-meta                = "legenddashboard.geds.ged_monitoring:run_dashboard_meta"
+dashboard-llama                = "legenddashboard.llama.llama_monitoring:run_dashboard_llama"
+dashboard-spms                = "legenddashboard.spms.sipm_monitoring:run_dashboard_spms"
+dashboard-muon                = "legenddashboard.muon.muon_monitoring:run_dashboard_muon"
+
 
 [tool.setuptools.package-dir]
 "" = "src"

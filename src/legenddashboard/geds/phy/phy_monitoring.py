@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import time
 from pathlib import Path
@@ -14,6 +15,7 @@ from bokeh.plotting import figure
 from legenddashboard.geds import phy
 from legenddashboard.geds.ged_monitoring import GedMonitoring
 from legenddashboard.util import logo_path
+from legenddashboard.util.config import read_config
 
 log = logging.getLogger(__name__)
 
@@ -302,7 +304,7 @@ class PhyMonitoring(GedMonitoring):
         )
 
     @classmethod
-    def init_cal_panes(
+    def init_phy_panes(
         cls,
         base_path,
         phy_path,
@@ -313,3 +315,38 @@ class PhyMonitoring(GedMonitoring):
             phy_path=phy_path,
         )
         return phy_monitor.build_phy_pane(widget_widths)
+
+    @classmethod
+    def display_phy(
+        cls,
+        base_path,
+        notebook=False,
+        widget_widths: int = 140,
+    ):
+        """
+        View the Physics panes.
+
+        Args:
+            widget_widths (int): Width of the widgets.
+
+        Returns:
+            pn.Row: Row containing the sidebar and the phy pane.
+        """
+        phy_monitor = cls(base_path=base_path, notebook=notebook)
+        sidebar = phy_monitor.build_sidebar()
+        return pn.Row(sidebar, phy_monitor.build_phy_pane(widget_widths))
+
+
+def run_dashboard_phy() -> None:
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("config_file", type=str)
+    argparser.add_argument("-p", "--port", type=int, default=9000)
+    argparser.add_argument(
+        "-w", "--widget_widths", type=int, default=140, required=False
+    )
+    args = argparser.parse_args()
+
+    config = read_config(args.config_file)
+    phy_pane = GedMonitoring.display_phy(config.base, args.widget_widths)
+    print("Starting Phy. Monitoring on port ", args.port)  # noqa: T201
+    pn.serve(phy_pane, port=args.port, show=False)

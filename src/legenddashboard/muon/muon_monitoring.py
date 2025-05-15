@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import datetime as dtt
 import logging
 import shelve
@@ -14,7 +15,7 @@ from bokeh.plotting import figure
 
 from legenddashboard import muon
 from legenddashboard.base import Monitoring
-from legenddashboard.util import logo_path
+from legenddashboard.util import logo_path, read_config
 
 log = logging.getLogger(__name__)
 
@@ -240,3 +241,40 @@ class MuonMonitoring(Monitoring):
             base_path=base_path,
             muon_path=muon_path,
         ).build_muon_panes(base_path, widget_widths)
+
+    @classmethod
+    def display_muon_panes(
+        cls,
+        base_path,
+        notebook=False,
+        widget_widths: int = 140,
+    ):
+        """
+        View the calibration panes.
+
+        Args:
+            widget_widths (int): Width of the widgets.
+
+        Returns:
+            pn.Row: Row containing the calibration panes.
+        """
+        muon_monitor = cls(base_path=base_path, notebook=notebook)
+        sidebar = muon_monitor.build_sidebar()
+        return pn.Row(
+            sidebar, pn.Tabs(*muon_monitor.build_muon_panes(widget_widths).values())
+        )
+
+
+def run_dashboard_muon() -> None:
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("config_file", type=str)
+    argparser.add_argument("-p", "--port", type=int, default=9000)
+    argparser.add_argument(
+        "-w", "--widget_widths", type=int, default=140, required=False
+    )
+    args = argparser.parse_args()
+
+    config = read_config(args.config_file)
+    muon_panes = MuonMonitoring.display_cal_panes(config.base, args.widget_widths)
+    print("Starting Muon Monitoring on port ", args.port)  # noqa: T201
+    pn.serve(muon_panes, port=args.port, show=False)

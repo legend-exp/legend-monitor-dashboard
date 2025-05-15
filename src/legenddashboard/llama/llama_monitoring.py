@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import time
 from pathlib import Path
@@ -10,6 +11,8 @@ import pandas as pd
 import panel as pn
 import param
 from bokeh.plotting import figure
+
+from legenddashboard.util import read_config
 
 log = logging.getLogger(__name__)
 
@@ -133,3 +136,18 @@ class LlamaMonitoring(param.Parameterized):
         """
         llama_monitor = cls(llama_path=llama_path)
         return llama_monitor.build_llama_pane()
+
+
+def run_dashboard_llama() -> None:
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("config_file", type=str)
+    argparser.add_argument("-p", "--port", type=int, default=9000)
+    argparser.add_argument(
+        "-w", "--widget_widths", type=int, default=140, required=False
+    )
+    args = argparser.parse_args()
+
+    config = read_config(args.config_file)
+    llama_pane = LlamaMonitoring.init_llama_pane(config.base)
+    print("Starting Llama Monitoring on port ", args.port)  # noqa: T201
+    pn.serve(llama_pane, port=args.port, show=False)

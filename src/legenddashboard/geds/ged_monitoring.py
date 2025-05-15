@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import time
 
@@ -15,6 +16,7 @@ from legenddashboard.util import (
     get_characterization,
     get_production,
     logo_path,
+    read_config,
     sort_dict,
     sorter,
 )
@@ -350,8 +352,23 @@ class GedMonitoring(Monitoring):
             notebook=notebook,
             widget_widths=widget_widths,
         )
-        return pn.Column(
+        return pn.Row(
             sidebar,
             meta_pane,
             sizing_mode="scale_both",
         )
+
+
+def run_dashboard_meta() -> None:
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("config_file", type=str)
+    argparser.add_argument("-p", "--port", type=int, default=9000)
+    argparser.add_argument(
+        "-w", "--widget_widths", type=int, default=140, required=False
+    )
+    args = argparser.parse_args()
+
+    config = read_config(args.config_file)
+    meta_panes = GedMonitoring.display_meta(config.base, args.widget_widths)
+    print("Starting Meta. Monitoring on port ", args.port)  # noqa: T201
+    pn.serve(meta_panes, port=args.port, show=False)

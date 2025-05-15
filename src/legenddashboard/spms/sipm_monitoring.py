@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 import time
 from pathlib import Path
@@ -12,7 +13,7 @@ from bokeh.plotting import figure
 
 import legenddashboard.spms.sipm_plots as spm
 from legenddashboard.base import Monitoring
-from legenddashboard.util import logo_path, sorter
+from legenddashboard.util import logo_path, read_config, sorter
 
 log = logging.getLogger(__name__)
 
@@ -195,3 +196,38 @@ class SiPMMonitoring(Monitoring):
             path=base_path,
             sipm_path=spm_path,
         ).build_spm_pane(widget_widths)
+
+    @classmethod
+    def display_spms(
+        cls,
+        base_path,
+        notebook=False,
+        widget_widths: int = 140,
+    ):
+        """
+        View the SiPM panes.
+
+        Args:
+            widget_widths (int): Width of the widgets.
+
+        Returns:
+            pn.Row: Row containing the sidebar and the spm pane.
+        """
+        spm_monitor = cls(base_path=base_path, notebook=notebook)
+        sidebar = spm_monitor.build_sidebar()
+        return pn.Row(sidebar, spm_monitor.build_spm_pane(widget_widths))
+
+
+def run_dashboard_spms() -> None:
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("config_file", type=str)
+    argparser.add_argument("-p", "--port", type=int, default=9000)
+    argparser.add_argument(
+        "-w", "--widget_widths", type=int, default=140, required=False
+    )
+    args = argparser.parse_args()
+
+    config = read_config(args.config_file)
+    spm_pane = SiPMMonitoring.display_spms(config.base, args.widget_widths)
+    print("Starting SiPM Monitoring on port ", args.port)  # noqa: T201
+    pn.serve(spm_pane, port=args.port, show=False)
