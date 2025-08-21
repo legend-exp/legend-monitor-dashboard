@@ -1,6 +1,6 @@
 paths:
-  base: /data2/public/prodenv/prod-blind/tmp-auto
-  cal: /data2/public/prodenv/prod-blind/tmp-auto
+  base: ..
+  cal: ..
   phy: /path/to/phy
   sipm: /path/to/sipm
   muon: /path/to/muon
