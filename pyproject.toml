@@ -65,6 +65,7 @@ dependencies = [
     "pyviz-comms>=2.2.1",
     "pywavelets>=1.4.1",
     "plotly",
+    "pyyaml",
     "scipy",
     "seaborn",
     "smmap>=5.0.0",
