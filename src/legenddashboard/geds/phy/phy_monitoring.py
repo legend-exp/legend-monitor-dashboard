@@ -297,7 +297,7 @@ class PhyMonitoring(GedMonitoring):
             pn.Row("## Current Plot:", physics_param_currentValue),
             # pn.Row("## Current SC Plot:", sc_param_currentValue),
             pn.Row(phy_gspec),
-            pn.pane.Bokeh(self.view_phy, sizing_mode="scale_width"),
+            pn.pane.Bokeh(self.update_plots(), sizing_mode="scale_width"),
             name="Phy. Monitoring",
             sizing_mode="stretch_width",
         )

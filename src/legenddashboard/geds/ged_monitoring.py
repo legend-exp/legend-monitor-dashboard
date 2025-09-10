@@ -63,19 +63,35 @@ class GedMonitoring(Monitoring):
     strings_dict = param.Dict({})
     channel_map = param.Dict({})
 
-    @param.depends("run", "channel")
-    def get_run_and_channel(self):
-        start_time = time.time()
-        ret = pn.pane.Markdown(
-            f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. Details | Channel {self.channel}"
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.param.watch(
+            self.get_run_and_channel,
+            ["period", "run", "channel"],
+            precedence=2,
+            queued=True,
         )
-        log.debug(
-            "Time to get run and channel:", extra={"time": time.time() - start_time}
+        self.param.watch(
+            self.update_strings, ["period", "run", "sort_by"], precedence=1, queued=True
         )
+        self.param.watch(
+            self._get_metadata, ["period", "run"], precedence=1, queued=True
+        )
+
+    def get_run_and_channel(self, event=None):  # noqa: ARG002
+        try:
+            start_time = time.time()
+            ret = pn.pane.Markdown(
+                f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. Details | Channel {self.channel}"
+            )
+            log.debug(
+                "Time to get run and channel:", extra={"time": time.time() - start_time}
+            )
+        except BaseException:
+            ret = pn.pane.Markdown("###")
         return ret
 
-    @param.depends("sort_by", watch=True)
-    def update_strings(self):
+    def update_strings(self, event=None):  # noqa: ARG002
         start_time = time.time()
         strings_dict, self.chan_dict, self.channel_map = sorter(
             self.base_path,
@@ -89,8 +105,7 @@ class GedMonitoring(Monitoring):
         self.strings_dict = strings_dict
         log.debug("Time to update strings:", extra={"time": time.time() - start_time})
 
-    @param.depends("run", watch=True)
-    def _get_metadata(self):
+    def _get_metadata(self, event=None):  # noqa: ARG002
         start_time = time.time()
         try:
             chan_dict, channel_map = self.chan_dict, self.channel_map
@@ -277,8 +292,8 @@ class GedMonitoring(Monitoring):
         return sidebar
 
     def build_meta_pane(self, widget_widths=130):
-        self.update_strings()
-        self._get_metadata()
+        self.update_strings(None)
+        self._get_metadata(None)
         meta_param_currentValue = pn.pane.Markdown(f"## {self.meta_visu_plots}")
         meta_param = pn.widgets.MenuButton(
             name="Visualization",

@@ -62,7 +62,6 @@ class Monitoring(param.Parameterized):
         self.base_path = base_path
         self.sort_obj = sort_dets(base_path)
 
-        self.startup_bool = True
         super().__init__(**params)
 
         self.tier_dict = {
@@ -84,51 +83,48 @@ class Monitoring(param.Parameterized):
             self.periods = gen_run_dict(self.base_path)
             log.debug("updating")
             self.param["period"].objects = list(self.periods)
-            self.period = next(iter(self.periods))
-            self._get_period_data()
+            self.period = list(self.periods)[-1]
+            self._get_period_data(None)
 
-    @param.depends("period", watch=True)
-    def _get_period_data(self):
-        if self.startup_bool:
-            log.debug("Startup procedure, skip _get_period_data")
-            self.startup_bool = False
+        self.param.watch(self._get_period_data, ["period"], precedence=0)
+        self.param.watch(self._get_run_dict, ["date_range"], precedence=0)
+
+    def _get_period_data(self, event=None):  # noqa: ARG002
+        self.run_dict = self.periods[self.period]
+
+        self.param["run"].objects = list(self.run_dict)
+        if self.run == list(self.run_dict)[-1]:
+            self.run = next(iter(self.run_dict))
         else:
-            self.run_dict = self.periods[self.period]
+            self.run = list(self.run_dict)[-1]
 
-            self.param["run"].objects = list(self.run_dict)
-            if self.run == list(self.run_dict)[-1]:
-                self.run = next(iter(self.run_dict))
-            else:
-                self.run = list(self.run_dict)[-1]
+        start_period = sorted(self.periods)[0]
+        start_run = sorted(self.periods[start_period])[0]
+        end_period = sorted(self.periods)[-1]
+        end_run = sorted(self.periods[end_period])[-1]
 
-            start_period = sorted(self.periods)[0]
-            start_run = sorted(self.periods[start_period])[0]
-            end_period = sorted(self.periods)[-1]
-            end_run = sorted(self.periods[end_period])[-1]
-
-            self.param["date_range"].bounds = (
-                datetime.strptime(
-                    self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-                )
-                - dtt.timedelta(minutes=100),
-                datetime.strptime(
-                    self.periods[end_period][end_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-                )
-                + dtt.timedelta(minutes=110),
+        self.param["date_range"].bounds = (
+            datetime.strptime(
+                self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
             )
-            self.date_range = (
-                datetime.strptime(
-                    self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-                )
-                - dtt.timedelta(minutes=100),
-                datetime.strptime(
-                    self.periods[end_period][end_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-                )
-                + dtt.timedelta(minutes=110),
+            - dtt.timedelta(minutes=100),
+            datetime.strptime(
+                self.periods[end_period][end_run]["timestamp"], "%Y%m%dT%H%M%SZ"
             )
+            + dtt.timedelta(minutes=110),
+        )
+        self.date_range = (
+            datetime.strptime(
+                self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
+            )
+            - dtt.timedelta(minutes=100),
+            datetime.strptime(
+                self.periods[end_period][end_run]["timestamp"], "%Y%m%dT%H%M%SZ"
+            )
+            + dtt.timedelta(minutes=110),
+        )
 
-    @param.depends("date_range", watch=True)
-    def _get_run_dict(self):
+    def _get_run_dict(self, event=None):  # noqa: ARG002
         start_time = time.time()
         valid_from = [
             datetime.timestamp(
