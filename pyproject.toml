@@ -43,6 +43,7 @@ dependencies = [
     "gitdb",
     "gitpython",
     "greenlet>=2.0.2",
+    "h5py",
     "holoviews>=1.16.0",
     "h5py",
     "linkify-it-py>=2.0.2",
