@@ -6,7 +6,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "legenddashboard"
+name = "legend_dashboard"
 description = "Python package for processing LEGEND-200 data"
 authors = [
     {name = "Florian Henkes", email = "florian.henkes@tum.de"},
@@ -90,13 +90,12 @@ dependencies = [
 
 
 [project.optional-dependencies]
-# these are needed to run the data production
 test = [
     "pytest>=6",
     "pytest-cov>=3",
 ]
 dev = [
-    "legenddashboard[test]",
+    "legend_dashboard[test]",
     "pre-commit",
     "jupyter"
 ]
