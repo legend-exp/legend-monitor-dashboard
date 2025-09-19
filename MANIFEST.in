@@ -1,0 +1,4 @@
+include README.md
+include LICENSE
+recursive-include src/legenddashboard/information *.md *.png *.svg
+recursive-include src/legenddashboard/logos *.svg *.png

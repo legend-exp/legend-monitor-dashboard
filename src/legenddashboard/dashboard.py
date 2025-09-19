@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import importlib.resources
+
 import panel as pn
 
 from legenddashboard.base import Monitoring
@@ -226,8 +228,8 @@ def run_dashboard() -> None:
         "-d", "--disable_page", nargs="*", required=False, default=[]
     )
     args = argparser.parse_args()
-
-    info_path = Path(__file__).parent.parent.parent / "information" / "general.md"
+    
+    info_path = importlib.resources.files("legenddashboard") / "information" / "general.md"
 
     l200_monitoring = build_dashboard(
         args.config_file, args.widget_widths, args.disable_page

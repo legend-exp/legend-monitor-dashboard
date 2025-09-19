@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import importlib.resources
+
 import matplotlib as mpl
 import numpy as np
 import panel as pn
@@ -19,7 +21,7 @@ pn.extension("tabulator")
 pn.extension("plotly")
 pn.extension("katex", "mathjax")
 
-logo_path = Path(__file__).parent.parent.parent / "logos"
+logo_path = importlib.resources.files("legenddashboard") / "logos"
 
 sort_dict = {
     "String": {

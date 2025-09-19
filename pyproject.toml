@@ -6,7 +6,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "legend_dashboard"
+name = "legenddashboard"
 description = "Python package for processing LEGEND-200 data"
 authors = [
     {name = "Florian Henkes", email = "florian.henkes@tum.de"},
@@ -96,7 +96,7 @@ test = [
     "pytest-cov>=3",
 ]
 dev = [
-    "legend_dashboard[test]",
+    "legenddashboard[test]",
     "pre-commit",
     "jupyter"
 ]
@@ -118,6 +118,8 @@ dashboard-llama                = "legenddashboard.llama.llama_monitoring:run_das
 dashboard-spms                = "legenddashboard.spms.sipm_monitoring:run_dashboard_spms"
 dashboard-muon                = "legenddashboard.muon.muon_monitoring:run_dashboard_muon"
 
+[tool.setuptools]
+include-package-data = true
 
 [tool.setuptools.package-dir]
 "" = "src"
@@ -126,14 +128,8 @@ dashboard-muon                = "legenddashboard.muon.muon_monitoring:run_dashbo
 where = ["src"]
 namespaces = false
 
-[tool.setuptools.package-data]
-"*" = [
-    "*.json",
-]
-
-
 [tool.uv.workspace]
-exclude = ["sync", "information", "dev", "logos"]
+exclude = ["sync", "dev"] #"information", , "logos"
 
 [tool.uv]
 default-groups = []
