@@ -103,6 +103,8 @@ class GedMonitoring(Monitoring):
         self.param["string"].objects = list(strings_dict)
         self.string = f"{next(iter(strings_dict))}"
         self.strings_dict = strings_dict
+        self.name_to_rawid = {k: int(v['daq']['rawid']) for k,v in self.channel_map.items()}
+        self.rawid_to_name = {int(v["daq"]["rawid"]): v["name"] for v in self.channel_map.values()}
         log.debug("Time to update strings:", extra={"time": time.time() - start_time})
 
     def _get_metadata(self, event=None):  # noqa: ARG002
