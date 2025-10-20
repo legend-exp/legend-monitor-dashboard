@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from bokeh.models import (
+    ColumnDataSource,
     DatetimeTickFormatter,
     LinearAxis,
     Range1d,
@@ -22,14 +23,13 @@ phy_plots_vals_dict = {
     "Baseline FPGA": "Baseline",
     "Baseline Mean": "BlMean",
     "Noise": "BlStd",
-    "Gain": "Cuspemax",
-    "Cal. Gain": "CuspemaxCtcCal",
-    "Gain to Pulser Ratio": "Cuspemax_pulser01anaRatio",
-    "Gain to Pulser Diff.": "Cuspemax_pulser01anaDiff",
+    "Gain": "Trapemax",
+    "Cal. Gain": "TrapemaxCtcCal",
+    "Gain to Pulser Ratio": "Trapemax_pulser01anaRatio",
+    "Gain to Pulser Diff.": "Trapemax_pulser01anaDiff",
     "Rate": "EventRate",
     "PSD Classifier": "AoeCustom",
 }
-phy_resampled_vals = [0, 5, 10, 30, 60]
 phy_unit_vals = ["Relative", "Absolute"]
 phy_plots_sc_vals_dict = {
     "None": False,
@@ -43,7 +43,6 @@ phy_plots_sc_vals_dict = {
     "ZUL_T_RR": "ZUL_T_RR",
 }
 
-
 def phy_plot_vsTime(
     data_string,
     data_string_mean,
@@ -55,32 +54,32 @@ def phy_plot_vsTime(
     run,
     period,
     run_dict,
-    channel_map,
     abs_unit,
     data_sc,
     sc_param,
 ):
-    # change column names to detector names
-    data_string.columns = [
-        "{}_val".format(channel_map[ch]["name"]) for ch in data_string.columns
-    ]
-
-    # create plot colours
-    len_colours = len(data_string.columns)
-    colours = color_palette("hls", len_colours).as_hex()
-
-    # add mean values for hover feature
-    data_string_mean.columns = [
-        channel_map[ch]["name"] for ch in data_string_mean.columns
-    ]
-    for col in data_string_mean.columns:
-        data_string[col] = data_string_mean[col][0]
-
-    # add two hours to x values with if condition
-    if data_string.index[0].utcoffset() != pd.Timedelta(
-        hours=2
-    ):  # only add timedelta if still in UTC
+    # add two hours to UTC index 
+    if data_string.index[0].utcoffset() != pd.Timedelta(hours=2):
         data_string.index += pd.Timedelta(hours=2)
+
+    data_high_res = data_string.copy()
+    data_high_res["datetime"] = data_high_res.index
+    data_high_res.reset_index(drop=True, inplace=True)
+    
+    # resample data 
+    if resample_unit != "0min":
+        data_resampled = data_string.resample(resample_unit, origin="start").mean()
+        data_resampled["datetime"] = data_resampled.index
+        data_resampled.reset_index(drop=True, inplace=True)
+
+        source_high_res = ColumnDataSource(data_high_res)
+        source_resampled = ColumnDataSource(data_resampled)
+    else:
+        source_high_res = ColumnDataSource(data_high_res)
+        source_resampled = None
+
+    n_channels = len(data_string_mean.columns)
+    colors = color_palette("hls", n_channels).as_hex()
 
     p = figure(
         width=1000,
@@ -93,168 +92,135 @@ def phy_plot_vsTime(
     p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_name} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
-    p.hover.formatters = {"$x": "datetime", "$snap_y": "printf", "@$name": "printf"}
-    p.hover.tooltips = [
-        (
-            "Time",
-            "$x{%F %H:%M:%S CET}",
-        ),  # Use the formatted CET time from the DataFrame
-        (f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]})", "$snap_y{%0.2f}"),
-        (f"Mean {plot_info.loc['label'][0]} ({abs_unit})", "@$name{0.2f}"),
-        ("Detector", "$name"),
-    ]
     p.hover.mode = "vline"
-
-    level = 1
-    zoom_in = ZoomInTool(
-        level=level, dimensions="height", factor=0.5
-    )  # set specific zoom factor
-    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
-    p.add_tools(zoom_in, zoom_out)
-    # p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
 
     # plot data
     hover_renderers = []
-    if resample_unit == "0min":
-        for i, det in enumerate(data_string_mean):
-            if "mean" in det:
-                continue
-            line = p.line(
-                "datetime",
-                f"{det}_val",
-                source=data_string,
-                color=colours[i],
-                legend_label=det,
-                name=det,
+    for i, col in enumerate(data_string_mean.columns):
+        time_series_col = f"{col}_val"
+        
+        # all timestamp entries
+        line_high_res = p.line(
+            x="datetime",
+            y=time_series_col,
+            source=source_high_res,
+            color=colors[i],
+            line_width=1,
+            line_alpha=0.3 if source_resampled is not None else 1, 
+            legend_label=col,
+            name=col,
+        )
+        
+        # resampled data
+        if source_resampled is not None:
+            line_resampled = p.line(
+                x="datetime",
+                y=time_series_col,
+                source=source_resampled,
+                color=colors[i],
                 line_width=2.5,
+                legend_label=col,
+                name=f"{col}",
             )
-            hover_renderers.append(line)
+            hover_renderers.append(line_resampled)  
+        else:
+            hover_renderers.append(line_high_res)  
+
+    p.hover.renderers = hover_renderers
+    p.hover.tooltips = [
+        ("Time", "$x{%F %H:%M:%S CET}"),
+        (f"Avg. {plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]})", f"@{time_series_col}{{0.2f}}"),
+        ("Detector", "$name"),
+    ]
+    p.hover.formatters = {"$x": "datetime", "$source": "printf"}
+
+    # legend
+    if p.legend:
+        p.legend.location = "bottom_left"
+        p.legend.click_policy = "hide"
+
+    # axis
+    if source_resampled is not None:
+        data_for_start_time = data_resampled
     else:
-        data_string_resampled = data_string.resample(
-            resample_unit, origin="start"
-        ).mean()
-
-        for i, det in enumerate(data_string_mean):
-            if "mean" in det:
-                continue
-            line = p.line(
-                "datetime",
-                f"{det}_val",
-                source=data_string_resampled,
-                color=colours[i],
-                legend_label=det,
-                name=det,
-                line_width=2.5,
-            )
-            p.line(
-                "datetime",
-                f"{det}_val",
-                source=data_string,
-                color=colours[i],
-                legend_label=det,
-                name=det,
-                line_width=2.5,
-                alpha=0.2,
-            )
-            hover_renderers.append(line)
-
-    # draw horizontal line at thresholds from plot info if available
-    #     if plot_info.loc["lower_lim_var"][0] != 'None' and plot_info.loc["unit"][0] == "%":
-    #         lower_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["lower_lim_var"][0]),
-    #                 line_color='black', line_dash='dashed', line_width=4)
-    #         upper_lim_var = Slope(gradient=0, y_intercept=float(plot_info.loc["upper_lim_var"][0]),
-    #                 line_color='black', line_dash='dashed', line_width=4)
-
-    #         p.add_layout(lower_lim_var)
-    #         p.add_layout(upper_lim_var)
-
-    # legend setups etc...
-    p.legend.location = "bottom_left"
-    p.legend.click_policy = "hide"
-    p.xaxis.axis_label = f"Time (CET), starting: {data_string.index[0].strftime('%d/%m/%Y %H:%M:%S')}"  # change of string
+        data_for_start_time = data_high_res
+        
+    start_time_str = pd.to_datetime(data_for_start_time['datetime'].iloc[0]).strftime('%d/%m/%Y %H:%M:%S')
+    p.xaxis.axis_label = f"Time (CET), starting: {start_time_str}"
     p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = f"{plot_info.loc['label'][0]} [{plot_info.loc['unit'][0]}]"
+    p.yaxis.axis_label = f"{plot_info.loc['label'].iloc[0]} [{plot_info.loc['unit'].iloc[0]}]"
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days="%Y/%m/%d")
-    p.hover.renderers = hover_renderers
 
-    if plot_info.loc["unit"][0] == "%":
-        if plot_info.loc["label"][0] == "Noise":
+    # y-range for % unit plots
+    label = plot_info.loc["label"].iloc[0]
+    unit = plot_info.loc["unit"].iloc[0]
+    if unit == "%":
+        if label == "Noise":
             p.y_range = Range1d(-150, 150)
-        elif (
-            plot_info.loc["label"][0] == "FPGA baseline"
-            or plot_info.loc["label"][0] == "Mean Baseline"
-        ):
+        elif label in ["FPGA baseline", "Mean Baseline"]:
             p.y_range = Range1d(-10, 10)
-        elif plot_info.loc["label"][0] == "Gain to Pulser Difference":
+        elif label == "Gain to Pulser Difference":
             p.y_range = Range1d(-4, 4)
-        elif plot_info.loc["label"][0] == "Event Rate":
+        elif label == "Event Rate":
             p.y_range = Range1d(-150, 50)
-        elif plot_info.loc["label"][0] == "Custom A/E (A_max / cuspEmax)":
+        elif label == "Custom A/E (A_max / cuspEmax)":
             p.y_range = Range1d(-10, 10)
         else:
             p.y_range = Range1d(-1, 1)
-    elif plot_info.loc["label"][0] == "Noise":
+    elif label == "Noise":
         p.y_range = Range1d(-150, 150)
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # SLOW CONTROL DATA
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # slow-control data 
     if not data_sc.empty:
-        y_column2_range = f"{sc_param}_range"
-        y_min = float(data_sc.copy()["value"].min()) * (1 - 0.01)
-        y_max = float(data_sc.copy()["value"].max()) * (1 + 0.01)
-        p.extra_y_ranges = {y_column2_range: Range1d(start=y_min, end=y_max)}
-
+        y_range_name = f"{sc_param}_range"
+        y_min = data_sc["value"].min() * 0.99
+        y_max = data_sc["value"].max() * 1.01
+        p.extra_y_ranges = {y_range_name: Range1d(start=y_min, end=y_max)}
         unit = data_sc["unit"][0]
         p.add_layout(
             LinearAxis(
-                y_range_name=y_column2_range,
+                y_range_name=y_range_name,
                 axis_label=f"{sc_param} [{unit}]",
                 axis_label_text_font_size="20px",
             ),
             "right",
         )
 
-        time = data_sc["tstamp"]
-        time = pd.to_datetime(time, origin="unix", utc=True)
-        values = data_sc["value"]
-        values = pd.to_numeric(values)
-        values.index = time
-
-        # we use the same resampling of geds data
-        # (use black line to distinguish from geds data)
-        if resample_unit == "0min":
+        # resampling
+        sc_data = data_sc.copy()
+        sc_data["tstamp"] = pd.to_datetime(sc_data["tstamp"], origin="unix", utc=True)
+        sc_data = sc_data.set_index("tstamp")["value"]
+        if resample_unit != "0min":
+            sc_data_resampled = sc_data.resample(resample_unit).mean()
             p.line(
-                time,
-                values,
-                legend_label=sc_param,
-                y_range_name=y_column2_range,
+                sc_data.index,
+                sc_data.values,
                 color="black",
+                alpha=0.2,
+                legend_label=sc_param,
+                y_range_name=y_range_name,
+                line_width=2,
+            )
+            p.line(
+                sc_data_resampled.index,
+                sc_data_resampled.values,
+                color="black",
+                legend_label=sc_param,
+                y_range_name=y_range_name,
                 line_width=2,
             )
         else:
-            binned_data = values.resample(resample_unit).mean()
             p.line(
-                time,
-                values,
+                sc_data.index,
+                sc_data.values,
                 color="black",
                 legend_label=sc_param,
-                y_range_name=y_column2_range,
-                line_width=2,
-                alpha=0.2,
-            )
-            p.line(
-                binned_data.index,
-                binned_data.values,
-                color="black",
-                legend_label=sc_param,
-                y_range_name=y_column2_range,
+                y_range_name=y_range_name,
                 line_width=2,
             )
 
     return p
-
 
 def phy_plot_histogram(
     data_string,
@@ -276,12 +242,12 @@ def phy_plot_histogram(
         output_backend="webgl",
         active_scroll="ywheel_zoom",
     )
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'][0]} | {string}"
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'].iloc[0]} | {string}"
     p.title.align = "center"
     p.title.text_font_size = "25px"
     p.hover.formatters = {"$x": "printf", "$snap_y": "printf"}
     p.hover.tooltips = [
-        (f"{plot_info.loc['label'][0]} ({plot_info.loc['unit'][0]}", "$x{%0.2f}"),
+        (f"{plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]}", "$x{%0.2f}"),
         ("Counts", "$snap_y"),
         ("Detector", "$name"),
     ]
@@ -365,8 +331,9 @@ def phy_plot_histogram(
             line_width=2,
         )
 
-    p.legend.location = "bottom_left"
-    p.legend.click_policy = "hide"
+    if p.legend:
+        p.legend.location = "bottom_left"
+        p.legend.click_policy = "hide"
     p.xaxis.axis_label = f"{plot_info['label']} [{plot_info['unit_label']}]"
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Counts"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 class PhyMonitoring(GedMonitoring):
     phy_path = param.String("")
+        
     phy_plots_types = param.ObjectSelector(
         default=next(iter(phy.phy_plots_types_dict)),
         objects=list(phy.phy_plots_types_dict),
@@ -37,8 +39,8 @@ class PhyMonitoring(GedMonitoring):
         label="Plot Style",
     )
     phy_resampled = param.Integer(
-        default=phy.phy_resampled_vals[0],
-        bounds=(phy.phy_resampled_vals[0], phy.phy_resampled_vals[-1]),
+        default=60,
+        bounds=(0, 60),
     )
     phy_units = param.ObjectSelector(
         default=phy.phy_unit_vals[0], objects=phy.phy_unit_vals, label="Units"
@@ -72,16 +74,10 @@ class PhyMonitoring(GedMonitoring):
     )
     def update_plots(self):
         start_time = time.time()
-        data_file = (
-            self.phy_path
-            + f"/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-geds.hdf"
-        )
-        data_file_sc = (
-            self.phy_path
-            + f"/generated/plt/phy/{self.period}/{self.run}/l200-{self.period}-{self.run}-phy-slow_control.hdf"
-        )
+        data_file = os.path.join(self.phy_path, "generated/plt/hit/phy", self.period, self.run, f"l200-{self.period}-{self.run}-phy-geds.hdf")
+        data_file_sc = os.path.join(self.phy_path, "generated/plt/hit/phy", self.period, self.run, f"l200-{self.period}-{self.run}-phy-slow_control.hdf")
 
-        # Create empty plot inc ase of errors
+        # Create empty plot inc case of errors
         p = figure(width=1000, height=600)
         p.title.text = f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
         p.title.align = "center"
@@ -97,8 +93,13 @@ class PhyMonitoring(GedMonitoring):
             filekeys = list(f.keys())
 
         # load dataframe for current plot value and get all data from selected string
-        channels = self.strings_dict[self.string]
-        phy_data_key = f"{self.phy_plots_types_dict[self.phy_plots_types]}_{self.phy_plots_vals_dict[self.phy_plots]}"
+        channel_names = self.strings_dict.get(self.string, [])
+        if not channel_names:
+            print(f"No channel_names found for string {self.string}")
+            return p
+
+        channels = [self.name_to_rawid[name] for name in channel_names if name in self.name_to_rawid]
+        phy_data_key = f"{phy.phy_plots_types_dict[self.phy_plots_types]}_{phy.phy_plots_vals_dict[self.phy_plots]}"
         if "pulser" in phy_data_key:
             if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
                 return p
@@ -106,20 +107,20 @@ class PhyMonitoring(GedMonitoring):
                 data_file, key=f"{phy_data_key.split('_pulser')[0]}_info"
             )
             if "Diff" in phy_data_key:
-                phy_plot_info.loc["label"][0] = "Gain to Pulser Difference"
+                phy_plot_info.loc["label"].iloc[0] = "Gain to Pulser Difference"
             else:
-                phy_plot_info.loc["label"][0] = "Gain to Pulser Ratio"
+                phy_plot_info.loc["label"].iloc[0] = "Gain to Pulser Ratio"
         else:
             if f"{phy_data_key}_info" not in filekeys:
                 return p
             phy_plot_info = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
-        abs_unit = phy_plot_info.loc["unit"][0]
+        abs_unit = phy_plot_info.loc["unit"].iloc[0]
 
         if self.phy_units == "Relative":
             if f"{phy_data_key}_var" not in filekeys:
                 return p
             phy_data_df = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
-            phy_plot_info.loc["unit"][0] = "%"
+            phy_plot_info.loc["unit", phy_plot_info.columns[0]] = "%"
         else:
             if phy_data_key not in filekeys:
                 return p
@@ -133,16 +134,17 @@ class PhyMonitoring(GedMonitoring):
         # get sc data if selected
         # if self.phy_plots_sc and self.phy_units == "Relative" and os.path.exists(data_file_sc):
         if (
-            self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
+            phy.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
             and Path(data_file_sc).exists()
         ):
             data_sc = pd.read_hdf(
-                data_file_sc, self.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
+                data_file_sc, phy.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
             )
             self._phy_sc_plotted = True
         else:
             data_sc = pd.DataFrame()
             self._phy_sc_plotted = False
+
         # check if channel selection actually exists in data
         channels = [
             ch
@@ -152,8 +154,12 @@ class PhyMonitoring(GedMonitoring):
         phy_data_df = phy_data_df[channels]
         phy_data_df_mean = phy_data_df_mean[channels]
 
+        # map rawids to detector names
+        phy_data_df = phy_data_df.rename(columns={rawid: f"{self.rawid_to_name[rawid]}_val" for rawid in phy_data_df.columns})
+        phy_data_df_mean = phy_data_df_mean.rename(columns=self.rawid_to_name)
+
         # plot data
-        p = self.phy_plot_style_dict[self.phy_plot_style](
+        p = phy.phy_plot_style_dict[self.phy_plot_style](
             phy_data_df,
             phy_data_df_mean,
             phy_plot_info,
@@ -164,7 +170,6 @@ class PhyMonitoring(GedMonitoring):
             self.run,
             self.period,
             self.run_dict[self.run],
-            self.channel_map,
             abs_unit,
             data_sc,
             self.phy_plots_sc_vals,
@@ -297,7 +302,7 @@ class PhyMonitoring(GedMonitoring):
             pn.Row("## Current Plot:", physics_param_currentValue),
             # pn.Row("## Current SC Plot:", sc_param_currentValue),
             pn.Row(phy_gspec),
-            pn.pane.Bokeh(self.update_plots(), sizing_mode="scale_width"),
+            self.update_plots, #pn.panel(self.update_plots), #pn.pane.Bokeh(self.update_plots(), sizing_mode="scale_width"),
             name="Phy. Monitoring",
             sizing_mode="stretch_width",
         )
