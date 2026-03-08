@@ -22,11 +22,11 @@ LOGO_DIR = CURR_DIR / "logos"
 
 # Verify it exists before passing it to pn.serve
 if not IMG_DIR.exists():
-    print(f"Warning: Logo directory not found at {IMG_DIR}") # noqa: T201
+    print(f"Warning: Logo directory not found at {IMG_DIR}")  # noqa: T201
 
 # Verify it exists before passing it to pn.serve
 if not LOGO_DIR.exists():
-    print(f"Warning: Logo directory not found at {LOGO_DIR}") # noqa: T201
+    print(f"Warning: Logo directory not found at {LOGO_DIR}")  # noqa: T201
 
 
 def build_dashboard(
@@ -248,18 +248,25 @@ def run_dashboard() -> None:
         importlib.resources.files("legenddashboard") / "information" / "general.md"
     )
 
-    l200_monitoring = build_dashboard(
-        args.config_file, args.widget_widths, args.disable_page
-    )
+    def _build_dash():
+        l200_monitoring = build_dashboard(
+            args.config_file, args.widget_widths, args.disable_page
+        )
 
-    l200_monitoring.header.append(
-        pn.Row(pn.Spacer(width=120), build_header_logos(), sizing_mode="stretch_width")
-    )
+        l200_monitoring.header.append(
+            pn.Row(
+                pn.Spacer(width=120), build_header_logos(), sizing_mode="stretch_width"
+            )
+        )
 
-    l200_monitoring.main.append(pn.Tabs(("Information", build_info_pane(info_path))))
+        l200_monitoring.main.append(
+            pn.Tabs(("Information", build_info_pane(info_path)))
+        )
+        return l200_monitoring
+
     print("Starting Monitoring Dashboard on port ", args.port)  # noqa: T201
     pn.serve(
-        l200_monitoring,
+        _build_dash,
         port=args.port,
         show=False,
         enable_xsrf_cookies=True,
