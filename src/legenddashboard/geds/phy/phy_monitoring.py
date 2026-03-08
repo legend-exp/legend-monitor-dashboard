@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 class PhyMonitoring(GedMonitoring):
     phy_path = param.String("")
-        
+
     phy_plots_types = param.ObjectSelector(
         default=next(iter(phy.phy_plots_types_dict)),
         objects=list(phy.phy_plots_types_dict),
@@ -74,8 +74,20 @@ class PhyMonitoring(GedMonitoring):
     )
     def update_plots(self):
         start_time = time.time()
-        data_file = os.path.join(self.phy_path, "generated/plt/hit/phy", self.period, self.run, f"l200-{self.period}-{self.run}-phy-geds.hdf")
-        data_file_sc = os.path.join(self.phy_path, "generated/plt/hit/phy", self.period, self.run, f"l200-{self.period}-{self.run}-phy-slow_control.hdf")
+        data_file = os.path.join(
+            self.phy_path,
+            "generated/plt/hit/phy",
+            self.period,
+            self.run,
+            f"l200-{self.period}-{self.run}-phy-geds.hdf",
+        )
+        data_file_sc = os.path.join(
+            self.phy_path,
+            "generated/plt/hit/phy",
+            self.period,
+            self.run,
+            f"l200-{self.period}-{self.run}-phy-slow_control.hdf",
+        )
 
         # Create empty plot inc case of errors
         p = figure(width=1000, height=600)
@@ -98,7 +110,11 @@ class PhyMonitoring(GedMonitoring):
             print(f"No channel_names found for string {self.string}")
             return p
 
-        channels = [self.name_to_rawid[name] for name in channel_names if name in self.name_to_rawid]
+        channels = [
+            self.name_to_rawid[name]
+            for name in channel_names
+            if name in self.name_to_rawid
+        ]
         phy_data_key = f"{phy.phy_plots_types_dict[self.phy_plots_types]}_{phy.phy_plots_vals_dict[self.phy_plots]}"
         if "pulser" in phy_data_key:
             if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
@@ -155,7 +171,12 @@ class PhyMonitoring(GedMonitoring):
         phy_data_df_mean = phy_data_df_mean[channels]
 
         # map rawids to detector names
-        phy_data_df = phy_data_df.rename(columns={rawid: f"{self.rawid_to_name[rawid]}_val" for rawid in phy_data_df.columns})
+        phy_data_df = phy_data_df.rename(
+            columns={
+                rawid: f"{self.rawid_to_name[rawid]}_val"
+                for rawid in phy_data_df.columns
+            }
+        )
         phy_data_df_mean = phy_data_df_mean.rename(columns=self.rawid_to_name)
 
         # plot data
@@ -302,7 +323,7 @@ class PhyMonitoring(GedMonitoring):
             pn.Row("## Current Plot:", physics_param_currentValue),
             # pn.Row("## Current SC Plot:", sc_param_currentValue),
             pn.Row(phy_gspec),
-            self.update_plots, #pn.panel(self.update_plots), #pn.pane.Bokeh(self.update_plots(), sizing_mode="scale_width"),
+            self.update_plots,  # pn.panel(self.update_plots), #pn.pane.Bokeh(self.update_plots(), sizing_mode="scale_width"),
             name="Phy. Monitoring",
             sizing_mode="stretch_width",
         )

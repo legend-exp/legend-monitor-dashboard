@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import importlib.resources
 from datetime import UTC, datetime
 from pathlib import Path
-
-import importlib.resources
 
 import matplotlib as mpl
 import numpy as np

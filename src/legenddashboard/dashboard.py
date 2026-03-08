@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-
 import importlib.resources
+from pathlib import Path
 
 import panel as pn
 
@@ -15,6 +14,19 @@ from legenddashboard.llama.llama_monitoring import LlamaMonitoring
 from legenddashboard.muon.muon_monitoring import MuonMonitoring
 from legenddashboard.spms.sipm_monitoring import SiPMMonitoring
 from legenddashboard.util import read_config
+
+# This finds the directory where dashboard.py lives
+CURR_DIR = Path(__file__).parent.resolve()
+IMG_DIR = CURR_DIR / "information" / "img"
+LOGO_DIR = CURR_DIR / "logos"
+
+# Verify it exists before passing it to pn.serve
+if not IMG_DIR.exists():
+    print(f"Warning: Logo directory not found at {IMG_DIR}") # noqa: T201
+
+# Verify it exists before passing it to pn.serve
+if not LOGO_DIR.exists():
+    print(f"Warning: Logo directory not found at {LOGO_DIR}") # noqa: T201
 
 
 def build_dashboard(
@@ -183,25 +195,25 @@ def build_header_logos():
     # Header
     return pn.Row(
         pn.pane.Image(
-            "https://legend.edm.nat.tum.de/logos/github-mark.png",
+            LOGO_DIR / "github-mark.png",
             link_url="https://github.com/legend-exp/",
             fixed_aspect=True,
             width=24,
         ),
         pn.pane.Image(
-            "https://legend.edm.nat.tum.de/logos/logo_indico.png",
+            LOGO_DIR / "logo_indico.png",
             link_url="https://indico.legend-exp.org",
             fixed_aspect=True,
             width=24,
         ),
         pn.pane.Image(
-            "https://legend.edm.nat.tum.de/logos/confluence.png",
+            LOGO_DIR / "confluence.png",
             link_url="https://legend-exp.atlassian.net/wiki/spaces/LEGEND/overview",
             fixed_aspect=True,
             width=24,
         ),
         pn.pane.Image(
-            "https://legend.edm.nat.tum.de/logos/elog.png",
+            LOGO_DIR / "elog.png",
             link_url="https://elog.legend-exp.org/ELOG/",
             fixed_aspect=True,
             width=30,
@@ -222,14 +234,19 @@ def run_dashboard() -> None:
     argparser.add_argument("config_file", type=str)
     argparser.add_argument("-p", "--port", type=int, default=9000)
     argparser.add_argument(
-        "-w", "--widget_widths", type=int, default=140, required=False
+        "-w", "--widget-widths", type=int, default=140, required=False
     )
     argparser.add_argument(
-        "-d", "--disable_page", nargs="*", required=False, default=[]
+        "-d", "--disable-page", nargs="*", required=False, default=[]
     )
+    argparser.add_argument("--num-procs", type=int, default=1)
+    argparser.add_argument("--num-threads", type=int, default=1)
+
     args = argparser.parse_args()
-    
-    info_path = importlib.resources.files("legenddashboard") / "information" / "general.md"
+
+    info_path = (
+        importlib.resources.files("legenddashboard") / "information" / "general.md"
+    )
 
     l200_monitoring = build_dashboard(
         args.config_file, args.widget_widths, args.disable_page
@@ -241,4 +258,17 @@ def run_dashboard() -> None:
 
     l200_monitoring.main.append(pn.Tabs(("Information", build_info_pane(info_path))))
     print("Starting Monitoring Dashboard on port ", args.port)  # noqa: T201
-    pn.serve(l200_monitoring, port=args.port, show=False)
+    pn.serve(
+        l200_monitoring,
+        port=args.port,
+        show=False,
+        enable_xsrf_cookies=True,
+        reuse_sessions=True,
+        warm=True,
+        use_xheaders=True,
+        # allow_websocket_origin='*',
+        num_procs=args.num_procs,
+        num_threads=args.num_threads,
+        static_dirs={"img": IMG_DIR, "logos": LOGO_DIR},
+        global_loading_spinner=True,
+    )

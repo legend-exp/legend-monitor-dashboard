@@ -43,6 +43,7 @@ phy_plots_sc_vals_dict = {
     "ZUL_T_RR": "ZUL_T_RR",
 }
 
+
 def phy_plot_vsTime(
     data_string,
     data_string_mean,
@@ -58,15 +59,15 @@ def phy_plot_vsTime(
     data_sc,
     sc_param,
 ):
-    # add two hours to UTC index 
+    # add two hours to UTC index
     if data_string.index[0].utcoffset() != pd.Timedelta(hours=2):
         data_string.index += pd.Timedelta(hours=2)
 
     data_high_res = data_string.copy()
     data_high_res["datetime"] = data_high_res.index
     data_high_res.reset_index(drop=True, inplace=True)
-    
-    # resample data 
+
+    # resample data
     if resample_unit != "0min":
         data_resampled = data_string.resample(resample_unit, origin="start").mean()
         data_resampled["datetime"] = data_resampled.index
@@ -98,7 +99,7 @@ def phy_plot_vsTime(
     hover_renderers = []
     for i, col in enumerate(data_string_mean.columns):
         time_series_col = f"{col}_val"
-        
+
         # all timestamp entries
         line_high_res = p.line(
             x="datetime",
@@ -106,11 +107,11 @@ def phy_plot_vsTime(
             source=source_high_res,
             color=colors[i],
             line_width=1,
-            line_alpha=0.3 if source_resampled is not None else 1, 
+            line_alpha=0.3 if source_resampled is not None else 1,
             legend_label=col,
             name=col,
         )
-        
+
         # resampled data
         if source_resampled is not None:
             line_resampled = p.line(
@@ -122,14 +123,17 @@ def phy_plot_vsTime(
                 legend_label=col,
                 name=f"{col}",
             )
-            hover_renderers.append(line_resampled)  
+            hover_renderers.append(line_resampled)
         else:
-            hover_renderers.append(line_high_res)  
+            hover_renderers.append(line_high_res)
 
     p.hover.renderers = hover_renderers
     p.hover.tooltips = [
         ("Time", "$x{%F %H:%M:%S CET}"),
-        (f"Avg. {plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]})", f"@{time_series_col}{{0.2f}}"),
+        (
+            f"Avg. {plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]})",
+            f"@{time_series_col}{{0.2f}}",
+        ),
         ("Detector", "$name"),
     ]
     p.hover.formatters = {"$x": "datetime", "$source": "printf"}
@@ -144,11 +148,15 @@ def phy_plot_vsTime(
         data_for_start_time = data_resampled
     else:
         data_for_start_time = data_high_res
-        
-    start_time_str = pd.to_datetime(data_for_start_time['datetime'].iloc[0]).strftime('%d/%m/%Y %H:%M:%S')
+
+    start_time_str = pd.to_datetime(data_for_start_time["datetime"].iloc[0]).strftime(
+        "%d/%m/%Y %H:%M:%S"
+    )
     p.xaxis.axis_label = f"Time (CET), starting: {start_time_str}"
     p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = f"{plot_info.loc['label'].iloc[0]} [{plot_info.loc['unit'].iloc[0]}]"
+    p.yaxis.axis_label = (
+        f"{plot_info.loc['label'].iloc[0]} [{plot_info.loc['unit'].iloc[0]}]"
+    )
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days="%Y/%m/%d")
 
@@ -171,7 +179,7 @@ def phy_plot_vsTime(
     elif label == "Noise":
         p.y_range = Range1d(-150, 150)
 
-    # slow-control data 
+    # slow-control data
     if not data_sc.empty:
         y_range_name = f"{sc_param}_range"
         y_min = data_sc["value"].min() * 0.99
@@ -222,6 +230,7 @@ def phy_plot_vsTime(
 
     return p
 
+
 def phy_plot_histogram(
     data_string,
     plot_info,
@@ -247,7 +256,10 @@ def phy_plot_histogram(
     p.title.text_font_size = "25px"
     p.hover.formatters = {"$x": "printf", "$snap_y": "printf"}
     p.hover.tooltips = [
-        (f"{plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]}", "$x{%0.2f}"),
+        (
+            f"{plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]}",
+            "$x{%0.2f}",
+        ),
         ("Counts", "$snap_y"),
         ("Detector", "$name"),
     ]
