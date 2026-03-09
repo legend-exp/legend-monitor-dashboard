@@ -4,6 +4,7 @@ uv.lock
 #testing
 Test.ipynb
 
+/src/legenddashboard/_version.py
 
 # ignore data files
 data/

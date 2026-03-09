@@ -65,13 +65,13 @@ def phy_plot_vsTime(
 
     data_high_res = data_string.copy()
     data_high_res["datetime"] = data_high_res.index
-    data_high_res.reset_index(drop=True, inplace=True)
+    data_high_res = data_high_res.reset_index(drop=True)
 
     # resample data
     if resample_unit != "0min":
         data_resampled = data_string.resample(resample_unit, origin="start").mean()
         data_resampled["datetime"] = data_resampled.index
-        data_resampled.reset_index(drop=True, inplace=True)
+        data_resampled = data_resampled.reset_index(drop=True)
 
         source_high_res = ColumnDataSource(data_high_res)
         source_resampled = ColumnDataSource(data_resampled)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import time
 from pathlib import Path
 
@@ -74,19 +73,19 @@ class PhyMonitoring(GedMonitoring):
     )
     def update_plots(self):
         start_time = time.time()
-        data_file = os.path.join(
-            self.phy_path,
-            "generated/plt/hit/phy",
-            self.period,
-            self.run,
-            f"l200-{self.period}-{self.run}-phy-geds.hdf",
+        data_file = (
+            Path(self.phy_path)
+            / "generated/plt/hit/phy"
+            / self.period
+            / self.run
+            / f"l200-{self.period}-{self.run}-phy-geds.hdf"
         )
-        data_file_sc = os.path.join(
-            self.phy_path,
-            "generated/plt/hit/phy",
-            self.period,
-            self.run,
-            f"l200-{self.period}-{self.run}-phy-slow_control.hdf",
+        data_file_sc = (
+            Path(self.phy_path)
+            / "generated/plt/hit/phy"
+            / self.period
+            / self.run
+            / f"l200-{self.period}-{self.run}-phy-slow_control.hdf"
         )
 
         # Create empty plot inc case of errors
@@ -97,7 +96,8 @@ class PhyMonitoring(GedMonitoring):
 
         # return empty plot if no data exists for run
         if not Path(data_file).exists():
-            log.debug("Time to get phy plot:", extra={"time": time.time() - start_time})
+            msg = f"Time to get phy plot: {time.time() - start_time}"
+            log.debug(msg)
             return p
 
         # get filekeys to check if key exists
@@ -107,7 +107,8 @@ class PhyMonitoring(GedMonitoring):
         # load dataframe for current plot value and get all data from selected string
         channel_names = self.strings_dict.get(self.string, [])
         if not channel_names:
-            print(f"No channel_names found for string {self.string}")
+            msg = f"No channel_names found for string {self.string}"
+            log.error(msg)
             return p
 
         channels = [
@@ -195,7 +196,8 @@ class PhyMonitoring(GedMonitoring):
             data_sc,
             self.phy_plots_sc_vals,
         )
-        log.debug("Time to get phy plot:", extra={"time": time.time() - start_time})
+        msg = f"Time to get phy plot: {time.time()-start_time}"
+        log.debug(msg)
         # self.bokeh_pane.object = p
         return p
 
@@ -373,5 +375,6 @@ def run_dashboard_phy() -> None:
 
     config = read_config(args.config_file)
     phy_pane = GedMonitoring.display_phy(config.base, args.widget_widths)
-    print("Starting Phy. Monitoring on port ", args.port)  # noqa: T201
+    msg = f"Starting Phy. Monitoring on port {args.port}"
+    log.info(msg)
     pn.serve(phy_pane, port=args.port, show=False)
