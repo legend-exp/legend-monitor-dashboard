@@ -251,7 +251,7 @@ def run_dashboard() -> None:
     argparser.add_argument(
         "-d", "--disable-page", nargs="*", required=False, default=[]
     )
-    argparser.add_argument("--num-procs", type=int, default=1)
+    # argparser.add_argument("--num-procs", type=int, default=1)
     argparser.add_argument("--num-threads", type=int, default=1)
 
     args = argparser.parse_args()
@@ -261,33 +261,27 @@ def run_dashboard() -> None:
     )
     img_dir, logo_dir = get_paths()
 
-    def _build_dash():
-        l200_monitoring = build_dashboard(
-            args.config_file, args.widget_widths, args.disable_page
-        )
+    l200_monitoring = build_dashboard(
+        args.config_file, args.widget_widths, args.disable_page
+    )
 
-        l200_monitoring.header.append(
-            pn.Row(
-                pn.Spacer(width=120), build_header_logos(), sizing_mode="stretch_width"
-            )
-        )
+    l200_monitoring.header.append(
+        pn.Row(pn.Spacer(width=120), build_header_logos(), sizing_mode="stretch_width")
+    )
 
-        l200_monitoring.main.append(
-            pn.Tabs(("Information", build_info_pane(info_path)))
-        )
-        return l200_monitoring
+    l200_monitoring.main.append(pn.Tabs(("Information", build_info_pane(info_path))))
 
-    print(
-        f"Starting Monitoring Dashboard on port: {args.port} with {args.num_procs} processes and {args.num_threads} threads"
+    print(  # noqa: T201
+        f"Starting Monitoring Dashboard on port: {args.port} with {args.num_threads} threads"  # with {args.num_procs} processes
     )
     pn.serve(
-        _build_dash,
+        l200_monitoring,
         port=args.port,
         show=False,
         enable_xsrf_cookies=True,
-        warm=args.num_procs == 1,
+        warm=True,
         use_xheaders=True,
-        num_procs=args.num_procs,
+        num_procs=1,
         num_threads=args.num_threads,
         static_dirs={"img": img_dir, "logos": logo_dir},
         global_loading_spinner=True,
