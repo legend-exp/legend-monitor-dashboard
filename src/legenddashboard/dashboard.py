@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.resources
 from pathlib import Path
 
@@ -91,6 +92,8 @@ def build_dashboard(
         date_range=base_monitor.param.date_range,
         name="L200 Ged Monitoring",
     )
+    with contextlib.suppress(RuntimeError):
+        pn.state.add_periodic_callback(base_monitor._refresh_periods, period=300000)
     sidebar = base_monitor.build_sidebar()
     l200_monitoring.sidebar.append(ged_monitor.build_sidebar(sidebar_instance=sidebar))
 
@@ -104,9 +107,11 @@ def build_dashboard(
             run=base_monitor.param.run,
             date_range=base_monitor.param.date_range,
             channel=ged_monitor.param.channel,
-            string=ged_monitor.param.string,
             sort_by=ged_monitor.param.sort_by,
             name="L200 Cal Monitoring",
+        )
+        ged_monitor.param.watch(
+            lambda e: setattr(cal_monitor, "string", e.new), "string"
         )
         cal_panes = cal_monitor.build_cal_panes(
             widget_widths=widget_widths,
@@ -125,9 +130,11 @@ def build_dashboard(
                 run=base_monitor.param.run,
                 date_range=base_monitor.param.date_range,
                 channel=ged_monitor.param.channel,
-                string=ged_monitor.param.string,
                 sort_by=ged_monitor.param.sort_by,
                 name="L200 Phy Monitoring",
+            )
+            ged_monitor.param.watch(
+                lambda e: setattr(phy_monitor, "string", e.new), "string"
             )
         else:
             phy_monitor = PhyMonitoring(
@@ -252,6 +259,7 @@ def run_dashboard() -> None:
     info_path = (
         importlib.resources.files("legenddashboard") / "information" / "general.md"
     )
+    img_dir, logo_dir = get_paths()
 
     def _build_dash():
         l200_monitoring = build_dashboard(
@@ -269,18 +277,16 @@ def run_dashboard() -> None:
         )
         return l200_monitoring
 
-    img_dir, logo_dir = get_paths()
-
-    print("Starting Monitoring Dashboard on port ", args.port)  # noqa: T201
+    print(
+        f"Starting Monitoring Dashboard on port: {args.port} with {args.num_procs} processes and {args.num_threads} threads"
+    )
     pn.serve(
         _build_dash,
         port=args.port,
         show=False,
         enable_xsrf_cookies=True,
-        reuse_sessions=True,
         warm=args.num_procs == 1,
         use_xheaders=True,
-        # allow_websocket_origin='*',
         num_procs=args.num_procs,
         num_threads=args.num_threads,
         static_dirs={"img": img_dir, "logos": logo_dir},

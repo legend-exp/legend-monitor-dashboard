@@ -41,6 +41,8 @@ class Monitoring(param.Parameterized):
     )
     run_dict = param.Dict({}, allow_refs=True, nested_refs=True)
     periods = param.Dict({}, allow_refs=True, nested_refs=True)
+    period_objects = param.List(default=[f"p{i:02}" for i in range(100)])
+    run_objects = param.List(default=[f"r{i:03}" for i in range(100)])
 
     date_range = param.DateRange(
         default=(
@@ -82,7 +84,7 @@ class Monitoring(param.Parameterized):
         if self.period == "p00":
             self.periods = gen_run_dict(self.base_path)
             log.debug("updating")
-            self.param["period"].objects = list(self.periods)
+            self.period_objects = list(self.periods)
             self.period = list(self.periods)[-1]
             self._get_period_data(None)
 
@@ -92,7 +94,7 @@ class Monitoring(param.Parameterized):
     def _get_period_data(self, event=None):  # noqa: ARG002
         self.run_dict = self.periods[self.period]
 
-        self.param["run"].objects = list(self.run_dict)
+        self.run_objects = list(self.run_dict)
         if self.run == list(self.run_dict)[-1]:
             self.run = next(iter(self.run_dict))
         else:
@@ -123,6 +125,13 @@ class Monitoring(param.Parameterized):
             )
             + dtt.timedelta(minutes=110),
         )
+
+    def _refresh_periods(self):
+        new_periods = gen_run_dict(self.base_path)
+        if new_periods != self.periods:
+            self.periods = new_periods
+            self.period_objects = list(new_periods)
+            self._get_period_data()
 
     def _get_run_dict(self, event=None):  # noqa: ARG002
         start_time = time.time()
@@ -159,7 +168,7 @@ class Monitoring(param.Parameterized):
             name=f"Run {int(self.run[1:]):02d}",
             button_type="primary",
             sizing_mode="stretch_width",
-            items=self.param.run.objects,
+            items=self.run_objects,
         )
 
         def update_run(event):
@@ -172,12 +181,12 @@ class Monitoring(param.Parameterized):
             name=f"Period {int(self.period[1:]):02d}",
             button_type="primary",
             sizing_mode="stretch_width",
-            items=self.param.period.objects,
+            items=self.period_objects,
         )
 
         def update_period(event):
             self.period = event.new
-            run_param.items = self.param.run.objects
+            run_param.items = self.run_objects
             run_param.name = f"Run {int(self.run[1:]):02d}"
             period_param.name = f"Period {int(self.period[1:]):02d}"
 

@@ -25,7 +25,7 @@ plt.rcParams["figure.dpi"] = 100
 
 
 class CalMonitoring(GedMonitoring):
-    cached_data = param.Dict(default={"hit": {}, "dsp": {}})
+    cached_data = param.Dict(default=None)
     tmp_path = param.String("/tmp/")
     plot_type_tracking = param.ObjectSelector(
         default=list(cal.tracking_plots)[1],
@@ -39,6 +39,8 @@ class CalMonitoring(GedMonitoring):
     plot_type_details = param.ObjectSelector(
         default=cal.detailed_plots[0], objects=cal.detailed_plots
     )
+    plot_type_details_objects = param.List(default=cal.detailed_plots)
+    channel_objects = param.List(default=[])
 
     plot_type_summary = param.ObjectSelector(
         default=list(cal.summary_plots)[3],
@@ -51,6 +53,7 @@ class CalMonitoring(GedMonitoring):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.cached_data = {"hit": {}, "dsp": {}}
         self.update_plot_dict(None)
         self.param.watch(
             self.download_summary_files,
@@ -134,6 +137,7 @@ class CalMonitoring(GedMonitoring):
         )
         return ret
 
+    @param.depends("period", "run", "sort_by", "plot_type_summary")
     def view_summary(self, event=None):  # noqa: ARG002
         start_time = time.time()
         figure = None
@@ -223,6 +227,7 @@ class CalMonitoring(GedMonitoring):
         self.cached_data["hit"] = {}
         self.cached_data["dsp"] = {}
 
+    @param.depends("period", "date_range", "sort_by", "string", "plot_type_tracking")
     def view_tracking(self, event=None):  # noqa: ARG002
         figure = None
         try:
@@ -274,7 +279,7 @@ class CalMonitoring(GedMonitoring):
             sort_dets_obj=self.sort_obj,
         )
 
-        self.param["channel"].objects = channels
+        self.channel_objects = channels
         self.channel = channels[0]
 
         self.update_strings()
@@ -301,13 +306,14 @@ class CalMonitoring(GedMonitoring):
     def update_plot_type_details(self):
         start_time = time.time()
         plots = cal.all_detailed_plots[self.parameter]
-        self.param["plot_type_details"].objects = plots
+        self.plot_type_details_objects = plots
         self.plot_type_details = plots[0]
         log.debug(
             "Time to update plot type details:",
             extra={"time": time.time() - start_time},
         )
 
+    @param.depends("period", "run", "channel", "parameter", "plot_type_details")
     def view_details(self, event=None):  # noqa: ARG002
         fig_pane = pn.pane.Matplotlib(plt.figure(), sizing_mode="scale_width")
         try:
@@ -373,31 +379,18 @@ class CalMonitoring(GedMonitoring):
         return fig_pane
 
     def build_detailed_pane(self, widget_widths: int = 140):
-        details_ch_param = pn.Param(
-            self.param,
-            widgets={
-                "channel": {"widget_type": pn.widgets.Select, "width": widget_widths}
-            },
-            parameters=["channel"],
-            show_labels=False,
-            show_name=False,
-            sort=True,
+        details_ch_param = pn.widgets.Select(
+            value=self.param.channel,
+            options=self.param.channel_objects,
+            width=widget_widths,
         )
 
-        details_type_param = pn.Param(
-            self.param,
-            widgets={
-                "plot_type_details": {
-                    "widget_type": pn.widgets.Select,
-                    "width": widget_widths,
-                }
-            },
+        details_type_param = pn.widgets.Select(
             # 'plot_type_details': {'widget_type': pn.widgets.RadioButtonGroup, 'button_type': 'success',
             #         'orientation':"vertical", 'width': widget_widths}},
-            parameters=["plot_type_details"],
-            show_labels=False,
-            show_name=False,
-            sort=True,
+            value=self.param.plot_type_details,
+            options=self.param.plot_type_details_objects,
+            width=widget_widths,
         )
 
         details_param_currentValue = pn.pane.Markdown(f"## {self.parameter}")

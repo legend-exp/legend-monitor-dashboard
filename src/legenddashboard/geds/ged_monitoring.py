@@ -34,13 +34,9 @@ meta_visu_plots_dict = {
 
 
 class GedMonitoring(Monitoring):
-    channel = param.Selector(default=0, objects=[0], allow_refs=True, nested_refs=True)
-    string = param.ObjectSelector(
-        default="01",
-        objects=[f"{i + 1:02}" for i in range(11)],
-        allow_refs=True,
-        nested_refs=True,
-    )
+    channel = param.Parameter(default=0, allow_refs=True, nested_refs=True)
+    string = param.Parameter(default="01", allow_refs=True, nested_refs=True)
+    string_objects = param.List(default=[f"{i + 1:02}" for i in range(11)])
     # general selectors
     sort_by = param.ObjectSelector(
         default=next(iter(sort_dict)),
@@ -53,8 +49,6 @@ class GedMonitoring(Monitoring):
         default=next(iter(meta_visu_plots_dict)), objects=list(meta_visu_plots_dict)
     )
     meta_visu_plots_dict = param.Dict(meta_visu_plots_dict)
-    meta_df = pd.DataFrame()
-    meta_visu_source = ColumnDataSource({})
     meta_visu_xlabels = param.Dict({})
     meta_visu_chan_dict = param.Dict({})
     meta_visu_channel_map = param.Dict({})
@@ -65,6 +59,8 @@ class GedMonitoring(Monitoring):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.meta_df = pd.DataFrame()
+        self.meta_visu_source = ColumnDataSource({})
         self.param.watch(
             self.get_run_and_channel,
             ["period", "run", "channel"],
@@ -78,6 +74,10 @@ class GedMonitoring(Monitoring):
             self._get_metadata, ["period", "run"], precedence=1, queued=True
         )
 
+        if self.run_dict:
+            self.update_strings()
+
+    @param.depends("period", "run", "channel")
     def get_run_and_channel(self, event=None):  # noqa: ARG002
         try:
             start_time = time.time()
@@ -100,7 +100,7 @@ class GedMonitoring(Monitoring):
             sort_dets_obj=self.sort_obj,
         )
 
-        self.param["string"].objects = list(strings_dict)
+        self.string_objects = list(strings_dict)
         self.string = f"{next(iter(strings_dict))}"
         self.strings_dict = strings_dict
         self.name_to_rawid = {
@@ -257,7 +257,7 @@ class GedMonitoring(Monitoring):
             name=f"{self.string}",
             button_type="primary",
             sizing_mode="stretch_width",
-            items=self.param.string.objects,
+            items=self.string_objects,
         )
 
         def update_string(event):
@@ -275,7 +275,7 @@ class GedMonitoring(Monitoring):
 
         def update_sort_by(event):
             self.sort_by = event.new
-            string_param.items = self.param.string.objects
+            string_param.items = self.string_objects
             string_param.name = f"{self.string}"
             sort_by_param.name = f"Sorted by {self.sort_by}"
 

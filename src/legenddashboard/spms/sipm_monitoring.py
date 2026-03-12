@@ -32,7 +32,8 @@ class SiPMMonitoring(Monitoring):
 
     sipm_sort_by = param.ObjectSelector(objects=["Barrel"], default="Barrel")
 
-    sipm_barrel = param.ObjectSelector(default=0, objects=[0])
+    sipm_barrel = param.Parameter(default=0)
+    sipm_barrel_objects = param.List(default=[0])
     sipm_resampled = param.Integer(
         default=1,
         bounds=(1, 60),
@@ -56,7 +57,7 @@ class SiPMMonitoring(Monitoring):
             sort_dets_obj=self.sort_obj,
         )
 
-        self.param["sipm_barrel"].objects = list(self.sipm_out_dict)
+        self.sipm_barrel_objects = list(self.sipm_out_dict)
         self.sipm_barrel = f"{next(iter(self.sipm_out_dict))}"
 
         log.debug("Time to update barrels:", extra={"time": time.time() - start_time})
@@ -133,7 +134,7 @@ class SiPMMonitoring(Monitoring):
             name="SiPM",
             button_type="primary",
             width=widget_widths,
-            items=self.param.sipm_barrel.objects,
+            items=self.sipm_barrel_objects,
         )
 
         def update_sipm_plots(event):
