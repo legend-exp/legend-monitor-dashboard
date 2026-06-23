@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import importlib.resources
+import logging
+import threading
+import weakref
+from collections import OrderedDict
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import matplotlib as mpl
@@ -10,6 +15,8 @@ import panel as pn
 from dbetto import AttrsDict, Props, TextDB
 from dbetto.catalog import Catalog
 from legendmeta import LegendMetadata
+
+log = logging.getLogger(__name__)
 
 # somehow TUM server needs Agg -> needs fix in the future
 mpl.use("Agg")
@@ -98,6 +105,139 @@ class sort_dets:
                 status_entries[system].append(new_entry)
 
         self.statuses = Catalog(status_entries)
+
+
+class LRUDict(OrderedDict):
+    """
+    Thread-safe, size-bounded dict with least-recently-used eviction.
+
+    Used to cache the (immutable) parsed parameter files so that they are
+    loaded from the high-latency NERSC filesystem at most once and shared
+    across all user sessions without growing without bound.
+    """
+
+    def __init__(self, maxsize=128, *args, **kwargs):
+        self.maxsize = maxsize
+        self._lock = threading.Lock()
+        super().__init__(*args, **kwargs)
+
+    def __getitem__(self, key):
+        with self._lock:
+            value = super().__getitem__(key)
+            self.move_to_end(key)
+            return value
+
+    def __setitem__(self, key, value):
+        with self._lock:
+            super().__setitem__(key, value)
+            self.move_to_end(key)
+            while len(self) > self.maxsize:
+                super().__delitem__(next(iter(self)))
+
+
+# Read-only metadata catalogs are expensive to build (they walk every
+# channelmap/status validity entry on disk) but never change at runtime, so we
+# build one ``sort_dets`` per base path and share it across all sessions.
+_sort_dets_cache: dict[str, sort_dets] = {}
+_sort_dets_lock = threading.Lock()
+
+# Parsed parameter files are immutable per run; share a single bounded cache
+# across every session to bound memory use and avoid repeated disk reads.
+_par_cache = {"hit": LRUDict(maxsize=128), "dsp": LRUDict(maxsize=128)}
+
+
+def get_sort_dets(path):
+    """Return a shared, cached :class:`sort_dets` instance for ``path``."""
+    key = str(Path(path).resolve())
+    with _sort_dets_lock:
+        cached = _sort_dets_cache.get(key)
+    if cached is None:
+        # Build outside the lock so concurrent first-time builds for *different*
+        # paths do not serialise; a duplicate build for the same path is rare
+        # and harmless.
+        built = sort_dets(path)
+        with _sort_dets_lock:
+            cached = _sort_dets_cache.setdefault(key, built)
+    return cached
+
+
+def get_par_cache():
+    """Return the process-wide bounded cache of parsed parameter files."""
+    return _par_cache
+
+
+class PeriodRefreshRegistry:
+    """
+    Coordinate a single, process-wide scan for new periods/runs.
+
+    Every user session registers its base monitor here. A single scheduled
+    task (or a manual refresh) then runs the filesystem scan *once* and pushes
+    the result into each live session via that session's Bokeh document, so we
+    never scan the (high-latency) filesystem once per user.
+    """
+
+    def __init__(self):
+        # id(monitor) -> (weakref to monitor, that session's document)
+        self._sessions: dict[int, tuple] = {}
+        self._lock = threading.Lock()
+        self._scan_path = None
+        self._scheduled = False
+
+    def register(self, monitor, path):
+        """Register a session's monitor; no-op outside a session context."""
+        doc = pn.state.curdoc
+        if doc is None:
+            # No live session (e.g. during warm-up) -> nothing to push to.
+            return
+        key = id(monitor)
+        with self._lock:
+            self._sessions[key] = (weakref.ref(monitor), doc)
+            self._scan_path = path
+        doc.on_session_destroyed(lambda _ctx: self._unregister(key))
+
+    def _unregister(self, key):
+        with self._lock:
+            self._sessions.pop(key, None)
+
+    def ensure_scheduled(self, period):
+        """Schedule the single server-wide refresh task exactly once."""
+        with self._lock:
+            if self._scheduled:
+                return
+            self._scheduled = True
+        try:
+            pn.state.schedule_task(
+                "legend_refresh_periods", self.scan_and_push, period=period
+            )
+        except Exception:
+            # No running event loop yet (e.g. during warm-up); allow a later
+            # session to schedule it.
+            with self._lock:
+                self._scheduled = False
+            log.debug("Could not schedule global period refresh", exc_info=True)
+
+    def scan_and_push(self):
+        """Scan the filesystem once and push new periods to every session."""
+        with self._lock:
+            path = self._scan_path
+            sessions = list(self._sessions.values())
+        if path is None or not sessions:
+            # Nobody connected -> skip the scan entirely.
+            return
+        new_periods = gen_run_dict(path)
+        for ref, doc in sessions:
+            monitor = ref()
+            if monitor is None:
+                continue
+            try:
+                # Mutate each session's state on its own document/event loop.
+                doc.add_next_tick_callback(partial(monitor._apply_periods, new_periods))
+            except Exception:
+                log.debug("Could not push period refresh to a session", exc_info=True)
+
+
+# Single, process-wide registry shared by all sessions.
+period_refresh_registry = PeriodRefreshRegistry()
 
 
 def gen_run_dict(path):

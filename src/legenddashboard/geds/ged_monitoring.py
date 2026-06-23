@@ -87,7 +87,8 @@ class GedMonitoring(Monitoring):
             log.debug(
                 "Time to get run and channel:", extra={"time": time.time() - start_time}
             )
-        except BaseException:
+        except Exception:
+            log.debug("Could not build run/channel header", exc_info=True)
             ret = pn.pane.Markdown("###")
         return ret
 
@@ -265,6 +266,15 @@ class GedMonitoring(Monitoring):
             string_param.name = f"{self.string}"
 
         string_param.on_click(update_string)
+
+        # Keep the string menu in sync when the strings are recomputed, e.g.
+        # after a refresh selects a newly discovered run (see update_strings).
+        self.param.watch(
+            lambda event: setattr(string_param, "items", event.new), "string_objects"
+        )
+        self.param.watch(
+            lambda event: setattr(string_param, "name", f"{event.new}"), "string"
+        )
 
         sort_by_param = pn.widgets.MenuButton(
             name=f"Sorted by {self.sort_by}",
