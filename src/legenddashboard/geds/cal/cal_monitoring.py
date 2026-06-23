@@ -14,7 +14,7 @@ import param
 import legenddashboard.geds.string_visulization as visu
 from legenddashboard.geds import cal
 from legenddashboard.geds.ged_monitoring import GedMonitoring
-from legenddashboard.util import logo_path, read_config, sorter
+from legenddashboard.util import get_par_cache, logo_path, read_config, sorter
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +53,10 @@ class CalMonitoring(GedMonitoring):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.cached_data = {"hit": {}, "dsp": {}}
+        # Shared, bounded cache of parsed parameter files; reused across all
+        # user sessions so the high-latency filesystem is read at most once per
+        # run and memory stays bounded (see legenddashboard.util.get_par_cache).
+        self.cached_data = get_par_cache()
         self.update_plot_dict(None)
         self.param.watch(
             self.download_summary_files,
@@ -123,7 +126,8 @@ class CalMonitoring(GedMonitoring):
                 name="Click to download 'csv'",
                 width=350,
             )
-        except BaseException:
+        except Exception:
+            log.exception("Failed to build summary download for %s", self.run)
             ret = pn.widgets.FileDownload(
                 None,
                 filename="temp",
@@ -142,11 +146,8 @@ class CalMonitoring(GedMonitoring):
         start_time = time.time()
         figure = None
         try:
-            if self.cached_data == {}:
-                self.cached_data = {
-                    "hit": {},
-                    "dsp": {},
-                }
+            if not self.cached_data:
+                self.cached_data = get_par_cache()
             if self.plot_type_summary in [
                 "FWHM Qbb",
                 "FWHM FEP",
@@ -215,17 +216,25 @@ class CalMonitoring(GedMonitoring):
                 )
             else:
                 figure = plt.figure()
-        except BaseException:
-            pass
+        except Exception:
+            log.exception(
+                "Failed to build summary plot '%s' for %s",
+                self.plot_type_summary,
+                self.run,
+            )
         log.debug("Time to get summary plot:", extra={"time": time.time() - start_time})
         return figure
 
-    def _clear_cached_data(self, event=None):  # noqa: ARG002
+    def _clear_cached_data(self, event=None):
         """
-        Clear the cached data if the period changes.
+        No-op retained for backwards compatibility.
+
+        The parameter-file cache is now a process-wide, size-bounded LRU cache
+        shared across all sessions (see legenddashboard.util.get_par_cache).
+        Parsed parameter files are immutable per run, so there is nothing to
+        clear when the period changes, and clearing here would evict entries
+        still in use by other users' sessions.
         """
-        self.cached_data["hit"] = {}
-        self.cached_data["dsp"] = {}
 
     @param.depends("period", "date_range", "sort_by", "string", "plot_type_tracking")
     def view_tracking(self, event=None):  # noqa: ARG002
@@ -252,8 +261,13 @@ class CalMonitoring(GedMonitoring):
                     cache_data=self.cached_data,
                     sort_dets_obj=self.sort_obj,
                 )
-        except BaseException:
-            pass
+        except Exception:
+            log.exception(
+                "Failed to build tracking plot '%s' for %s %s",
+                self.plot_type_tracking,
+                self.period,
+                self.string,
+            )
         return figure
 
     def update_plot_dict(self, event=None):  # noqa: ARG002
@@ -374,8 +388,13 @@ class CalMonitoring(GedMonitoring):
                 new_manager.canvas.figure = fig
                 fig.set_canvas(new_manager.canvas)
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
-        except BaseException:
-            pass
+        except Exception:
+            log.exception(
+                "Failed to build detailed plot '%s'/'%s' for channel %s",
+                self.parameter,
+                self.plot_type_details,
+                self.channel,
+            )
         return fig_pane
 
     def build_detailed_pane(self, widget_widths: int = 140):

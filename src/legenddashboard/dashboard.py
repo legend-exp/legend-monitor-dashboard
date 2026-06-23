@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
+import datetime as dt
 import importlib.resources
 from pathlib import Path
 
@@ -37,7 +37,7 @@ def build_dashboard(
     from legenddashboard.llama.llama_monitoring import LlamaMonitoring
     from legenddashboard.muon.muon_monitoring import MuonMonitoring
     from legenddashboard.spms.sipm_monitoring import SiPMMonitoring
-    from legenddashboard.util import read_config
+    from legenddashboard.util import period_refresh_registry, read_config
 
     config = read_config(config)
 
@@ -92,8 +92,41 @@ def build_dashboard(
         date_range=base_monitor.param.date_range,
         name="L200 Ged Monitoring",
     )
-    with contextlib.suppress(RuntimeError):
-        pn.state.add_periodic_callback(base_monitor._refresh_periods, period=300000)
+    # Register this session for the single, server-wide periodic scan for new
+    # periods/runs (one filesystem scan for all users, pushed into every live
+    # session), and make sure that scan is scheduled exactly once per hour.
+    period_refresh_registry.register(base_monitor, data_path)
+    period_refresh_registry.ensure_scheduled(dt.timedelta(hours=1))
+
+    # Manual refresh button, placed in the top-right corner of the header.
+    refresh_button = pn.widgets.Button(
+        name="Refresh",
+        icon="refresh",
+        button_type="primary",
+        width=120,
+        description="Check now for new periods and runs",
+    )
+
+    def _on_refresh(event):
+        # Trigger the shared scan; results are pushed to every session
+        # (including this one) via its document.
+        refresh_button.loading = True
+        try:
+            period_refresh_registry.scan_and_push()
+        finally:
+            refresh_button.loading = False
+
+    refresh_button.on_click(_on_refresh)
+    l200_monitoring.header.append(
+        pn.Row(
+            pn.Spacer(width=120),
+            build_header_logos(),
+            pn.HSpacer(),
+            refresh_button,
+            sizing_mode="stretch_width",
+        )
+    )
+
     sidebar = base_monitor.build_sidebar()
     l200_monitoring.sidebar.append(ged_monitor.build_sidebar(sidebar_instance=sidebar))
 
@@ -230,7 +263,6 @@ def build_header_logos():
             fixed_aspect=True,
             width=30,
         ),
-        width=1800,
         align="center",
     )
 
@@ -251,8 +283,21 @@ def run_dashboard() -> None:
     argparser.add_argument(
         "-d", "--disable-page", nargs="*", required=False, default=[]
     )
-    # argparser.add_argument("--num-procs", type=int, default=1)
-    argparser.add_argument("--num-threads", type=int, default=1)
+    # num_procs is fixed to 1: warm=True (pre-warmed sessions) requires a single
+    # process, and the expensive read-only metadata is shared across sessions
+    # in-process anyway (see legenddashboard.util.get_sort_dets / get_par_cache).
+    argparser.add_argument("--num-threads", type=int, default=4)
+    argparser.add_argument(
+        "--websocket-origin",
+        nargs="*",
+        default=None,
+        help=(
+            "Allowed websocket origin host(s), e.g. the public NERSC spin "
+            "hostname. Required when serving behind a reverse proxy, otherwise "
+            "Bokeh rejects the websocket connection and the dashboard never "
+            "updates."
+        ),
+    )
 
     args = argparser.parse_args()
 
@@ -261,28 +306,34 @@ def run_dashboard() -> None:
     )
     img_dir, logo_dir = get_paths()
 
-    l200_monitoring = build_dashboard(
-        args.config_file, args.widget_widths, args.disable_page
-    )
-
-    l200_monitoring.header.append(
-        pn.Row(pn.Spacer(width=120), build_header_logos(), sizing_mode="stretch_width")
-    )
-
-    l200_monitoring.main.append(pn.Tabs(("Information", build_info_pane(info_path))))
+    def _build_dash():
+        # Build a fresh dashboard per session so each user gets independent
+        # widget state. The heavy, read-only data (metadata catalogs and parsed
+        # parameter files) is cached and shared across sessions, so this stays
+        # cheap despite running on every connection.
+        l200_monitoring = build_dashboard(
+            args.config_file, args.widget_widths, args.disable_page
+        )
+        l200_monitoring.main.append(
+            pn.Tabs(("Information", build_info_pane(info_path)))
+        )
+        return l200_monitoring
 
     print(  # noqa: T201
-        f"Starting Monitoring Dashboard on port: {args.port} with {args.num_threads} threads"  # with {args.num_procs} processes
+        f"Starting Monitoring Dashboard on port: {args.port} with {args.num_threads} threads"
     )
-    pn.serve(
-        l200_monitoring,
-        port=args.port,
-        show=False,
-        enable_xsrf_cookies=True,
-        warm=True,
-        use_xheaders=True,
-        num_procs=1,
-        num_threads=args.num_threads,
-        static_dirs={"img": img_dir, "logos": logo_dir},
-        global_loading_spinner=True,
-    )
+    serve_kwargs = {
+        "port": args.port,
+        "show": False,
+        "enable_xsrf_cookies": True,
+        "warm": True,
+        "use_xheaders": True,
+        "address": "0.0.0.0",
+        "num_procs": 1,
+        "num_threads": args.num_threads,
+        "static_dirs": {"img": img_dir, "logos": logo_dir},
+        "global_loading_spinner": True,
+    }
+    if args.websocket_origin:
+        serve_kwargs["websocket_origin"] = args.websocket_origin
+    pn.serve(_build_dash, **serve_kwargs)

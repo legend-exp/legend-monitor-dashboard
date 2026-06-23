@@ -14,7 +14,7 @@ from bokeh.io import output_notebook
 from bokeh.resources import INLINE
 from dbetto import Props
 
-from legenddashboard.util import gen_run_dict, logo_path, sort_dets
+from legenddashboard.util import gen_run_dict, get_sort_dets, logo_path
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class Monitoring(param.Parameterized):
             output_notebook(INLINE)
         self.cached_plots = {}
         self.base_path = base_path
-        self.sort_obj = sort_dets(base_path)
+        self.sort_obj = get_sort_dets(base_path)
 
         super().__init__(**params)
 
@@ -127,7 +127,15 @@ class Monitoring(param.Parameterized):
         )
 
     def _refresh_periods(self):
-        new_periods = gen_run_dict(self.base_path)
+        """Scan for new periods/runs in this session and apply any changes."""
+        self._apply_periods(gen_run_dict(self.base_path))
+
+    def _apply_periods(self, new_periods):
+        """Apply an already-scanned periods dict to this session's state.
+
+        Kept separate from the scan so a single shared scan can push the same
+        result into many sessions (see util.PeriodRefreshRegistry).
+        """
         if new_periods != self.periods:
             self.periods = new_periods
             self.period_objects = list(new_periods)
@@ -191,6 +199,26 @@ class Monitoring(param.Parameterized):
             period_param.name = f"Period {int(self.period[1:]):02d}"
 
         period_param.on_click(update_period)
+
+        # Keep the menu buttons in sync when the underlying parameters change
+        # outside of a direct click, e.g. after a manual or periodic refresh
+        # discovers new periods/runs (see _refresh_periods).
+        self.param.watch(
+            lambda event: setattr(period_param, "items", event.new), "period_objects"
+        )
+        self.param.watch(
+            lambda event: setattr(
+                period_param, "name", f"Period {int(event.new[1:]):02d}"
+            ),
+            "period",
+        )
+        self.param.watch(
+            lambda event: setattr(run_param, "items", event.new), "run_objects"
+        )
+        self.param.watch(
+            lambda event: setattr(run_param, "name", f"Run {int(event.new[1:]):02d}"),
+            "run",
+        )
 
         return pn.Column(
             pn.pane.SVG(
