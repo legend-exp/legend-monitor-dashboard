@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import importlib.resources
+import os
+import secrets
 from pathlib import Path
 
 import panel as pn
@@ -336,4 +338,35 @@ def run_dashboard() -> None:
     }
     if args.websocket_origin:
         serve_kwargs["websocket_origin"] = args.websocket_origin
+
+    # Optional authentication. On NERSC spin the username, password and cookie
+    # secret are injected as environment variables from spin secrets, so they
+    # never appear in the image, the command line or the repo. When
+    # DASHBOARD_PASSWORD is set, Panel shows a login page. If DASHBOARD_USERNAME
+    # is also set, only that username/password pair is accepted; otherwise any
+    # username with the matching password works.
+    password = os.environ.get("DASHBOARD_PASSWORD")
+    username = os.environ.get("DASHBOARD_USERNAME")
+    basic_auth = {username: password} if (password and username) else password
+    if basic_auth:
+        cookie_secret = os.environ.get("DASHBOARD_COOKIE_SECRET")
+        if not cookie_secret:
+            # A cookie secret is required to sign the login cookie. Generate an
+            # ephemeral one if none is provided, but warn: it changes on every
+            # restart (invalidating logins) and differs across replicas, so set
+            # it as a spin secret for stable sessions.
+            cookie_secret = secrets.token_urlsafe(32)
+            print(  # noqa: T201
+                "DASHBOARD_COOKIE_SECRET not set; generated an ephemeral one. "
+                "Logins will be invalidated on restart -- set it as a spin "
+                "secret for stable sessions."
+            )
+        serve_kwargs["basic_auth"] = basic_auth
+        serve_kwargs["cookie_secret"] = cookie_secret
+        print("Shared-password authentication enabled.")  # noqa: T201
+    else:
+        print(  # noqa: T201
+            "No DASHBOARD_PASSWORD set; serving without authentication."
+        )
+
     pn.serve(_build_dash, **serve_kwargs)

@@ -336,7 +336,7 @@ class GedMonitoring(Monitoring):
             pn.Tabs(
                 (
                     "Detector Visu",
-                    pn.pane.Bokeh(self.view_meta_visu, sizing_mode="scale_both"),
+                    pn.pane.Bokeh(self.view_meta_visu, sizing_mode="scale_width"),
                 ),
                 ("Detector Map", self.view_meta),
                 sizing_mode="scale_both",

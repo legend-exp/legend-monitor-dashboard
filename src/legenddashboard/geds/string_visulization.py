@@ -231,11 +231,14 @@ def create_detector_plot(
     if ticker is None:
         ticker = BasicTicker()
 
-    # To Do: find optimal width and height values for plotting (do not hardcode)
+    # width/height set the preferred aspect ratio; sizing_mode lets the plot
+    # scale down to the available screen width instead of overflowing at a
+    # fixed 1200px.
     p = figure(
         title=plot_title,
         width=1200,
         height=920,
+        sizing_mode="scale_width",
         tools="pan,box_zoom,hover,reset,save",
         tooltips=tooltips,
         match_aspect=True,
