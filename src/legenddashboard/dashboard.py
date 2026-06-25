@@ -58,12 +58,17 @@ def build_dashboard(
     # llama data path
     llama_path = config.llama
 
-    # use Golden layout template with header and LEGEND logo from LEGEND webpage
-    l200_monitoring = pn.template.GoldenTemplate(
+    # FastListTemplate with header and LEGEND logo from the LEGEND webpage. The
+    # main panes are wrapped in a single pn.Tabs (see below) instead of the old
+    # GoldenTemplate windows: GoldenLayout builds its panes with JavaScript
+    # after page load, and in Firefox the Bokeh embed runs before those target
+    # divs exist ("could not find ... HTML tag"), leaving the page blank.
+    l200_monitoring = pn.template.FastListTemplate(
         header_background="#f8f8fa",
         header_color="#1A2A5B",
         title="L200 Monitoring Dashboard",
-        sidebar_width=7,
+        sidebar_width=300,
+        main_layout=None,
         site="",
         logo="https://legend-exp.org/typo3conf/ext/sitepackage/Resources/Public/Images/Logo/logo_legend_tag_next.svg",
         favicon="https://legend-exp.org/typo3conf/ext/sitepackage/Resources/Public/Favicons/android-chrome-96x96.png",
@@ -132,6 +137,11 @@ def build_dashboard(
     sidebar = base_monitor.build_sidebar()
     l200_monitoring.sidebar.append(ged_monitor.build_sidebar(sidebar_instance=sidebar))
 
+    # Collect every main pane as a (title, pane) tab; they are placed into a
+    # single pn.Tabs at the end so all target divs exist in the DOM at embed
+    # time (deterministic rendering across browsers, incl. Firefox).
+    main_tabs: list = []
+
     if "cal" not in disable_page:
         cal_monitor = CalMonitoring(
             base_path=cal_path,
@@ -152,8 +162,8 @@ def build_dashboard(
             widget_widths=widget_widths,
         )
         # cal
-        for pane in cal_panes.values():
-            l200_monitoring.main.append(pane)
+        for title, pane in cal_panes.items():
+            main_tabs.append((title, pane))
     if "phy" not in disable_page:
         if "cal" not in disable_page:
             phy_monitor = PhyMonitoring(
@@ -182,9 +192,12 @@ def build_dashboard(
                 date_range=base_monitor.param.date_range,
                 name="L200 Phy Monitoring",
             )
-        l200_monitoring.main.append(
-            phy_monitor.build_phy_pane(
-                widget_widths=widget_widths,
+        main_tabs.append(
+            (
+                "Physics",
+                phy_monitor.build_phy_pane(
+                    widget_widths=widget_widths,
+                ),
             )
         )
     if "spm" not in disable_page:
@@ -198,9 +211,12 @@ def build_dashboard(
             date_range=base_monitor.param.date_range,
             name="L200 SiPM Monitoring",
         )
-        l200_monitoring.main.append(
-            sipm_monitor.build_spm_pane(
-                widget_widths=widget_widths,
+        main_tabs.append(
+            (
+                "SiPM",
+                sipm_monitor.build_spm_pane(
+                    widget_widths=widget_widths,
+                ),
             )
         )
 
@@ -218,11 +234,11 @@ def build_dashboard(
         muon_panes = muon_monitor.build_muon_panes(
             widget_widths=widget_widths,
         )
-        for pane in muon_panes.values():
-            l200_monitoring.main.append(pane)
+        for title, pane in muon_panes.items():
+            main_tabs.append((title, pane))
     if "meta" not in disable_page:
-        l200_monitoring.main.append(
-            ged_monitor.build_meta_pane(widget_widths=widget_widths)
+        main_tabs.append(
+            ("MetaData", ged_monitor.build_meta_pane(widget_widths=widget_widths))
         )
     if "llama" not in disable_page:
         llama_monitor = LlamaMonitoring(
@@ -230,9 +246,21 @@ def build_dashboard(
             base_path=cal_path,
             name="L200 Llama Monitoring",
         )
-        l200_monitoring.main.append(
-            llama_monitor.build_llama_pane(widget_widths=widget_widths)
+        main_tabs.append(
+            ("Llama", llama_monitor.build_llama_pane(widget_widths=widget_widths))
         )
+
+    # Information tab (was previously appended by the per-session factory).
+    info_path = (
+        importlib.resources.files("legenddashboard") / "information" / "general.md"
+    )
+    main_tabs.append(("Information", build_info_pane(info_path)))
+
+    # Single Tabs holds every pane; dynamic=False keeps all tab divs in the DOM
+    # so Bokeh can embed every root reliably (the GoldenTemplate/Firefox fix).
+    l200_monitoring.main.append(
+        pn.Tabs(*main_tabs, sizing_mode="stretch_both", dynamic=False)
+    )
 
     return l200_monitoring
 
@@ -303,23 +331,15 @@ def run_dashboard() -> None:
 
     args = argparser.parse_args()
 
-    info_path = (
-        importlib.resources.files("legenddashboard") / "information" / "general.md"
-    )
     img_dir, logo_dir = get_paths()
 
     def _build_dash():
         # Build a fresh dashboard per session so each user gets independent
         # widget state. The heavy, read-only data (metadata catalogs and parsed
         # parameter files) is cached and shared across sessions, so this stays
-        # cheap despite running on every connection.
-        l200_monitoring = build_dashboard(
-            args.config_file, args.widget_widths, args.disable_page
-        )
-        l200_monitoring.main.append(
-            pn.Tabs(("Information", build_info_pane(info_path)))
-        )
-        return l200_monitoring
+        # cheap despite running on every connection. The Information tab is now
+        # added inside build_dashboard's main Tabs.
+        return build_dashboard(args.config_file, args.widget_widths, args.disable_page)
 
     print(  # noqa: T201
         f"Starting Monitoring Dashboard on port: {args.port} with {args.num_threads} threads"
