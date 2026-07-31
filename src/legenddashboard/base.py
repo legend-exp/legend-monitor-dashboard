@@ -4,17 +4,20 @@ import bisect
 import datetime as dtt
 import logging
 import time
-from datetime import date, datetime
-from pathlib import Path
+from datetime import datetime
 
 import numpy as np
 import panel as pn
 import param
 from bokeh.io import output_notebook
 from bokeh.resources import INLINE
-from dbetto import Props
 
-from legenddashboard.util import gen_run_dict, get_sort_dets, logo_path
+from legenddashboard.util import (
+    get_dataflow_config,
+    get_run_dict,
+    get_sort_dets,
+    logo_path,
+)
 
 log = logging.getLogger(__name__)
 
@@ -44,10 +47,12 @@ class Monitoring(param.Parameterized):
     period_objects = param.List(default=[f"p{i:02}" for i in range(100)])
     run_objects = param.List(default=[f"r{i:03}" for i in range(100)])
 
+    # Static default: a per-session range is set in __init__ (a datetime.now()
+    # call here would be evaluated once at import and frozen for all sessions).
     date_range = param.DateRange(
         default=(
-            datetime.now() - dtt.timedelta(minutes=10),
-            datetime.now() + dtt.timedelta(minutes=10),
+            datetime(2000, 1, 1, 0, 0, 0),
+            datetime(2100, 1, 1, 0, 0, 0),
         ),
         bounds=(
             datetime(2000, 1, 1, 0, 0, 0),
@@ -60,11 +65,17 @@ class Monitoring(param.Parameterized):
     def __init__(self, base_path, notebook=False, **params):
         if notebook is True:
             output_notebook(INLINE)
-        self.cached_plots = {}
         self.base_path = base_path
         self.sort_obj = get_sort_dets(base_path)
 
         super().__init__(**params)
+
+        if "date_range" not in params:
+            now = datetime.now()
+            self.date_range = (
+                now - dtt.timedelta(minutes=10),
+                now + dtt.timedelta(minutes=10),
+            )
 
         self.tier_dict = {
             "raw": "raw",
@@ -79,26 +90,30 @@ class Monitoring(param.Parameterized):
             self.tier_dict["hit"] = "pht"
             self.tier_dict["evt"] = "pet"
 
-        prod_config = Path(self.base_path) / "dataflow-config.yaml"
-        self.prod_config = Props.read_from(prod_config, subst_pathvar=True)
+        self.prod_config = get_dataflow_config(self.base_path)
         if self.period == "p00":
-            self.periods = gen_run_dict(self.base_path)
-            log.debug("updating")
+            self.periods = get_run_dict(self.base_path)
+            if not self.periods:
+                msg = f"No runs found under {self.base_path}"
+                raise RuntimeError(msg)
             self.period_objects = list(self.periods)
             self.period = list(self.periods)[-1]
             self._get_period_data(None)
 
         self.param.watch(self._get_period_data, ["period"], precedence=0)
-        self.param.watch(self._get_run_dict, ["date_range"], precedence=0)
 
     def _get_period_data(self, event=None):  # noqa: ARG002
         self.run_dict = self.periods[self.period]
 
         self.run_objects = list(self.run_dict)
-        if self.run == list(self.run_dict)[-1]:
-            self.run = next(iter(self.run_dict))
+        # Always land on the latest run of the (new) period. If the run id is
+        # unchanged (run ids repeat across periods), trigger explicitly so
+        # dependent views still refresh for the new period.
+        last_run = list(self.run_dict)[-1]
+        if self.run == last_run:
+            self.param.trigger("run")
         else:
-            self.run = list(self.run_dict)[-1]
+            self.run = last_run
 
         start_period = sorted(self.periods)[0]
         start_run = sorted(self.periods[start_period])[0]
@@ -128,7 +143,7 @@ class Monitoring(param.Parameterized):
 
     def _refresh_periods(self):
         """Scan for new periods/runs in this session and apply any changes."""
-        self._apply_periods(gen_run_dict(self.base_path))
+        self._apply_periods(get_run_dict(self.base_path, refresh=True))
 
     def _apply_periods(self, new_periods):
         """Apply an already-scanned periods dict to this session's state.
@@ -149,26 +164,26 @@ class Monitoring(param.Parameterized):
             )
             for entry in self.run_dict
         ]
-        if isinstance(self.date_range[0], date):
+        # A plain ``date`` (from the date-picker) needs expanding to the full
+        # day; note ``datetime`` is a subclass of ``date``, so check it first.
+        if isinstance(self.date_range[0], datetime):
+            low_range = datetime.timestamp(self.date_range[0])
+        else:
             low_range = datetime.timestamp(
                 datetime.combine(self.date_range[0], datetime.min.time())
             )
+        if isinstance(self.date_range[1], datetime):
+            high_range = datetime.timestamp(self.date_range[1])
         else:
-            low_range = datetime.timestamp(self.date_range[0])
-        if isinstance(self.date_range[0], date):
             high_range = datetime.timestamp(
                 datetime.combine(self.date_range[1], datetime.max.time())
             )
-        else:
-            high_range = datetime.timestamp(self.date_range[1])
         pos1 = bisect.bisect_right(valid_from, low_range)
         pos2 = bisect.bisect_left(valid_from, high_range)
-        pos1 = max(pos1, 0)
-        pos2 = min(len(self.run_dict), pos2)
         valid_idxs = np.arange(pos1, pos2, 1)
         valid_keys = np.array(list(self.run_dict))[valid_idxs]
         out_dict = {key: self.run_dict[key] for key in valid_keys}
-        log.debug("Time to get run dict:", extra={"time": time.time() - start_time})
+        log.debug("Time to get run dict: %.3fs", time.time() - start_time)
         return out_dict
 
     def build_sidebar(self):
@@ -234,6 +249,7 @@ class Monitoring(param.Parameterized):
             sizing_mode="stretch_width",
         )
 
+    @staticmethod
     def build_base(path, notebook=False):
         monitor = Monitoring(
             base_path=path,

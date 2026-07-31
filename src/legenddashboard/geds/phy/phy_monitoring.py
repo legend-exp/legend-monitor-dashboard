@@ -51,14 +51,21 @@ class PhyMonitoring(GedMonitoring):
         label="SC Values",
     )
 
-    # create initial dataframes
-    phy_data_df = pd.DataFrame()
-    phy_data_df_mean = pd.DataFrame()
-    phy_abs_unit = ""
-    phy_plot_info = None
-    phy_data_sc = pd.DataFrame()
-    phy_pane = pn.pane.Bokeh(figure(width=1000, height=600), sizing_mode="scale_width")
-    _phy_sc_plotted = False
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Per-instance state. As class attributes these would be shared by
+        # every session in the process -- the Bokeh pane in particular can
+        # belong to only one document, so a shared instance would break
+        # multi-user serving.
+        self.phy_data_df = pd.DataFrame()
+        self.phy_data_df_mean = pd.DataFrame()
+        self.phy_abs_unit = ""
+        self.phy_plot_info = None
+        self.phy_data_sc = pd.DataFrame()
+        self.phy_pane = pn.pane.Bokeh(
+            figure(width=1000, height=600), sizing_mode="scale_width"
+        )
+        self._phy_sc_plotted = False
 
     @param.depends(
         "run",

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import datetime as dt
 import importlib.resources
 import os
 import secrets
+import sys
 from pathlib import Path
 
 import panel as pn
+from panel.auth import BasicAuthProvider, BasicLoginHandler
+from panel.io.resources import CDN_DIST
 
 
 def get_paths():
@@ -18,7 +22,7 @@ def get_paths():
 
     # Verify it exists before passing it to pn.serve
     if not img_dir.exists():
-        print(f"Warning: Logo directory not found at {img_dir}")  # noqa: T201
+        print(f"Warning: Image directory not found at {img_dir}")  # noqa: T201
 
     # Verify it exists before passing it to pn.serve
     if not logo_dir.exists():
@@ -41,6 +45,8 @@ def build_dashboard(
     from legenddashboard.spms.sipm_monitoring import SiPMMonitoring
     from legenddashboard.util import period_refresh_registry, read_config
 
+    if disable_page is None:
+        disable_page = ()
     config = read_config(config)
 
     # path to period data
@@ -79,7 +85,7 @@ def build_dashboard(
     #header {padding: 0}
     .title {
         font-weight: bold;
-        font-family: bradley hand;, cursive
+        font-family: "Bradley Hand", cursive;
         padding-left: 10px;
         color: #1A2A5B;
     }
@@ -114,12 +120,14 @@ def build_dashboard(
         description="Check now for new periods and runs",
     )
 
-    def _on_refresh(event):
+    async def _on_refresh(event):
         # Trigger the shared scan; results are pushed to every session
-        # (including this one) via its document.
+        # (including this one) via its document. Run the filesystem scan on a
+        # worker thread so the event loop (and the loading indicator) stays
+        # responsive while the high-latency scan runs.
         refresh_button.loading = True
         try:
-            period_refresh_registry.scan_and_push()
+            await asyncio.to_thread(period_refresh_registry.scan_and_push)
         finally:
             refresh_button.loading = False
 
@@ -303,6 +311,43 @@ def build_info_pane(info_path):
     return pn.pane.Markdown(general_information)
 
 
+class _XSRFBasicLoginHandler(BasicLoginHandler):
+    """Panel's basic login handler, extended to carry the Tornado XSRF token.
+
+    The stock handler renders a form without the ``_xsrf`` field, so serving
+    with ``xsrf_cookies=True`` would reject every login attempt with a 403.
+    """
+
+    def get(self):
+        try:
+            errormessage = self.get_argument("error")
+        except Exception:
+            errormessage = ""
+        next_url = self.get_argument("next", pn.state.base_url)
+        if next_url:
+            if pn.state.base_url and not next_url.startswith(pn.state.base_url):
+                next_url = next_url.replace("/", pn.state.base_url, 1)
+            self.set_cookie("next_url", next_url)
+        html = self._login_template.render(
+            login_endpoint=self._login_endpoint,
+            errormessage=errormessage,
+            PANEL_CDN=CDN_DIST,
+            # Rendering the hidden form field also sets the _xsrf cookie.
+            xsrf_input=self.xsrf_form_html(),
+        )
+        self.write(html)
+
+
+class _XSRFBasicAuthProvider(BasicAuthProvider):
+    """BasicAuthProvider whose login form includes the XSRF token."""
+
+    @property
+    def login_handler(self):
+        _XSRFBasicLoginHandler._login_endpoint = self._login_endpoint
+        _XSRFBasicLoginHandler._login_template = self._login_template
+        return _XSRFBasicLoginHandler
+
+
 def run_dashboard() -> None:
     argparser = argparse.ArgumentParser()
     argparser.add_argument("config_file", type=str)
@@ -344,17 +389,26 @@ def run_dashboard() -> None:
     print(  # noqa: T201
         f"Starting Monitoring Dashboard on port: {args.port} with {args.num_threads} threads"
     )
+
+    # These are pn.config options, not pn.serve kwargs: passed as kwargs they
+    # would be silently swallowed as Tornado settings, leaving the server
+    # single-threaded and without a loading indicator.
+    pn.config.nthreads = args.num_threads
+    pn.config.global_loading_spinner = True
+
     serve_kwargs = {
         "port": args.port,
         "show": False,
-        "enable_xsrf_cookies": True,
+        # Tornado cross-site request forgery protection. The Bokeh/Tornado
+        # kwarg is ``xsrf_cookies`` (``enable_xsrf_cookies`` is only the CLI
+        # flag name and would be silently ignored here). The login form ships
+        # its own template carrying the token (see _XSRFBasicLoginHandler).
+        "xsrf_cookies": True,
         "warm": True,
         "use_xheaders": True,
         "address": "0.0.0.0",
         "num_procs": 1,
-        "num_threads": args.num_threads,
         "static_dirs": {"img": img_dir, "logos": logo_dir},
-        "global_loading_spinner": True,
     }
     if args.websocket_origin:
         serve_kwargs["websocket_origin"] = args.websocket_origin
@@ -381,12 +435,33 @@ def run_dashboard() -> None:
                 "Logins will be invalidated on restart -- set it as a spin "
                 "secret for stable sessions."
             )
-        serve_kwargs["basic_auth"] = basic_auth
+        # Passing ``basic_auth`` to pn.serve would install Panel's stock login
+        # form, which lacks the XSRF field. Install our provider instead and
+        # expose the credentials via pn.config.basic_auth, which the login
+        # handler's validation falls back to.
+        login_template = (
+            importlib.resources.files("legenddashboard")
+            / "templates"
+            / "basic_login.html"
+        )
+        pn.config.basic_auth = basic_auth
+        serve_kwargs["auth_provider"] = _XSRFBasicAuthProvider(
+            login_template=str(login_template)
+        )
         serve_kwargs["cookie_secret"] = cookie_secret
         print("Shared-password authentication enabled.")  # noqa: T201
     else:
+        if username:
+            print(  # noqa: T201
+                "=" * 70 + "\nWARNING: DASHBOARD_USERNAME is set but DASHBOARD_PASSWORD"
+                " is missing\nor empty -- the configured credentials are NOT"
+                " in effect.\n" + "=" * 70,
+                file=sys.stderr,
+            )
         print(  # noqa: T201
-            "No DASHBOARD_PASSWORD set; serving without authentication."
+            "=" * 70 + "\nWARNING: no DASHBOARD_PASSWORD set; the dashboard is served"
+            " WITHOUT\nauthentication and is publicly accessible.\n" + "=" * 70,
+            file=sys.stderr,
         )
 
     pn.serve(_build_dash, **serve_kwargs)
