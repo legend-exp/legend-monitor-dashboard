@@ -28,9 +28,10 @@ def plot_energy(path, run_dict, det, plot, colour, period, cache_data=None):
     cals = []
     times = []
     qbb_adc = None
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
         hit_pars_dict = load_run_pars(
-            get_dataflow_config(path), "hit", period, run, run_dict[run], cache_data
+            prod_config, "hit", period, run, run_dict[run], cache_data
         )
 
         try:
@@ -80,9 +81,10 @@ def plot_energy_res(
 ):
     reses = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
         hit_pars_dict = load_run_pars(
-            get_dataflow_config(path), "hit", period, run, run_dict[run], cache_data
+            prod_config, "hit", period, run, run_dict[run], cache_data
         )
         try:
             if at == "Qbb":
@@ -141,9 +143,10 @@ def plot_aoe_mean(path, run_dict, det, plot, colour, period, cache_data=None):
     reses = []
     res_errs = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
         hit_pars_dict = load_run_pars(
-            get_dataflow_config(path), "hit", period, run, run_dict[run], cache_data
+            prod_config, "hit", period, run, run_dict[run], cache_data
         )
         try:
             det_dict = hit_pars_dict[det]
@@ -223,9 +226,10 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period, cache_data=None):
     reses = []
     res_errs = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
         hit_pars_dict = load_run_pars(
-            get_dataflow_config(path), "hit", period, run, run_dict[run], cache_data
+            prod_config, "hit", period, run, run_dict[run], cache_data
         )
 
         try:
@@ -268,9 +272,10 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period, cache_data=None):
 def plot_aoe_cut(path, run_dict, det, plot, colour, period, cache_data=None):
     cuts = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
         hit_pars_dict = load_run_pars(
-            get_dataflow_config(path), "hit", period, run, run_dict[run], cache_data
+            prod_config, "hit", period, run, run_dict[run], cache_data
         )
 
         with contextlib.suppress(KeyError):
@@ -302,9 +307,10 @@ def plot_aoe_cut(path, run_dict, det, plot, colour, period, cache_data=None):
 def plot_tau(path, run_dict, det, plot, colour, period, cache_data=None):
     values = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
         dsp_pars_dict = load_run_pars(
-            get_dataflow_config(path), "dsp", period, run, run_dict[run], cache_data
+            prod_config, "dsp", period, run, run_dict[run], cache_data
         )
 
         with contextlib.suppress(KeyError):
@@ -336,9 +342,10 @@ def plot_tau(path, run_dict, det, plot, colour, period, cache_data=None):
 def plot_ctc_const(path, run_dict, det, plot, colour, period, cache_data=None):
     values = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
         dsp_pars_dict = load_run_pars(
-            get_dataflow_config(path), "dsp", period, run, run_dict[run], cache_data
+            prod_config, "dsp", period, run, run_dict[run], cache_data
         )
 
         with contextlib.suppress(KeyError):
@@ -494,9 +501,10 @@ def plot_energy_residuals_period(
         for detector in strings[stri]:
             res[detector] = {peak: [] for peak in peaks}
 
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
         hit_pars_dict = load_run_pars(
-            get_dataflow_config(path), "hit", period, run, run_dict[run], cache_data
+            prod_config, "hit", period, run, run_dict[run], cache_data
         )
 
         for peak in peaks:

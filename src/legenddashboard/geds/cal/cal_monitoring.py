@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import logging
 import pickle as pkl
 import shelve
@@ -104,12 +105,14 @@ class CalMonitoring(GedMonitoring):
                 sort_dets_obj=self.sort_obj,
                 cache_data=self.cached_data,
             )
-            tmp_path = Path(self.tmp_path)
-            # Always rewrite: the file is cheap to produce and a bare exists()
-            # check would serve a stale CSV forever if upstream data changed.
-            download_file.to_csv(tmp_path / download_filename, index=False)
+            # Serialise on click, in memory. The filename is derived only from
+            # experiment/period/run/plot type, so every session viewing the
+            # same run resolved to the *same* path on disk: concurrent renders
+            # truncated and rewrote the file while another session's download
+            # was streaming it. Keeping the CSV per-session also means it can
+            # never be served stale.
             ret = pn.widgets.FileDownload(
-                tmp_path / download_filename,
+                callback=lambda df=download_file: io.StringIO(df.to_csv(index=False)),
                 filename=download_filename,
                 button_type="success",
                 embed=False,
