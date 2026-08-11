@@ -9,8 +9,9 @@ legend-datasets).
 Edits happen in a per-user **workspace** (a git worktree of the datasets
 submodule, see ``meta_git.ensure_workspace``): the page is read-only until a
 workspace name (the user's GitHub username) is opened; staged edits are then
-private to that workspace and survive page reloads -- re-opening the same
-name reattaches.
+isolated to that workspace and survive page reloads -- re-opening the same
+name reattaches. Workspaces are isolated from one another but not
+access-controlled -- see the note in ``meta_git``.
 """
 
 from __future__ import annotations
@@ -180,6 +181,10 @@ class MetaMonitoring(Monitoring):
 
     def _bump(self) -> None:
         self.metadb.reload()
+        # Every _figs key embeds meta_version, so bumping it orphans the whole
+        # cache: drop it rather than let a long editing session accumulate one
+        # set of figures per edit.
+        self._figs.clear()
         self.meta_version += 1
 
     def _require_workspace(self) -> bool:
@@ -1215,10 +1220,11 @@ class MetaMonitoring(Monitoring):
 
         return pn.Column(
             pn.pane.Alert(
-                "Edits are **private to your workspace** until pushed. "
-                "Un-pushed edits survive page reloads (open the same "
-                "workspace name again) but **not container restarts** — "
-                "push finished work.",
+                "Edits stay in **your workspace** until pushed, separate from "
+                "other workspaces — but anyone signed in who opens the same "
+                "workspace name will see them. Un-pushed edits survive page "
+                "reloads (open the same workspace name again) but **not "
+                "container restarts** — push finished work.",
                 alert_type="warning",
                 sizing_mode="stretch_width",
             ),
@@ -1255,8 +1261,7 @@ class MetaMonitoring(Monitoring):
                 sizing_mode="stretch_width",
             )
         return pn.pane.Alert(
-            f"Workspace **`{self.workspace}`** open — edits are private "
-            "until pushed.",
+            f"Workspace **`{self.workspace}`** open — edits stay here until pushed.",
             alert_type="primary",
             sizing_mode="stretch_width",
         )

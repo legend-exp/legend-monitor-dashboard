@@ -224,3 +224,24 @@ def test_branch_collision_with_old_push_branches(clone):
     assert not meta_git._branch_exists(
         clone / "datasets", "metaedit/alice/20250101-000000"
     )
+
+
+def test_ensure_clone_recovers_uninitialised_submodule(clone):
+    # An interrupted first startup can leave the superproject cloned but the
+    # datasets submodule absent. The porcelain check then runs `git -C` on a
+    # path that does not exist, which raises and is swallowed by the outer
+    # handler -- and because `.git` still exists the same branch is taken on
+    # every restart, so the page stayed disabled forever. ensure_clone must
+    # re-initialise instead.
+    # (An *empty* datasets/ dir already recovered: git reports the
+    # uninitialised submodule as clean, so the pull + submodule-init ran.)
+    shutil.rmtree(clone / "datasets")
+    assert not (clone / "datasets").exists()
+
+    assert meta_git.ensure_clone(clone) is True
+
+    assert (clone / "datasets" / ".git").exists()
+    assert (clone / "datasets" / "ignored_daq_cycles.yaml").exists()
+    # and the recovered clone is usable
+    ws = meta_git.ensure_workspace(clone, "alice")
+    assert (ws / "ignored_daq_cycles.yaml").exists()

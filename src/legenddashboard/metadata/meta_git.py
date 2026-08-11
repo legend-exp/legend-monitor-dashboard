@@ -3,9 +3,14 @@
 The editable files all live in the ``datasets/`` submodule (legend-datasets).
 Each user edits in their own **workspace** -- a git worktree of that submodule
 at ``<clone>-workspaces/<name>`` on branch ``workspace/<name>`` -- so staged
-edits are private until pushed and survive page reloads (re-opening the same
-name reattaches). The superproject and the hardware submodules (channelmaps)
-stay shared read-only.
+edits stay isolated from other workspaces until pushed and survive page
+reloads (re-opening the same name reattaches). The superproject and the
+hardware submodules (channelmaps) stay shared read-only.
+
+Note that a workspace is *isolated*, not *access-controlled*: the name is
+supplied by the user, and the dashboard's shared-password login accepts any
+username, so it cannot be authenticated. Any logged-in user can open any
+workspace name. Enforcing ownership needs per-user (e.g. OAuth) auth.
 
 Users cannot push to legend-exp upstream, so pushes go to the user's own fork
 over HTTPS with a one-shot token (via ``GIT_ASKPASS`` -- never on disk, argv,
@@ -24,6 +29,7 @@ import importlib.resources
 import logging
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import threading
@@ -111,6 +117,15 @@ def ensure_clone(path: str | Path, url: str | None = None) -> bool:
                     url,
                     str(path),
                 )
+                _init_submodules(path)
+            elif not (path / "datasets" / ".git").exists():
+                # Clone present but the datasets submodule never finished
+                # initialising (an interrupted first startup). Recover by
+                # falling through to the pull + submodule init below; without
+                # this the porcelain check raises on every restart and the
+                # page stays disabled forever.
+                log.warning("datasets submodule missing in %s; re-initialising", path)
+                _git(path, "pull", "--ff-only")
                 _init_submodules(path)
             elif _git(path / "datasets", "status", "--porcelain").strip():
                 # pre-workspace leftovers in the shared tree: keep them visible
@@ -379,7 +394,11 @@ def commit_and_push(
     ``fork_url`` overrides the fork remote (used by tests).
     """
     datasets_path = Path(datasets_path)
-    push_branch = f"metaedit/{username}/{time.strftime('%Y%m%d-%H%M%S')}"
+    # short suffix: the timestamp alone only resolves to the second, so two
+    # pushes within the same second would target one remote branch
+    push_branch = (
+        f"metaedit/{username}/{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}"
+    )
     url = fork_url or f"https://github.com/{username}/{DATASETS_REPO}.git"
     askpass = (
         importlib.resources.files("legenddashboard") / "metadata" / "git_askpass.sh"
