@@ -14,10 +14,11 @@ workspace name. Enforcing ownership needs per-user (e.g. OAuth) auth.
 
 Users cannot push to legend-exp upstream, so pushes go to the user's own fork
 over HTTPS with a one-shot token (via ``GIT_ASKPASS`` -- never on disk, argv,
-or in a stored remote URL) as a remote-only ``metaedit/<user>/<timestamp>``
-branch. The local workspace branch namespace (``workspace/*``) is deliberately
-disjoint from the push namespace: ``refs/heads/metaedit/<user>`` could not
-coexist with ``refs/heads/metaedit/<user>/<ts>``.
+or in a stored remote URL) as a remote-only branch named
+``metaedit/<user>/<timestamp>-<suffix>`` (the suffix keeps two pushes in the
+same second apart). The local workspace branch namespace (``workspace/*``) is
+deliberately disjoint from the push namespace: ``refs/heads/metaedit/<user>``
+could not coexist with ``refs/heads/metaedit/<user>/<ts>``.
 
 One process-wide lock serialises every git operation (all worktrees share one
 object store).
@@ -384,7 +385,7 @@ def commit_and_push(
 
     Returns the GitHub compare URL to open a pull request. The commit is made
     on the workspace branch and pushed as a remote-only
-    ``metaedit/<user>/<timestamp>`` branch to
+    ``metaedit/<user>/<timestamp>-<suffix>`` branch to
     ``https://github.com/<user>/legend-datasets``. On success the workspace is
     reset to the upstream default branch (the edits now live only on the
     pushed branch); on push failure the commit is soft-reset so the changes

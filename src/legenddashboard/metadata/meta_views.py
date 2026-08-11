@@ -125,20 +125,24 @@ def partition_label(part_name):
 # ---------------------------------------------------------------------------
 
 
-def _columns(viewer, datatype, periods=None):
+def _columns(viewer, datatype, periods=None, run_filter=None):
     """Ordered run columns: ``[(period, run, start_key|None, livetime|None)]``.
 
-    One column per run in the catalogue (restricted to ``periods`` when
+    One column per run in the catalogue (restricted to ``periods`` and/or a
+    runlists ``run_filter`` -- ``{datatype: {(period, run), ...}}`` -- when
     given); ``start_key`` is None when the run has no ``datatype`` entry in
     ``runinfo``.
     """
     runinfo = viewer.runinfo
     runs = viewer.available_runs()
+    allowed = run_filter.get(datatype, set()) if run_filter is not None else None
     cols = []
     for period in sorted(runs):
         if periods is not None and period not in periods:
             continue
         for run in sorted(runs[period]):
+            if allowed is not None and (period, run) not in allowed:
+                continue
             entry = runinfo.get(period, {}).get(run, {}).get(datatype)
             cols.append(
                 (
@@ -190,9 +194,9 @@ def _detector_rows(viewer, cols):
     return names, seps, present
 
 
-def _grid(viewer, datatype, periods=None):
+def _grid(viewer, datatype, periods=None, run_filter=None):
     """Shared row/column scaffolding for the matrices."""
-    cols = _columns(viewer, datatype, periods)
+    cols = _columns(viewer, datatype, periods, run_filter)
     names, strings, present = _detector_rows(viewer, cols)
     if not names:
         msg = f"no runs in the catalogue have a {datatype!r} entry in runinfo"
@@ -211,9 +215,9 @@ def _fmt_livetime(seconds):
 # ---------------------------------------------------------------------------
 
 
-def usability_cells(viewer, datatype="phy", periods=None):
+def usability_cells(viewer, datatype="phy", periods=None, run_filter=None):
     """Long-form per-cell columns for the usability matrix + grid scaffolding."""
-    cols, names, strings, present = _grid(viewer, datatype, periods)
+    cols, names, strings, present = _grid(viewer, datatype, periods, run_filter)
 
     cells = {c: [] for c in ("x", "y", "color", "usability", "reason", "livetime")}
     for period, run, start_key, livetime in cols:
@@ -236,9 +240,9 @@ def usability_cells(viewer, datatype="phy", periods=None):
     return cells, cols, names, strings
 
 
-def usability_figure(viewer, datatype="phy", periods=None):
+def usability_figure(viewer, datatype="phy", periods=None, run_filter=None):
     """Detector x run usability heatmap; hover shows the off/ac reason."""
-    cells, cols, names, strings = usability_cells(viewer, datatype, periods)
+    cells, cols, names, strings = usability_cells(viewer, datatype, periods, run_filter)
     tooltips = [
         ("detector", "@y"),
         ("run", "@x"),
@@ -281,9 +285,9 @@ def _bb_like_status(psd):
     return overall, expr
 
 
-def psd_cells(viewer, datatype="phy", periods=None):
+def psd_cells(viewer, datatype="phy", periods=None, run_filter=None):
     """Long-form per-cell columns for the PSD-status matrix + scaffolding."""
-    cols, names, strings, present = _grid(viewer, datatype, periods)
+    cols, names, strings, present = _grid(viewer, datatype, periods, run_filter)
 
     cells = {c: [] for c in ("x", "y", "color", "status", "expr", "reason")}
     for period, run, start_key, _livetime in cols:
@@ -309,9 +313,9 @@ def psd_cells(viewer, datatype="phy", periods=None):
     return cells, cols, names, strings
 
 
-def psd_figure(viewer, datatype="phy", periods=None):
+def psd_figure(viewer, datatype="phy", periods=None, run_filter=None):
     """Detector x run PSD-readiness heatmap (``is_bb_like`` evaluation)."""
-    cells, cols, names, strings = psd_cells(viewer, datatype, periods)
+    cells, cols, names, strings = psd_cells(viewer, datatype, periods, run_filter)
     tooltips = [
         ("detector", "@y"),
         ("run", "@x"),
@@ -336,7 +340,9 @@ def psd_figure(viewer, datatype="phy", periods=None):
 UNASSIGNED_COLOR = "#EBEBEB"
 
 
-def partitions_cells(viewer, datatype="phy", periods=None, groupings_key=None):
+def partitions_cells(
+    viewer, datatype="phy", periods=None, groupings_key=None, run_filter=None
+):
     """Long-form per-cell columns for the partitions matrix + scaffolding.
 
     ``groupings_key`` selects which groupings file to show ("cal", "phy",
@@ -345,7 +351,7 @@ def partitions_cells(viewer, datatype="phy", periods=None, groupings_key=None):
     detector is in the array (channelmap) at that run; runs outside any
     partition get an "unassigned" cell so box-selection can pick them up.
     """
-    cols, names, strings, present = _grid(viewer, datatype, periods)
+    cols, names, strings, present = _grid(viewer, datatype, periods, run_filter)
     groupings = viewer.groupings(groupings_key or datatype)
     default = groupings.get("default", {})
 
@@ -397,7 +403,12 @@ def partitions_cells(viewer, datatype="phy", periods=None, groupings_key=None):
 
 
 def partitions_figure(
-    viewer, datatype="phy", periods=None, groupings_key=None, box_select=False
+    viewer,
+    datatype="phy",
+    periods=None,
+    groupings_key=None,
+    box_select=False,
+    run_filter=None,
 ):
     """Detector x run partition-membership heatmap.
 
@@ -405,7 +416,7 @@ def partitions_figure(
     cells can be drag-selected for partition assignment.
     """
     cells, cols, names, strings, partitions, color_of = partitions_cells(
-        viewer, datatype, periods, groupings_key
+        viewer, datatype, periods, groupings_key, run_filter
     )
     tooltips = [
         ("detector", "@y"),
@@ -519,13 +530,13 @@ def _add_swatch_legend(fig, items):
 # ---------------------------------------------------------------------------
 
 
-def exposure_cells(viewer, datatype="phy", periods=None):
+def exposure_cells(viewer, datatype="phy", periods=None, run_filter=None):
     """Per-run exposure columns: active mass x livetime, plus the cumulative sum.
 
     Active mass counts detectors with usability "on" at the run start. Runs
     without a runinfo entry (or without livetime, e.g. cal) contribute zero.
     """
-    cols, names, strings, _present = _grid(viewer, datatype, periods)
+    cols, names, strings, _present = _grid(viewer, datatype, periods, run_filter)
 
     cells = {c: [] for c in ("x", "exposure", "cumulative", "mass", "livetime", "n_on")}
     total = 0.0
@@ -554,9 +565,9 @@ def exposure_cells(viewer, datatype="phy", periods=None):
     return cells, cols
 
 
-def exposure_figure(viewer, datatype="phy", periods=None):
+def exposure_figure(viewer, datatype="phy", periods=None, run_filter=None):
     """Per-run exposure bars with a cumulative-exposure line (kg yr)."""
-    cells, cols = exposure_cells(viewer, datatype, periods)
+    cells, cols = exposure_cells(viewer, datatype, periods, run_filter)
     factors = [(p, r) for p, r, _, _ in cols]
     source = ColumnDataSource(cells)
     fig = figure(
@@ -646,7 +657,7 @@ _MIN_BLOCK_WIDTH = timedelta(minutes=5)
 DATATYPE_COLORS = {"phy": LEGEND_BLUE, "cal": "#FFA500"}
 
 
-def timeline_cells(viewer, periods=None):
+def timeline_cells(viewer, periods=None, run_filter=None):
     """One block per run *and datatype* on a real time axis.
 
     Unlike the matrices this view is not filtered by datatype: every runinfo
@@ -665,7 +676,9 @@ def timeline_cells(viewer, periods=None):
         if periods is None or period in periods
         for run in sorted(runs[period])
         for dtype, info in runinfo.get(period, {}).get(run, {}).items()
-        if isinstance(info, dict) and info.get("start_key") is not None
+        if isinstance(info, dict)
+        and info.get("start_key") is not None
+        and (run_filter is None or (period, run) in run_filter.get(dtype, ()))
     ]
     if not entries:
         msg = "no runs in the catalogue have a runinfo entry"
@@ -724,9 +737,9 @@ def timeline_cells(viewer, periods=None):
     return cells, periods_seen, [(d, color_of[d]) for d in dt_order]
 
 
-def timeline_figure(viewer, datatype="phy", periods=None):
+def timeline_figure(viewer, datatype="phy", periods=None, run_filter=None):
     """Data blocks vs time, one lane per period; hover shows each run's livetime."""
-    cells, lanes, datatype_colors = timeline_cells(viewer, periods)
+    cells, lanes, datatype_colors = timeline_cells(viewer, periods, run_filter)
     source = ColumnDataSource(cells)
     fig = figure(
         x_axis_type="datetime",

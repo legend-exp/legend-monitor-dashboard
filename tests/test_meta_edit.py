@@ -59,6 +59,24 @@ B00000D:
 """
 
 
+RUNLISTS_FILE = """\
+# Run lists for various analyses.
+
+valid:
+  cal:
+    p03:
+      - r000..r005
+    p04: all
+  phy:
+    p03:
+      - r000..r002
+0vbb:
+  phy:
+    p03:
+      - r000..r005
+"""
+
+
 @pytest.fixture
 def datasets(tmp_path):
     statuses = tmp_path / "statuses"
@@ -67,6 +85,7 @@ def datasets(tmp_path):
     (statuses / "validity.yaml").write_text(VALIDITY_FILE)
     (tmp_path / "ignored_daq_cycles.yaml").write_text(CYCLES_FILE)
     (tmp_path / "cal_groupings.yaml").write_text(GROUPINGS_FILE)
+    (tmp_path / "runlists.yaml").write_text(RUNLISTS_FILE)
     return tmp_path
 
 
@@ -395,6 +414,30 @@ def test_add_ignored_cycles_preserves_existing_comments(datasets):
     )
     with pytest.raises(ValueError, match="not a valid cycle id"):
         meta_edit.add_ignored_cycles(datasets, "not-a-cycle", "x")
+
+
+def test_set_runlist_replaces_one_node(datasets):
+    path = meta_edit.set_runlist(
+        datasets, "valid", "phy", {"p03": "r000..r004", "p04": "all"}
+    )
+    text = path.read_text()
+    assert "p03: r000..r004" in text
+    assert text.startswith("# Run lists for various analyses.")
+    # other datatype and dataset untouched
+    assert "- r000..r005" in text  # valid.cal.p03
+    assert "0vbb:" in text
+    # datatype-level "all" scalar for the new period
+    assert "p04: all" in text
+
+
+def test_set_runlist_creates_and_removes(datasets):
+    path = meta_edit.set_runlist(datasets, "newset", "cal", {"p16": ["r000"]})
+    assert "newset:" in path.read_text()
+    meta_edit.set_runlist(datasets, "newset", "cal", None)
+    assert "newset:" not in path.read_text()
+    # removing the only datatype removes the whole dataset
+    meta_edit.set_runlist(datasets, "0vbb", "phy", {})
+    assert "0vbb:" not in path.read_text()
 
 
 def test_list_and_remove_ignored_cycles(datasets):

@@ -510,6 +510,46 @@ def split_group(block: dict, part: str, period: str, at_run: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# runlists
+# ---------------------------------------------------------------------------
+
+
+def set_runlist(
+    datasets_path: str | Path,
+    dataset: str,
+    datatype: str,
+    periods: dict | None,
+) -> Path:
+    """Replace one ``<dataset>.<datatype>`` node of ``runlists.yaml``.
+
+    ``periods`` maps period to a runs value (``"all"``, a run list, or range
+    notation); ``None``/empty removes the datatype, and a dataset left with
+    no datatypes is removed entirely. Everything else in the file (other
+    datasets/datatypes, the header comments) is untouched (ruamel
+    round-trip).
+    """
+    path = Path(datasets_path) / "runlists.yaml"
+    doc = _read(path)
+
+    if not periods:
+        if dataset in doc and datatype in doc[dataset]:
+            del doc[dataset][datatype]
+            if not doc[dataset]:
+                del doc[dataset]
+        _write(path, doc)
+        return path
+
+    node = CommentedMap()
+    for period, runs in periods.items():
+        node[str(period)] = _to_plain(runs)
+    if dataset not in doc:
+        doc[dataset] = CommentedMap()
+    doc[dataset][str(datatype)] = node
+    _write(path, doc)
+    return path
+
+
+# ---------------------------------------------------------------------------
 # bad cycles
 # ---------------------------------------------------------------------------
 

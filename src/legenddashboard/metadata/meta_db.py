@@ -74,6 +74,7 @@ class MetaDB:
         self.status_db = TextDB(self.datasets_path, lazy=True)
         self._groupings_cache: dict[str, dict] = {}
         self._runinfo = None
+        self._runlists = None
 
     def reload(self):
         """Drop every cached object so subsequent reads see staged edits."""
@@ -121,6 +122,37 @@ class MetaDB:
     def statuses_on(self, tstamp: str, category: str = "all") -> dict:
         """Resolved detector statuses valid at ``tstamp`` for ``category``."""
         return self.status_db.statuses.on(tstamp, system=category)
+
+    def runlists(self) -> dict:
+        """Parsed ``runlists.yaml``: ``{dataset: {datatype: {period: runs}}}``."""
+        if self._runlists is None:
+            self._runlists = Props.read_from(self.datasets_path / "runlists.yaml")
+        return self._runlists
+
+    def runlist_filter(self, dataset: str) -> dict[str, set[tuple[str, str]]] | None:
+        """``{datatype: {(period, run), ...}}`` for one runlists dataset.
+
+        ``None`` for the pseudo-dataset "all" (no filtering). A period value
+        of ``"all"`` expands to every catalogue run of that period; run
+        ranges (``rXXX..rYYY``) are expanded.
+        """
+        if dataset == "all":
+            return None
+        from legenddashboard.metadata.meta_views import expand_run_list
+
+        catalogue = self.available_runs()
+        out: dict[str, set[tuple[str, str]]] = {}
+        for datatype, periods in self.runlists().get(dataset, {}).items():
+            allowed: set[tuple[str, str]] = set()
+            if not isinstance(periods, dict):
+                continue
+            for period, runs in periods.items():
+                if str(runs) == "all":
+                    allowed.update((period, r) for r in catalogue.get(period, []))
+                else:
+                    allowed.update((period, r) for r in expand_run_list(runs))
+            out[str(datatype)] = allowed
+        return out
 
     def groupings(self, key: str) -> dict:
         """Parsed groupings file for ``key`` ("cal"|"phy"|"escale"|"psd")."""

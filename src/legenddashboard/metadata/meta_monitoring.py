@@ -56,6 +56,9 @@ class MetaMonitoring(Monitoring):
     overview_datatype = param.Selector(
         default="phy", objects=list(meta_views.DATATYPES), label="Datatype"
     )
+    overview_dataset = param.Selector(
+        default="all", objects=["all"], label="Dataset (runlists)"
+    )
     groupings_key = param.Selector(
         default="cal", objects=list(GROUPING_FILES), label="Groupings file"
     )
@@ -104,6 +107,20 @@ class MetaMonitoring(Monitoring):
         detectors = self._detector_names()
         self.param.edit_detector.objects = detectors
         self.edit_detector = detectors[0]
+
+        self.param.watch(self._refresh_datasets, ["meta_version"])
+        self._refresh_datasets()
+
+    def _refresh_datasets(self, *_events):
+        """Dataset choices for the overview filter: "all" + runlists keys."""
+        try:
+            options = ["all", *self.metadb.runlists()]
+        except Exception:
+            log.exception("could not read runlists.yaml")
+            options = ["all"]
+        self.param.overview_dataset.objects = options
+        if self.overview_dataset not in options:
+            self.overview_dataset = "all"
 
     def _filter_end_runs(self, *_events):
         """End-run choices: open-ended or any run from the start run onwards."""
@@ -221,7 +238,11 @@ class MetaMonitoring(Monitoring):
     # ------------------------------------------------------------------
 
     @param.depends(
-        "overview_plot", "overview_datatype", "groupings_key", "meta_version"
+        "overview_plot",
+        "overview_datatype",
+        "overview_dataset",
+        "groupings_key",
+        "meta_version",
     )
     def view_overview(self):
         if self.metadb is None:
@@ -229,6 +250,7 @@ class MetaMonitoring(Monitoring):
         key = (
             self.overview_plot,
             self.overview_datatype,
+            self.overview_dataset,
             self.groupings_key,
             self.meta_version,
         )
@@ -242,7 +264,11 @@ class MetaMonitoring(Monitoring):
                 else:
                     datatype = self.overview_datatype
                 fig, source = meta_views.dataset_figure(
-                    self.metadb, plot=self.overview_plot, datatype=datatype, **kwargs
+                    self.metadb,
+                    plot=self.overview_plot,
+                    datatype=datatype,
+                    run_filter=self.metadb.runlist_filter(self.overview_dataset),
+                    **kwargs,
                 )
             except Exception as exc:
                 log.exception("could not build overview figure")
@@ -265,11 +291,16 @@ class MetaMonitoring(Monitoring):
         groupings_sel = pn.widgets.Select.from_param(
             self.param.groupings_key, width=widget_widths
         )
+        dataset_sel = pn.widgets.Select.from_param(
+            self.param.overview_dataset, width=widget_widths
+        )
         return pn.Column(
-            pn.Row(plot_sel, dtype_sel, groupings_sel),
+            pn.Row(plot_sel, dtype_sel, dataset_sel, groupings_sel),
             pn.pane.Markdown(
                 "Tap a cell/bar/block to point the whole dashboard at that run "
-                "(runs without processed data are ignored)."
+                "(runs without processed data are ignored). The dataset "
+                "selector restricts every plot to the runs of one "
+                "`runlists.yaml` dataset."
             ),
             self.view_overview,
             name="Overview",
@@ -912,6 +943,210 @@ class MetaMonitoring(Monitoring):
         return block
 
     # ------------------------------------------------------------------
+    # Runlists
+    # ------------------------------------------------------------------
+
+    def _runlist_df(self, dataset: str, datatype: str) -> pd.DataFrame:
+        periods = self.metadb.runlists().get(dataset, {}).get(datatype, {})
+        rows = []
+        if isinstance(periods, dict):
+            for period, runs in periods.items():
+                value = (
+                    "all"
+                    if str(runs) == "all"
+                    else ", ".join(meta_views.expand_run_list(runs))
+                )
+                rows.append({"period": period, "runs": value})
+        return pd.DataFrame(rows, columns=["period", "runs"])
+
+    @staticmethod
+    def _runlist_mapping(df: pd.DataFrame) -> dict:
+        """Table rows -> ``{period: "all" | runs-notation}`` (validated)."""
+        mapping: dict = {}
+        for _, row in df.iterrows():
+            period = str(row["period"]).strip()
+            runs_str = str(row["runs"]).strip()
+            if not period and not runs_str:
+                continue  # blank row
+            if not (period and runs_str):
+                msg = f"incomplete row: {dict(row)}"
+                raise ValueError(msg)
+            if not re.match(r"^p\d{2}$", period):
+                msg = f"not a period id: {period!r}"
+                raise ValueError(msg)
+            if runs_str == "all":
+                mapping[period] = "all"
+                continue
+            runs = meta_views.expand_run_list(
+                [tok.strip() for tok in runs_str.split(",") if tok.strip()]
+            )
+            for r in runs:
+                if not re.match(r"^r\d{3}$", r):
+                    msg = f"not a run id: {r!r}"
+                    raise ValueError(msg)
+            mapping[period] = meta_edit.compress_runs(runs)
+        return mapping
+
+    def _build_runlists_tab(self, widget_widths):
+        w = max(widget_widths, 160)
+        dataset_sel = pn.widgets.Select(name="Dataset", options=[], width=w)
+        datatype_sel = pn.widgets.Select(name="Datatype", options=[], width=w)
+        new_dataset_in = pn.widgets.TextInput(
+            name="New dataset", placeholder="e.g. mycheck26", width=w
+        )
+        new_datatype_in = pn.widgets.TextInput(
+            name="New datatype", placeholder="e.g. phy", width=w
+        )
+        table = pn.widgets.Tabulator(
+            pd.DataFrame(columns=["period", "runs"]),
+            show_index=False,
+            selectable=1,
+            height=350,
+            sizing_mode="stretch_width",
+        )
+
+        def _refresh_datasets(*_events):
+            try:
+                runlists = self.metadb.runlists()
+            except Exception:
+                log.exception("could not read runlists.yaml")
+                return
+            names = list(runlists)
+            extra = [v for v in (dataset_sel.value,) if v and v not in names]
+            dataset_sel.options = names + extra
+            if dataset_sel.value not in dataset_sel.options and names:
+                dataset_sel.value = names[0]
+            _refresh_datatypes()
+
+        def _refresh_datatypes(*_events):
+            datatypes = list(self.metadb.runlists().get(dataset_sel.value, {}))
+            extra = [v for v in (datatype_sel.value,) if v and v not in datatypes]
+            datatype_sel.options = datatypes + extra
+            if datatype_sel.value not in datatype_sel.options and datatypes:
+                datatype_sel.value = datatypes[0]
+            _refresh_table()
+
+        def _refresh_table(*_events):
+            table.value = self._runlist_df(dataset_sel.value, datatype_sel.value)
+
+        self.param.watch(_refresh_datasets, ["meta_version"])
+        dataset_sel.param.watch(_refresh_datatypes, "value")
+        datatype_sel.param.watch(_refresh_table, "value")
+        _refresh_datasets()
+
+        def _new_dataset(_event):
+            name = new_dataset_in.value.strip()
+            if not name:
+                return
+            dataset_sel.options = [*dataset_sel.options, name]
+            dataset_sel.value = name
+
+        new_dataset_btn = pn.widgets.Button(name="Create dataset", width=w)
+        new_dataset_btn.on_click(_new_dataset)
+
+        def _new_datatype(_event):
+            name = new_datatype_in.value.strip()
+            if not name:
+                return
+            datatype_sel.options = [*datatype_sel.options, name]
+            datatype_sel.value = name
+            table.value = pd.DataFrame(columns=["period", "runs"])
+
+        new_datatype_btn = pn.widgets.Button(name="Create datatype", width=w)
+        new_datatype_btn.on_click(_new_datatype)
+
+        add_row_btn = pn.widgets.Button(name="Add row", width=w)
+        add_row_btn.on_click(
+            lambda _e: setattr(
+                table,
+                "value",
+                pd.concat(
+                    [table.value, pd.DataFrame([{"period": "", "runs": ""}])],
+                    ignore_index=True,
+                ),
+            )
+        )
+        del_row_btn = pn.widgets.Button(name="Delete selected row", width=w)
+
+        def _del_row(_event):
+            if table.selection:
+                table.value = table.value.drop(
+                    table.value.index[table.selection]
+                ).reset_index(drop=True)
+
+        del_row_btn.on_click(_del_row)
+
+        apply_btn = pn.widgets.Button(
+            name="Apply", button_type="primary", width=w, icon="pencil"
+        )
+
+        def _apply(_event):
+            self.alert.visible = False
+            if not self._require_workspace():
+                return
+            try:
+                mapping = self._runlist_mapping(table.value)
+                path = meta_edit.set_runlist(
+                    self.metadb.datasets_path,
+                    dataset_sel.value,
+                    datatype_sel.value,
+                    mapping,
+                )
+            except Exception as exc:
+                log.exception("could not stage the runlist edit")
+                self._fail(f"**runlist edit failed** — {exc}")
+                return
+            self._bump()
+            what = f"**{dataset_sel.value}.{datatype_sel.value}**"
+            self._ok(
+                (
+                    f"removed {what} from `{path.name}`"
+                    if not mapping
+                    else f"staged {what} in `{path.name}`"
+                )
+                + " — review in *Commit & Push*"
+            )
+
+        apply_btn.on_click(_apply)
+
+        edit_panel = pn.Column(
+            pn.pane.Markdown("### Edit runlists"),
+            dataset_sel,
+            datatype_sel,
+            pn.layout.Divider(),
+            new_dataset_in,
+            new_dataset_btn,
+            new_datatype_in,
+            new_datatype_btn,
+            pn.layout.Divider(),
+            add_row_btn,
+            del_row_btn,
+            apply_btn,
+            width=max(w + 60, 320),
+            styles=self._STICKY,
+        )
+        content = pn.Column(
+            pn.pane.Markdown(
+                "**Run lists** (`runlists.yaml`) define named datasets for "
+                "analyses (`snakemake valid-l200-...`). Edit one "
+                "dataset/datatype at a time: one row per period, runs as a "
+                "comma-separated list, ranges like `r000..r005`, or the "
+                "single word `all` for every run of the period. An **empty "
+                "table removes the datatype** (and an emptied dataset). New "
+                "datasets/datatypes appear in the file on Apply."
+            ),
+            table,
+            sizing_mode="stretch_width",
+            styles={"min-width": "0"},
+        )
+        return pn.Row(
+            content,
+            edit_panel,
+            name="Runlists",
+            sizing_mode="stretch_width",
+        )
+
+    # ------------------------------------------------------------------
     # Bad cycles
     # ------------------------------------------------------------------
 
@@ -1327,6 +1562,7 @@ class MetaMonitoring(Monitoring):
             self._build_overview_tab(widget_widths),
             self._build_status_tab(widget_widths),
             self._build_partitions_tab(widget_widths),
+            self._build_runlists_tab(widget_widths),
             self._build_cycles_tab(widget_widths),
             self._build_git_tab(widget_widths),
             dynamic=True,
@@ -1346,12 +1582,23 @@ class MetaMonitoring(Monitoring):
 
 
 def run_dashboard_metaedit() -> None:
-    """Standalone entry point: serve only the Metadata editor page."""
+    """Standalone entry point: serve only the Metadata editor page.
+
+    Still needs a production cycle at ``paths: cal`` (period/run catalogue,
+    raw-tier cycle discovery) next to the editable clone at
+    ``paths: metadata_edit``.
+    """
     argparser = argparse.ArgumentParser()
     argparser.add_argument("config_file", type=str)
     argparser.add_argument("-p", "--port", type=int, default=9000)
     argparser.add_argument(
         "-w", "--widget_widths", type=int, default=140, required=False
+    )
+    argparser.add_argument(
+        "--websocket-origin",
+        nargs="*",
+        default=None,
+        help="allowed websocket origin host(s) when serving behind a proxy",
     )
     args = argparser.parse_args()
 
@@ -1367,11 +1614,23 @@ def run_dashboard_metaedit() -> None:
             meta_path=config.metadata_edit,
             name="L200 Metadata Editor",
         )
-        return pn.Row(
-            monitor.build_sidebar(),
-            monitor.build_metadata_pane(args.widget_widths),
-            sizing_mode="stretch_width",
+        # same template/branding as the full dashboard (see dashboard.py)
+        template = pn.template.FastListTemplate(
+            header_background="#f8f8fa",
+            header_color="#1A2A5B",
+            title="L200 Metadata Editor",
+            sidebar_width=300,
+            main_layout=None,
+            site="",
+            logo="https://legend-exp.org/typo3conf/ext/sitepackage/Resources/Public/Images/Logo/logo_legend_tag_next.svg",
+            favicon="https://legend-exp.org/typo3conf/ext/sitepackage/Resources/Public/Favicons/android-chrome-96x96.png",
         )
+        template.sidebar.append(monitor.build_sidebar())
+        template.main.append(monitor.build_metadata_pane(args.widget_widths))
+        return template
 
+    serve_kwargs = {"port": args.port, "show": False, "address": "0.0.0.0"}
+    if args.websocket_origin:
+        serve_kwargs["websocket_origin"] = args.websocket_origin
     print("Starting Metadata editor on port ", args.port)  # noqa: T201
-    pn.serve(_build, port=args.port, show=False)
+    pn.serve(_build, **serve_kwargs)
