@@ -6,3 +6,6 @@ paths:
   muon: /path/to/muon
   tmp: /tmp
   llama: /path/to/llama
+  # editable legend-metadata clone for the Metadata editor page (cloned /
+  # updated on startup; see METADATA_EDIT_URL)
+  metadata_edit: ../metadata-edit

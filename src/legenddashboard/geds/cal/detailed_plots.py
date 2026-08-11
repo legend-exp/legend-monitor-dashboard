@@ -1,10 +1,29 @@
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+
+_BERLIN_TZ = ZoneInfo("Europe/Berlin")
+
+
+def _percent_shift(counts, spread):
+    """Return (% shift, % error) w.r.t. the mean of the first 10 finite values.
+
+    Returns ``(None, None)`` when there is no finite data or the mean is zero,
+    so callers can skip the trace instead of dividing by zero.
+    """
+    finite = counts[~np.isnan(counts)]
+    if len(finite) == 0:
+        return None, None
+    mean = np.mean(finite[:10])
+    if mean == 0:
+        return None, None
+    return 100 * (counts - mean) / mean, 100 * spread / mean
+
 
 detailed_plots = [
     "2614_timemap",
@@ -214,48 +233,47 @@ def plot_cut_spectra(plot_dict):
 
 def track_peaks(plot_dict):
     time_bins = plot_dict["2614_stability"]["time"]
-    th_counts = plot_dict["2614_stability"]["energy"]
-    th_spread = plot_dict["2614_stability"]["spread"]
-    th_mean = np.mean(th_counts[~np.isnan(th_counts)][:10])
-    th_shift = 100 * (th_counts - th_mean) / th_mean
-    th_shift_err = 100 * th_spread / th_mean
-
-    lep_counts = plot_dict["583_stability"]["energy"]
-    lep_spread = plot_dict["583_stability"]["spread"]
-    lep_mean = np.mean(lep_counts[~np.isnan(lep_counts)][:10])
-    lep_shift = 100 * (lep_counts - lep_mean) / lep_mean
-    lep_shift_err = 100 * lep_spread / lep_mean
 
     fig = plt.figure(figsize=(8, 6))
-    plt.step(time_bins, th_shift, where="mid", label="2.6 MeV peak", color="blue")
+    if len(time_bins) == 0:
+        plt.close()
+        return fig
 
-    plt.fill_between(
-        time_bins,
-        th_shift - th_shift_err,
-        th_shift + th_shift_err,
-        step="mid",
-        alpha=0.1,
-        color="blue",
+    th_shift, th_shift_err = _percent_shift(
+        plot_dict["2614_stability"]["energy"], plot_dict["2614_stability"]["spread"]
     )
+    if th_shift is not None:
+        plt.step(time_bins, th_shift, where="mid", label="2.6 MeV peak", color="blue")
+        plt.fill_between(
+            time_bins,
+            th_shift - th_shift_err,
+            th_shift + th_shift_err,
+            step="mid",
+            alpha=0.1,
+            color="blue",
+        )
 
-    plt.step(time_bins, lep_shift, where="mid", label="583 keV peak", color="orange")
-    plt.fill_between(
-        time_bins,
-        lep_shift - lep_shift_err,
-        lep_shift + lep_shift_err,
-        step="mid",
-        alpha=0.1,
-        color="orange",
+    lep_shift, lep_shift_err = _percent_shift(
+        plot_dict["583_stability"]["energy"], plot_dict["583_stability"]["spread"]
     )
+    if lep_shift is not None:
+        plt.step(
+            time_bins, lep_shift, where="mid", label="583 keV peak", color="orange"
+        )
+        plt.fill_between(
+            time_bins,
+            lep_shift - lep_shift_err,
+            lep_shift + lep_shift_err,
+            step="mid",
+            alpha=0.1,
+            color="orange",
+        )
 
     pulser_counts = plot_dict["pulser_stability"]["energy"]
     pulser_spread = plot_dict["pulser_stability"]["spread"]
-    if np.isnan(pulser_counts).all():
-        pass
-    else:
+    pulser_shift, pulser_shift_err = _percent_shift(pulser_counts, pulser_spread)
+    if pulser_shift is not None:
         pulser_mean = np.mean(pulser_counts[~np.isnan(pulser_counts)][:10])
-        pulser_shift = 100 * (pulser_counts - pulser_mean) / pulser_mean
-        pulser_shift_err = 100 * pulser_spread / pulser_mean
         plt.step(
             time_bins,
             pulser_shift,
@@ -272,14 +290,19 @@ def track_peaks(plot_dict):
             color="red",
         )
 
-    ticks, labels = plt.xticks()
-    plt.xlabel(
-        f"Time starting : {datetime.utcfromtimestamp(ticks[0]).strftime('%d/%m/%y %H:%M')}"
-    )
+    # Label ticks from the data timestamps, not the matplotlib-generated tick
+    # locations, which can extend beyond the valid timestamp range.
+    start = datetime.fromtimestamp(time_bins[0], tz=_BERLIN_TZ)
+    plt.xlabel(f"Time (CET/CEST) starting : {start.strftime('%d/%m/%y %H:%M')}")
     plt.ylabel("% Shift")
+    ticks, _ = plt.xticks()
+    in_range = [t for t in ticks if time_bins[0] <= t <= time_bins[-1]]
     plt.xticks(
-        ticks,
-        [datetime.utcfromtimestamp(tick).strftime("%H:%M") for tick in ticks],
+        in_range,
+        [
+            datetime.fromtimestamp(tick, tz=_BERLIN_TZ).strftime("%H:%M")
+            for tick in in_range
+        ],
     )
     plt.xlim([time_bins[0] - 10, time_bins[-1] + 10])
 

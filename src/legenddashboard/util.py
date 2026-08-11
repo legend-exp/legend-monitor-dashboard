@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.resources
 import logging
 import threading
@@ -21,11 +22,10 @@ log = logging.getLogger(__name__)
 # somehow TUM server needs Agg -> needs fix in the future
 mpl.use("Agg")
 
-# use terminal and tabulator extensions, sizing mode stretch enables nicer layout
-pn.extension("terminal")
-pn.extension("tabulator")
-pn.extension("plotly")
-pn.extension("katex", "mathjax")
+# Only load the extensions actually used by the dashboard (tabulator for the
+# metadata table, plotly for the detailed cal plots); every extension listed
+# here ships extra JS to each client.
+pn.extension("tabulator", "plotly")
 
 logo_path = importlib.resources.files("legenddashboard") / "logos"
 
@@ -64,13 +64,7 @@ def read_config(config: str | dict) -> AttrsDict:
 
 class sort_dets:
     def __init__(self, path):
-        self.cached_chmaps = {}
-        self.cached_det_status = {}
-
-        path = Path(path)
-
-        self.prod_config = path / "dataflow-config.yaml"
-        self.prod_config = Props.read_from(self.prod_config, subst_pathvar=True)
+        self.prod_config = get_dataflow_config(path)
 
         meta_path = Path(self.prod_config["paths"]["metadata"])
         chmap_path = Path(self.prod_config["paths"]["chan_map"])
@@ -134,6 +128,21 @@ class LRUDict(OrderedDict):
             while len(self) > self.maxsize:
                 super().__delitem__(next(iter(self)))
 
+    def __contains__(self, key):
+        with self._lock:
+            contained = super().__contains__(key)
+            if contained:
+                self.move_to_end(key)
+            return contained
+
+    def get(self, key, default=None):
+        with self._lock:
+            if not super().__contains__(key):
+                return default
+            value = super().__getitem__(key)
+            self.move_to_end(key)
+            return value
+
 
 # Read-only metadata catalogs are expensive to build (they walk every
 # channelmap/status validity entry on disk) but never change at runtime, so we
@@ -144,6 +153,48 @@ _sort_dets_lock = threading.Lock()
 # Parsed parameter files are immutable per run; share a single bounded cache
 # across every session to bound memory use and avoid repeated disk reads.
 _par_cache = {"hit": LRUDict(maxsize=128), "dsp": LRUDict(maxsize=128)}
+
+# dataflow-config.yaml never changes at runtime but is needed by every
+# Monitoring instance and inside the per-run plot loops; parse it once per
+# base path.
+_dataflow_config_cache: dict[str, dict] = {}
+_dataflow_config_lock = threading.Lock()
+
+# The run dict requires one filesystem stat per run on the high-latency NERSC
+# filesystem; share one scan per base path across all sessions. It is
+# refreshed by PeriodRefreshRegistry.scan_and_push (hourly / manual refresh).
+_run_dict_cache: dict[str, dict] = {}
+_run_dict_lock = threading.Lock()
+
+
+def get_dataflow_config(path):
+    """Return the parsed (read-only) dataflow-config.yaml for ``path``."""
+    key = str(Path(path).resolve())
+    with _dataflow_config_lock:
+        cfg = _dataflow_config_cache.get(key)
+    if cfg is None:
+        cfg = Props.read_from(Path(path) / "dataflow-config.yaml", subst_pathvar=True)
+        with _dataflow_config_lock:
+            cfg = _dataflow_config_cache.setdefault(key, cfg)
+    return cfg
+
+
+def get_run_dict(path, refresh=False):
+    """Return the shared run dict for ``path``, scanning the filesystem once.
+
+    Pass ``refresh=True`` to force a rescan (used by the periodic/manual
+    refresh); all subsequent callers then see the updated dict.
+    """
+    key = str(Path(path).resolve())
+    if not refresh:
+        with _run_dict_lock:
+            cached = _run_dict_cache.get(key)
+        if cached is not None:
+            return cached
+    scanned = gen_run_dict(path)
+    with _run_dict_lock:
+        _run_dict_cache[key] = scanned
+    return scanned
 
 
 def get_sort_dets(path):
@@ -164,6 +215,31 @@ def get_sort_dets(path):
 def get_par_cache():
     """Return the process-wide bounded cache of parsed parameter files."""
     return _par_cache
+
+
+def load_run_pars(prod_config, tier, period, run, run_info, cache_data=None):
+    """Load the par_<tier> file for one calibration run via the shared cache.
+
+    Cache keys must include the period because run ids (r000, r001, ...)
+    repeat across periods, and ``cache_data`` is shared by every session.
+    """
+    cache_key = f"{period}/{run}"
+    if cache_data is not None:
+        cached = cache_data[tier].get(cache_key)
+        if cached is not None:
+            return cached
+    pars_path = (
+        Path(prod_config["paths"][f"par_{tier}"])
+        / f"cal/{period}/{run}"
+        / (
+            f"{run_info['experiment']}-{period}-{run}-cal-"
+            f"{run_info['timestamp']}-par_{tier}.yaml"
+        )
+    )
+    pars = Props.read_from(pars_path)
+    if cache_data is not None:
+        cache_data[tier][cache_key] = pars
+    return pars
 
 
 class PeriodRefreshRegistry:
@@ -207,7 +283,7 @@ class PeriodRefreshRegistry:
             self._scheduled = True
         try:
             pn.state.schedule_task(
-                "legend_refresh_periods", self.scan_and_push, period=period
+                "legend_refresh_periods", self._scan_and_push_async, period=period
             )
         except Exception:
             # No running event loop yet (e.g. during warm-up); allow a later
@@ -215,6 +291,15 @@ class PeriodRefreshRegistry:
             with self._lock:
                 self._scheduled = False
             log.debug("Could not schedule global period refresh", exc_info=True)
+
+    async def _scan_and_push_async(self):
+        """Scheduled-task wrapper: run the blocking scan on a worker thread.
+
+        The scheduled task runs on the server's event loop; running the
+        high-latency filesystem scan there would stall every session's
+        websocket handling for its duration.
+        """
+        await asyncio.to_thread(self.scan_and_push)
 
     def scan_and_push(self):
         """Scan the filesystem once and push new periods to every session."""
@@ -224,7 +309,9 @@ class PeriodRefreshRegistry:
         if path is None or not sessions:
             # Nobody connected -> skip the scan entirely.
             return
-        new_periods = gen_run_dict(path)
+        # Force a rescan and refresh the shared cache so new sessions also see
+        # the new periods without their own filesystem walk.
+        new_periods = get_run_dict(path, refresh=True)
         for ref, doc in sessions:
             monitor = ref()
             if monitor is None:
@@ -241,8 +328,7 @@ period_refresh_registry = PeriodRefreshRegistry()
 
 
 def gen_run_dict(path):
-    prod_config = Path(path) / "dataflow-config.yaml"
-    prod_config = Props.read_from(prod_config, subst_pathvar=True)  # ["setups"]["l200"]
+    prod_config = get_dataflow_config(path)
     par_file = Path(prod_config["paths"]["par_hit"]) / "validity.yaml"
     run_dict = {}
     file = Props.read_from(par_file)
@@ -266,17 +352,30 @@ def gen_run_dict(path):
     return run_dict
 
 
+# Sorting the channel map is pure w.r.t. (path, timestamp, key, datatype) but
+# is called several times per render; cache the results process-wide. Entries
+# are treated as read-only by all callers.
+_sorter_cache = LRUDict(maxsize=256)
+
+
 def sorter(
     path, timestamp, key="String", datatype="cal", spms=False, sort_dets_obj=None
 ):
+    cache_key = (str(path), timestamp, key, datatype, spms)
+    cached = _sorter_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    result = _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj)
+    _sorter_cache[cache_key] = result
+    return result
+
+
+def _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj):
     if sort_dets_obj is not None:
         chmap = sort_dets_obj.chmaps.valid_for(timestamp, system=datatype)
         det_status = sort_dets_obj.statuses.valid_for(timestamp, system=datatype)
     else:
-        prod_config = Path(path) / "dataflow-config.yaml"
-        prod_config = Props.read_from(
-            prod_config, subst_pathvar=True
-        )  # ["setups"]["l200"]
+        prod_config = get_dataflow_config(path)
 
         cfg_file = prod_config["paths"]["metadata"]
         configs = LegendMetadata(path=cfg_file)

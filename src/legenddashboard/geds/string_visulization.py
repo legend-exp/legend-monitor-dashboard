@@ -246,8 +246,11 @@ def create_detector_plot(
 
     # handle colors according to display_dict
     values = [val for val in display_dict.values() if val is not None]
-    minvalue = min(values) if colour_min is None else colour_min
-    maxvalue = max(values) if colour_min is None else colour_max
+    minvalue = min(values, default=0) if colour_min is None else colour_min
+    maxvalue = max(values, default=1) if colour_max is None else colour_max
+    if maxvalue == minvalue:
+        # all values identical -> avoid a zero-width colour range
+        maxvalue = minvalue + 1
 
     color_mapper = LinearColorMapper(palette=palette, low=minvalue, high=maxvalue)
 
@@ -258,7 +261,7 @@ def create_detector_plot(
             return "white"
         if v > maxvalue:
             return palette[-1]
-        if v < maxvalue:
+        if v < minvalue:
             return palette[0]
         return palette[int((v - minvalue) / (maxvalue - minvalue) * (len(palette) - 1))]
 

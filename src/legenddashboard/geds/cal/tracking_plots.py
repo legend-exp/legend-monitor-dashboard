@@ -4,7 +4,6 @@ import contextlib
 import datetime as dtt
 import warnings
 from datetime import datetime
-from pathlib import Path
 
 import colorcet as cc
 import numexpr as ne
@@ -20,33 +19,20 @@ from bokeh.models import (
     ZoomOutTool,
 )
 from bokeh.plotting import figure
-from dbetto import Props
 from scipy.optimize import minimize
 
-from legenddashboard.util import sorter
+from legenddashboard.util import get_dataflow_config, load_run_pars, sorter
 
 
 def plot_energy(path, run_dict, det, plot, colour, period, cache_data=None):
     cals = []
     times = []
     qbb_adc = None
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
-        if cache_data is not None and run in cache_data["hit"]:
-            hit_pars_dict = cache_data["hit"][run]
-        else:
-            prod_config = Path(path) / "dataflow-config.yaml"
-            prod_config = Props.read_from(prod_config, subst_pathvar=True)
-            hit_pars_file_path = (
-                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-            )
-
-            hit_pars_path = (
-                Path(hit_pars_file_path)
-                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
-            )
-
-            hit_pars_dict = Props.read_from(hit_pars_path)
-            cache_data["hit"][run] = hit_pars_dict
+        hit_pars_dict = load_run_pars(
+            prod_config, "hit", period, run, run_dict[run], cache_data
+        )
 
         try:
             hit_dict = hit_pars_dict[det]["pars"]["operations"]["cuspEmax_ctc_cal"]
@@ -95,24 +81,11 @@ def plot_energy_res(
 ):
     reses = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
-        if cache_data is not None and run in cache_data["hit"]:
-            hit_pars_dict = cache_data["hit"][run]
-        else:
-            prod_config = Path(path) / "dataflow-config.yaml"
-            prod_config = Props.read_from(prod_config, subst_pathvar=True)
-
-            hit_pars_file_path = (
-                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-            )
-
-            hit_pars_path = (
-                hit_pars_file_path
-                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
-            )
-
-            hit_pars_dict = Props.read_from(hit_pars_path)
-            cache_data["hit"][run] = hit_pars_dict
+        hit_pars_dict = load_run_pars(
+            prod_config, "hit", period, run, run_dict[run], cache_data
+        )
         try:
             if at == "Qbb":
                 reses.append(
@@ -170,23 +143,11 @@ def plot_aoe_mean(path, run_dict, det, plot, colour, period, cache_data=None):
     reses = []
     res_errs = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
-        if cache_data is not None and run in cache_data["hit"]:
-            hit_pars_dict = cache_data["hit"][run]
-        else:
-            prod_config = Path(path) / "dataflow-config.yaml"
-            prod_config = Props.read_from(prod_config, subst_pathvar=True)
-            hit_pars_file_path = (
-                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-            )
-
-            hit_pars_path = (
-                hit_pars_file_path
-                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
-            )
-
-            hit_pars_dict = Props.read_from(hit_pars_path)
-            cache_data["hit"][run] = hit_pars_dict
+        hit_pars_dict = load_run_pars(
+            prod_config, "hit", period, run, run_dict[run], cache_data
+        )
         try:
             det_dict = hit_pars_dict[det]
 
@@ -265,23 +226,11 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period, cache_data=None):
     reses = []
     res_errs = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
-        if cache_data is not None and run in cache_data["hit"]:
-            hit_pars_dict = cache_data["hit"][run]
-        else:
-            prod_config = Path(path) / "dataflow-config.yaml"
-            prod_config = Props.read_from(prod_config, subst_pathvar=True)
-            hit_pars_file_path = (
-                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-            )
-
-            hit_pars_path = (
-                hit_pars_file_path
-                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
-            )
-
-            hit_pars_dict = Props.read_from(hit_pars_path)
-            cache_data["hit"][run] = hit_pars_dict
+        hit_pars_dict = load_run_pars(
+            prod_config, "hit", period, run, run_dict[run], cache_data
+        )
 
         try:
             means.append(
@@ -323,23 +272,11 @@ def plot_aoe_sig(path, run_dict, det, plot, colour, period, cache_data=None):
 def plot_aoe_cut(path, run_dict, det, plot, colour, period, cache_data=None):
     cuts = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
-        if cache_data is not None and run in cache_data["hit"]:
-            hit_pars_dict = cache_data["hit"][run]
-        else:
-            prod_config = Path(path) / "dataflow-config.yaml"
-            prod_config = Props.read_from(prod_config, subst_pathvar=True)
-            hit_pars_file_path = (
-                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-            )
-
-            hit_pars_path = (
-                hit_pars_file_path
-                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
-            )
-
-            hit_pars_dict = Props.read_from(hit_pars_path)
-            cache_data["hit"][run] = hit_pars_dict
+        hit_pars_dict = load_run_pars(
+            prod_config, "hit", period, run, run_dict[run], cache_data
+        )
 
         with contextlib.suppress(KeyError):
             cuts.append(hit_pars_dict[det]["results"]["aoe"]["low_cut"])
@@ -370,23 +307,11 @@ def plot_aoe_cut(path, run_dict, det, plot, colour, period, cache_data=None):
 def plot_tau(path, run_dict, det, plot, colour, period, cache_data=None):
     values = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
-        if cache_data is not None and run in cache_data["dsp"]:
-            dsp_pars_dict = cache_data["dsp"][run]
-        else:
-            prod_config = Path(path) / "dataflow-config.yaml"
-            prod_config = Props.read_from(prod_config, subst_pathvar=True)
-            dsp_pars_file_path = (
-                Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
-            )
-
-            dsp_pars_path = (
-                dsp_pars_file_path
-                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.yaml'
-            )
-
-            dsp_pars_dict = Props.read_from(dsp_pars_path)
-            cache_data["dsp"][run] = dsp_pars_dict
+        dsp_pars_dict = load_run_pars(
+            prod_config, "dsp", period, run, run_dict[run], cache_data
+        )
 
         with contextlib.suppress(KeyError):
             values.append(float(dsp_pars_dict[det]["pz"]["tau1"][:-3]))
@@ -417,22 +342,11 @@ def plot_tau(path, run_dict, det, plot, colour, period, cache_data=None):
 def plot_ctc_const(path, run_dict, det, plot, colour, period, cache_data=None):
     values = []
     times = []
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
-        if cache_data is not None and run in cache_data["dsp"]:
-            dsp_pars_dict = cache_data["dsp"][run]
-        else:
-            prod_config = Path(path) / "dataflow-config.yaml"
-            prod_config = Props.read_from(prod_config, subst_pathvar=True)
-            dsp_pars_file_path = (
-                Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
-            )
-            dsp_pars_path = (
-                dsp_pars_file_path
-                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_dsp.yaml'
-            )
-
-            dsp_pars_dict = Props.read_from(dsp_pars_path)
-            cache_data["dsp"][run] = dsp_pars_dict
+        dsp_pars_dict = load_run_pars(
+            prod_config, "dsp", period, run, run_dict[run], cache_data
+        )
 
         with contextlib.suppress(KeyError):
             values.append(
@@ -546,7 +460,7 @@ def plot_tracking(
         p.yaxis.axis_label = "% Shift of A/E mean"
     elif plot_func == plot_aoe_sig:
         p.yaxis.axis_label = "Shift of A/E Resolution"
-    elif plot_func == plot_aoe_sig:
+    elif plot_func == plot_aoe_cut:
         p.yaxis.axis_label = "Shift of A/E Low Cut"
     elif plot_func == plot_tau:
         p.yaxis.axis_label = "% Shift PZ const"
@@ -587,23 +501,11 @@ def plot_energy_residuals_period(
         for detector in strings[stri]:
             res[detector] = {peak: [] for peak in peaks}
 
+    prod_config = get_dataflow_config(path)
     for run in run_dict:
-        if cache_data is not None and run in cache_data["hit"]:
-            hit_pars_dict = cache_data["hit"][run]
-        else:
-            prod_config = Path(path) / "dataflow-config.yaml"
-            prod_config = Props.read_from(prod_config, subst_pathvar=True)
-            hit_pars_file_path = (
-                Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-            )
-
-            hit_pars_path = (
-                hit_pars_file_path
-                / f'{run_dict[run]["experiment"]}-{period}-{run}-cal-{run_dict[run]["timestamp"]}-par_hit.yaml'
-            )
-
-            hit_pars_dict = Props.read_from(hit_pars_path)
-            cache_data["hit"][run] = hit_pars_dict
+        hit_pars_dict = load_run_pars(
+            prod_config, "hit", period, run, run_dict[run], cache_data
+        )
 
         for peak in peaks:
             for stri in strings:

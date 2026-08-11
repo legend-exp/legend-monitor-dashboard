@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import copy
 import logging
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import bokeh.palettes as pal
 import colorcet as cc
@@ -20,13 +20,24 @@ from bokeh.models import (
     ZoomOutTool,
 )
 from bokeh.plotting import figure
-from dbetto import Props
 from legendmeta import LegendMetadata
 
 from legenddashboard.geds.string_visulization import create_detector_plot
-from legenddashboard.util import sorter
+from legenddashboard.util import load_run_pars, sorter
 
 log = logging.getLogger(__name__)
+
+_BERLIN_TZ = ZoneInfo("Europe/Berlin")
+
+
+def _to_local_naive(ts):
+    """Convert a unix timestamp to naive Europe/Berlin wall-clock time.
+
+    The stability timestamps are unix epochs (UTC); converting via the real
+    timezone handles CET vs CEST correctly, and stripping the tzinfo makes
+    Bokeh's datetime axis display the wall-clock value.
+    """
+    return datetime.fromtimestamp(ts, tz=_BERLIN_TZ).replace(tzinfo=None)
 
 
 def build_string_array(chan_map):
@@ -184,16 +195,7 @@ def plot_counts(
         chmap = LegendMetadata(path=prod_config["paths"]["metadata"])
         cmap = chmap.channelmap(run_dict["timestamp"])
 
-    if cache_data is not None and run in cache_data["hit"]:
-        all_res = cache_data["hit"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
-        )
-        all_res = Props.read_from(path)
-        cache_data["hit"][run] = all_res
+    all_res = load_run_pars(prod_config, "hit", period, run, run_dict, cache_data)
 
     res = {}
     for det in cmap:
@@ -241,17 +243,7 @@ def plot_energy_resolutions(
         path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    if cache_data is not None and run in cache_data["hit"]:
-        all_res = cache_data["hit"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
-        )
-
-        all_res = Props.read_from(path)
-        cache_data["hit"][run] = all_res
+    all_res = load_run_pars(prod_config, "hit", period, run, run_dict, cache_data)
 
     default = {
         "cuspEmax_ctc_cal": {
@@ -556,17 +548,7 @@ def plot_energy_residuals(
         path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    if cache_data is not None and run in cache_data["hit"]:
-        all_res = cache_data["hit"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
-        )
-
-        all_res = Props.read_from(path)
-        cache_data["hit"][run] = all_res
+    all_res = load_run_pars(prod_config, "hit", period, run, run_dict, cache_data)
 
     peaks = [2614.511, 583.191, 2103.511]
     filters = ["cuspEmax_ctc_cal", "zacEmax_ctc_cal", "trapEmax_ctc_cal"]
@@ -780,17 +762,7 @@ def plot_no_fitted_energy_peaks(
         chmap[field] for field in soft_dict if soft_dict[field]["processable"] is False
     ]
 
-    if cache_data is not None and run in cache_data["hit"]:
-        res = cache_data["hit"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
-        )
-
-        res = Props.read_from(path)
-        cache_data["hit"][run] = res
+    res = load_run_pars(prod_config, "hit", period, run, run_dict, cache_data)
 
     peaks = [583.191, 727.33, 860.564, 1592.511, 1620.5, 2103.511, 2614.511]
     grid = np.ones((len(peaks), len(channels)))
@@ -903,17 +875,7 @@ def plot_aoe_status(
         field for field in soft_dict if soft_dict[field]["processable"] is False
     ]
 
-    if cache_data is not None and run in cache_data["hit"]:
-        res = cache_data["hit"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
-        )
-
-        res = Props.read_from(path)
-        cache_data["hit"][run] = res
+    res = load_run_pars(prod_config, "hit", period, run, run_dict, cache_data)
 
     checks = ["Time_corr", "Energy_corr", "Cut_det", "Low_side_sfs", "2_side_sfs"]
 
@@ -1040,17 +1002,7 @@ def plot_no_fitted_aoe_slices(
         path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    if cache_data is not None and run in cache_data["hit"]:
-        res = cache_data["hit"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
-        )
-
-        res = Props.read_from(path)
-        cache_data["hit"][run] = res
+    res = load_run_pars(prod_config, "hit", period, run, run_dict, cache_data)
 
     nfits = {}
     for stri in strings:
@@ -1168,17 +1120,7 @@ def get_aoe_results(
         path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    if cache_data is not None and run in cache_data["hit"]:
-        all_res = cache_data["hit"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_hit"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_hit.yaml'
-        )
-
-        all_res = Props.read_from(path)
-        cache_data["hit"][run] = all_res
+    all_res = load_run_pars(prod_config, "hit", period, run, run_dict, cache_data)
 
     default = {
         "A/E_Energy_param": "cuspEmax",
@@ -1252,10 +1194,6 @@ def get_aoe_results(
     peak_colors = ["blue", "orange", "green", "red", "purple"]
 
     for peak_type in peak_types:
-        for det in aoe_res:
-            log.debug(det)
-            log.debug(aoe_res[det]["low_side_sfs"][peak_type]["sf"])
-        # try:
         x_plot, y_plot, y_plot_err = (
             np.arange(1, len(list(aoe_res)) + 1, 1),
             [float(aoe_res[det]["low_side_sfs"][peak_type]["sf"]) for det in aoe_res],
@@ -1374,17 +1312,7 @@ def plot_pz_consts(
         path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    if cache_data is not None and run in cache_data["dsp"]:
-        cal_dict = cache_data["hit"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_dsp.yaml'
-        )
-
-        cal_dict = Props.read_from(path)
-        cache_data["dsp"][run] = cal_dict
+    cal_dict = load_run_pars(prod_config, "dsp", period, run, run_dict, cache_data)
 
     taus = {}
 
@@ -1536,17 +1464,7 @@ def plot_alpha(
         path, run_dict["timestamp"], key=key, sort_dets_obj=sort_dets_obj
     )
 
-    if cache_data is not None and run in cache_data["dsp"]:
-        cal_dict = cache_data["dsp"][run]
-    else:
-        file_path = Path(prod_config["paths"]["par_dsp"]) / f"cal/{period}/{run}"
-        path = (
-            file_path
-            / f'{run_dict["experiment"]}-{period}-{run}-cal-{run_dict["timestamp"]}-par_dsp.yaml'
-        )
-
-        cal_dict = Props.read_from(path)
-        cache_data["dsp"][run] = cal_dict
+    cal_dict = load_run_pars(prod_config, "dsp", period, run, run_dict, cache_data)
 
     trap_alpha = {}
     cusp_alpha = {}
@@ -1848,50 +1766,28 @@ def plot_baseline_stability(
         try:
             bl = plot_dict[channel]["baseline_stability"]["baseline"]
             # bl_spread = plot_dict[channel]["baseline_stability"]["spread"]
-            mean = np.nanmean(bl[~np.isnan(bl)][:10])
+            finite_bl = bl[~np.isnan(bl)]
+            if len(finite_bl) == 0:
+                continue
+            mean = np.nanmean(finite_bl[:10])
+            if mean == 0:
+                continue
             bl_mean = 100 * (bl - mean) / mean
 
-            # define if condition such that timedelta only added if still in UTC
-            base_time = plot_dict[channel]["baseline_stability"]["time"][0]
-            dt_object_base = datetime.utcfromtimestamp(base_time)
-            utc_offset_base = dt_object_base.utcoffset()
-
-            if utc_offset_base is None:
-                p.line(
-                    [
-                        (datetime.fromtimestamp(time) + timedelta(hours=2))
-                        for time in plot_dict[channel]["baseline_stability"]["time"]
-                    ],  # add two hours manually
-                    bl_mean,
-                    legend_label=f'{chan_dict[channel]["name"]}',
-                    name=f'{chan_dict[channel]["name"]}',
-                    line_width=2,
-                    line_color=colours[i],
-                )
-                if times is None:
-                    times = [
-                        (datetime.fromtimestamp(t) + timedelta(hours=2))
-                        for t in plot_dict[channel]["baseline_stability"]["time"]
-                    ]
-            if utc_offset_base is not None:
-                p.line(
-                    [
-                        datetime.fromtimestamp(time)
-                        for time in plot_dict[channel]["baseline_stability"]["time"]
-                    ],
-                    bl_mean,
-                    legend_label=f'{chan_dict[channel]["name"]}',
-                    name=f'{chan_dict[channel]["name"]}',
-                    line_width=2,
-                    line_color=colours[i],
-                )
-                if times is None:
-                    times = [
-                        datetime.fromtimestamp(t)
-                        for t in plot_dict[f"ch{channel:03}"]["baseline_stability"][
-                            "time"
-                        ]
-                    ]
+            channel_times = [
+                _to_local_naive(t)
+                for t in plot_dict[channel]["baseline_stability"]["time"]
+            ]
+            p.line(
+                channel_times,
+                bl_mean,
+                legend_label=f'{chan_dict[channel]["name"]}',
+                name=f'{chan_dict[channel]["name"]}',
+                line_width=2,
+                line_color=colours[i],
+            )
+            if times is None:
+                times = channel_times
         except KeyError:
             pass
 
@@ -1899,12 +1795,14 @@ def plot_baseline_stability(
     p.hover.formatters = {"$x": "datetime", "$y": "printf"}
     p.hover.tooltips = [
         ("Detector", "$name"),
-        ("Time", "$x{%F %H:%M:%S CET}"),
+        ("Time", "$x{%F %H:%M:%S}"),
         ("BL Shift (%)", "@y{0, 0.0000} %"),
     ]
     p.hover.mode = "vline"
     p.xaxis.axis_label = (
-        f"Time (CET), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+        f"Time (CET/CEST), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+        if times
+        else "Time (CET/CEST)"
     )
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Shift (%)"
@@ -1964,48 +1862,26 @@ def plot_stability(
 
             en = plot_dict_chan[energy_param][parameter]["energy"]
             # en_spread = plot_dict_chan[energy_param][parameter]["spread"]
-            mean = np.nanmean(en[~np.isnan(en)][:10])
+            finite_en = en[~np.isnan(en)]
+            if len(finite_en) == 0:
+                continue
+            mean = np.nanmean(finite_en[:10])
             en_mean = en - mean  # /mean
 
-            # define if condition such that timedelta only added if still in UTC
-            plot_time = plot_dict_chan[energy_param][parameter]["time"][0]
-            dt_object_plot = datetime.utcfromtimestamp(plot_time)
-            utc_offset = dt_object_plot.utcoffset()
-
-            if utc_offset is None:
-                p.line(
-                    [
-                        (datetime.fromtimestamp(time) + timedelta(hours=2))
-                        for time in plot_dict_chan[energy_param][parameter]["time"]
-                    ],  # add two hours manually
-                    en_mean,
-                    legend_label=f'{chan_dict[channel]["name"]}',
-                    name=f'{chan_dict[channel]["name"]}',
-                    line_width=2,
-                    line_color=colours[i],
-                )
-                if times is None:
-                    times = [
-                        (datetime.fromtimestamp(t) + timedelta(hours=2))
-                        for t in plot_dict_chan[energy_param][parameter]["time"]
-                    ]
-            if utc_offset is not None:
-                p.line(
-                    [
-                        (datetime.fromtimestamp(time))
-                        for time in plot_dict_chan[energy_param][parameter]["time"]
-                    ],
-                    en_mean,
-                    legend_label=f'{chan_dict[channel]["name"]}',
-                    name=f'{chan_dict[channel]["name"]}',
-                    line_width=2,
-                    line_color=colours[i],
-                )
-                if times is None:
-                    times = [
-                        datetime.fromtimestamp(t)
-                        for t in plot_dict_chan[energy_param][parameter]["time"]
-                    ]
+            channel_times = [
+                _to_local_naive(t)
+                for t in plot_dict_chan[energy_param][parameter]["time"]
+            ]
+            p.line(
+                channel_times,
+                en_mean,
+                legend_label=f'{chan_dict[channel]["name"]}',
+                name=f'{chan_dict[channel]["name"]}',
+                line_width=2,
+                line_color=colours[i],
+            )
+            if times is None:
+                times = channel_times
         except KeyError:
             pass
 
@@ -2013,12 +1889,14 @@ def plot_stability(
     p.hover.formatters = {"$x": "datetime", "$y": "printf"}
     p.hover.tooltips = [
         ("Detector", "$name"),
-        ("Time", "$x{%F %H:%M:%S CET}"),
+        ("Time", "$x{%F %H:%M:%S}"),
         ("Energy Shift (%)", "@y{0, 0.0000} %"),
     ]
     p.hover.mode = "vline"
     p.xaxis.axis_label = (
-        f"Time (CET), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+        f"Time (CET/CEST), starting: {times[0].strftime('%d/%m/%Y %H:%M:%S')}"
+        if times
+        else "Time (CET/CEST)"
     )
     p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label = "Energy Shift (keV)"

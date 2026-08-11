@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import logging
 import pickle as pkl
 import shelve
@@ -10,6 +11,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import panel as pn
 import param
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 
 import legenddashboard.geds.string_visulization as visu
 from legenddashboard.geds import cal
@@ -22,6 +25,18 @@ log = logging.getLogger(__name__)
 plt.rcParams["font.size"] = 10
 plt.rcParams["figure.figsize"] = (16, 6)
 plt.rcParams["figure.dpi"] = 100
+
+
+def _rehome_figure(fig):
+    """Attach a fresh Agg canvas to a figure unpickled from a shelve.
+
+    Unpickled figures have no canvas. Constructing a ``FigureCanvasAgg``
+    registers itself on the figure without going through pyplot, so nothing
+    accumulates in pyplot's process-global figure registry (which previously
+    leaked one figure per detailed-plot view, across all sessions).
+    """
+    FigureCanvasAgg(fig)
+    return fig
 
 
 class CalMonitoring(GedMonitoring):
@@ -46,8 +61,10 @@ class CalMonitoring(GedMonitoring):
         default=list(cal.summary_plots)[3],
         objects=list(cal.summary_plots),
     )
+    # Options must be keys of cal.summary_plots (functions that support
+    # ``download=True``).
     plot_types_download = param.Selector(
-        objects=["FWHM Qbb", "FWHM FEP", "A/E", "PZ", "Alpha"],
+        objects=["FWHM Qbb", "FWHM FEP", "A/E SF", "PZ", "CT Alpha"],
         default="FWHM Qbb",
     )
 
@@ -57,46 +74,21 @@ class CalMonitoring(GedMonitoring):
         # user sessions so the high-latency filesystem is read at most once per
         # run and memory stays bounded (see legenddashboard.util.get_par_cache).
         self.cached_data = get_par_cache()
-        self.update_plot_dict(None)
-        self.param.watch(
-            self.download_summary_files,
-            ["period", "run", "sort_by", "plot_types_download"],
-            precedence=3,
-            queued=True,
-        )
-        self.param.watch(
-            self.view_summary,
-            ["period", "run", "sort_by", "plot_type_summary"],
-            precedence=2,
-            queued=True,
-        )
+        # The view_*/download_* methods are re-rendered by Panel through their
+        # @param.depends decorators (they are placed directly in the panes);
+        # additional param.watch registrations would compute every plot twice
+        # per interaction. Only genuine state updaters are watchers, and they
+        # must be registered before the initial update_plot_dict call so its
+        # channel assignment triggers the channel-shelve load.
         self.param.watch(
             self.update_plot_dict, ["period", "run"], precedence=2, queued=True
         )
         self.param.watch(
             self.update_channel_plot_dict, ["channel"], precedence=2, queued=True
         )
-        self.param.watch(
-            self._clear_cached_data,
-            [
-                "period",
-            ],
-            precedence=1,
-            queued=True,
-        )
-        self.param.watch(
-            self.view_tracking,
-            ["period", "date_range", "sort_by", "string", "plot_type_tracking"],
-            precedence=2,
-            queued=True,
-        )
-        self.param.watch(
-            self.view_details,
-            ["period", "run", "channel", "parameter", "plot_type_details"],
-            precedence=2,
-            queued=True,
-        )
+        self.update_plot_dict(None)
 
+    @param.depends("period", "run", "sort_by", "plot_types_download")
     def download_summary_files(self, event=None):  # noqa: ARG002
         start_time = time.time()
         try:
@@ -113,13 +105,14 @@ class CalMonitoring(GedMonitoring):
                 sort_dets_obj=self.sort_obj,
                 cache_data=self.cached_data,
             )
-            # log.debug(download_filename)
-            tmp_path = Path(self.tmp_path)
-            if not (tmp_path / download_filename).exists():
-                download_file.to_csv(tmp_path / download_filename, index=False)
-                log.debug(download_file, tmp_path)
+            # Serialise on click, in memory. The filename is derived only from
+            # experiment/period/run/plot type, so every session viewing the
+            # same run resolved to the *same* path on disk: concurrent renders
+            # truncated and rewrote the file while another session's download
+            # was streaming it. Keeping the CSV per-session also means it can
+            # never be served stale.
             ret = pn.widgets.FileDownload(
-                tmp_path / download_filename,
+                callback=lambda df=download_file: io.StringIO(df.to_csv(index=False)),
                 filename=download_filename,
                 button_type="success",
                 embed=False,
@@ -136,9 +129,7 @@ class CalMonitoring(GedMonitoring):
                 name="Click to download 'csv'",
                 width=350,
             )
-        log.debug(
-            "Time to download summary files:", extra={"time": time.time() - start_time}
-        )
+        log.debug("Time to download summary files: %.3fs", time.time() - start_time)
         return ret
 
     @param.depends("period", "run", "sort_by", "plot_type_summary")
@@ -215,26 +206,15 @@ class CalMonitoring(GedMonitoring):
                     cache_data=self.cached_data,
                 )
             else:
-                figure = plt.figure()
+                figure = Figure()
         except Exception:
             log.exception(
                 "Failed to build summary plot '%s' for %s",
                 self.plot_type_summary,
                 self.run,
             )
-        log.debug("Time to get summary plot:", extra={"time": time.time() - start_time})
+        log.debug("Time to get summary plot: %.3fs", time.time() - start_time)
         return figure
-
-    def _clear_cached_data(self, event=None):
-        """
-        No-op retained for backwards compatibility.
-
-        The parameter-file cache is now a process-wide, size-bounded LRU cache
-        shared across all sessions (see legenddashboard.util.get_par_cache).
-        Parsed parameter files are immutable per run, so there is nothing to
-        clear when the period changes, and clearing here would evict entries
-        still in use by other users' sessions.
-        """
 
     @param.depends("period", "date_range", "sort_by", "string", "plot_type_tracking")
     def view_tracking(self, event=None):  # noqa: ARG002
@@ -272,49 +252,57 @@ class CalMonitoring(GedMonitoring):
 
     def update_plot_dict(self, event=None):  # noqa: ARG002
         start_time = time.time()
+        run_info = self.run_dict[self.run]
+        file_stem = (
+            f"{run_info['experiment']}-{self.period}-{self.run}-cal-"
+            f"{run_info['timestamp']}"
+        )
+        plt_base = Path(self.prod_config["paths"]["plt"])
         self.plot_dict = (
-            Path(self.prod_config["paths"]["plt"])
-            / f"hit/cal/{self.period}/{self.run}"
-            / f'{self.run_dict[self.run]["experiment"]}-{self.period}-{self.run}-cal-{self.run_dict[self.run]["timestamp"]}-plt_hit'
+            plt_base / f"hit/cal/{self.period}/{self.run}" / f"{file_stem}-plt_hit"
+        )
+        # Build the dsp path explicitly rather than str.replace("hit", "dsp"),
+        # which would corrupt any other "hit" substring in the deployment path.
+        self.dsp_plot_dict = (
+            plt_base / f"dsp/cal/{self.period}/{self.run}" / f"{file_stem}-plt_dsp"
         )
 
-        # log.debug(self.run_dict)
-        # log.debug(self.plot_dict)
         with shelve.open(self.plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             channels = list(shelf.keys())
-
-        with shelve.open(self.plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             self.common_dict = shelf["common"]
-        channels.remove("common")
+        if "common" in channels:
+            channels.remove("common")
+        if not channels:
+            msg = f"No channels found in plot file {self.plot_dict}"
+            raise RuntimeError(msg)
         self.strings_dict, self.chan_dict, self.channel_map = sorter(
             self.base_path,
-            self.run_dict[self.run]["timestamp"],
+            run_info["timestamp"],
             "String",
             sort_dets_obj=self.sort_obj,
         )
 
         self.channel_objects = channels
-        self.channel = channels[0]
+        if self.channel == channels[0]:
+            # No change event fires -> refresh the channel shelves explicitly.
+            self.update_channel_plot_dict()
+        else:
+            # Fires the channel watcher, which runs update_channel_plot_dict.
+            self.channel = channels[0]
 
         self.update_strings()
-        self.update_channel_plot_dict()
-        log.debug("Time to update plot dict:", extra={"time": time.time() - start_time})
+        log.debug("Time to update plot dict: %.3fs", time.time() - start_time)
 
     def update_channel_plot_dict(self, event=None):  # noqa: ARG002
         start_time = time.time()
-        log.debug(self.channel)
+        log.debug("Updating channel plot dict for %s", self.channel)
         with shelve.open(self.plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL) as shelf:
             self.plot_dict_ch = shelf[self.channel[:9]]
         with shelve.open(
-            str(self.plot_dict).replace("hit", "dsp"),
-            "r",
-            protocol=pkl.HIGHEST_PROTOCOL,
+            self.dsp_plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL
         ) as shelf:
             self.dsp_dict = shelf[self.channel[:9]]
-        log.debug(
-            "Time to update channel plot dict:",
-            extra={"time": time.time() - start_time},
-        )
+        log.debug("Time to update channel plot dict: %.3fs", time.time() - start_time)
 
     @param.depends("parameter", watch=True)
     def update_plot_type_details(self):
@@ -322,44 +310,27 @@ class CalMonitoring(GedMonitoring):
         plots = cal.all_detailed_plots[self.parameter]
         self.plot_type_details_objects = plots
         self.plot_type_details = plots[0]
-        log.debug(
-            "Time to update plot type details:",
-            extra={"time": time.time() - start_time},
-        )
+        log.debug("Time to update plot type details: %.3fs", time.time() - start_time)
 
     @param.depends("period", "run", "channel", "parameter", "plot_type_details")
     def view_details(self, event=None):  # noqa: ARG002
-        fig_pane = pn.pane.Matplotlib(plt.figure(), sizing_mode="scale_width")
+        fig_pane = pn.pane.Matplotlib(Figure(), sizing_mode="scale_width")
         try:
             if self.parameter == "A/E":
-                fig = self.plot_dict_ch["aoe"][self.plot_type_details]
-                dummy = plt.figure()
-                new_manager = dummy.canvas.manager
-                new_manager.canvas.figure = fig
-                fig.set_canvas(new_manager.canvas)
+                fig = _rehome_figure(self.plot_dict_ch["aoe"][self.plot_type_details])
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             elif self.parameter == "Baseline":
-                fig = self.plot_dict_ch["ecal"][self.plot_type_details]
-                dummy = plt.figure()
-                new_manager = dummy.canvas.manager
-                new_manager.canvas.figure = fig
-                fig.set_canvas(new_manager.canvas)
+                fig = _rehome_figure(self.plot_dict_ch["ecal"][self.plot_type_details])
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             elif self.parameter == "PZ":
-                fig = self.dsp_dict["pz"][self.plot_type_details]
-                dummy = plt.figure()
-                new_manager = dummy.canvas.manager
-                new_manager.canvas.figure = fig
-                fig.set_canvas(new_manager.canvas)
+                fig = _rehome_figure(self.dsp_dict["pz"][self.plot_type_details])
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             elif self.parameter == "Optimisation":
-                fig = self.dsp_dict[
-                    f"{self.plot_type_details.split('_')[0]}_optimisation"
-                ][f"{self.plot_type_details.split('_')[1]}_space"]
-                dummy = plt.figure()
-                new_manager = dummy.canvas.manager
-                new_manager.canvas.figure = fig
-                fig.set_canvas(new_manager.canvas)
+                fig = _rehome_figure(
+                    self.dsp_dict[
+                        f"{self.plot_type_details.split('_')[0]}_optimisation"
+                    ][f"{self.plot_type_details.split('_')[1]}_space"]
+                )
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             elif self.plot_type_details in {"spectrum", "logged_spectrum"}:
                 fig = cal.plot_spectrum(
@@ -382,11 +353,9 @@ class CalMonitoring(GedMonitoring):
                 fig = cal.track_peaks(self.plot_dict_ch["ecal"][self.parameter])
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             else:
-                fig = self.plot_dict_ch["ecal"][self.parameter][self.plot_type_details]
-                dummy = plt.figure()
-                new_manager = dummy.canvas.manager
-                new_manager.canvas.figure = fig
-                fig.set_canvas(new_manager.canvas)
+                fig = _rehome_figure(
+                    self.plot_dict_ch["ecal"][self.parameter][self.plot_type_details]
+                )
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
         except Exception:
             log.exception(
@@ -531,7 +500,8 @@ class CalMonitoring(GedMonitoring):
         )
 
     def build_cal_panes(self, widget_widths: int = 140):
-        self.update_plot_dict()
+        # update_plot_dict already ran in __init__ (and re-runs via its
+        # period/run watcher); no need to redo the shelve reads here.
         return {
             "Cal. Summary": self.build_summary_pane(widget_widths),
             "Cal. Details": self.build_detailed_pane(widget_widths),
@@ -589,6 +559,8 @@ def run_dashboard_cal() -> None:
     args = argparser.parse_args()
 
     config = read_config(args.config_file)
-    cal_panes = CalMonitoring.display_cal_panes(config.base, args.widget_widths)
+    cal_panes = CalMonitoring.display_cal_panes(
+        config.base, widget_widths=args.widget_widths
+    )
     print("Starting Cal. Monitoring on port ", args.port)  # noqa: T201
     pn.serve(cal_panes, port=args.port, show=False)

@@ -61,12 +61,9 @@ class GedMonitoring(Monitoring):
         super().__init__(**kwargs)
         self.meta_df = pd.DataFrame()
         self.meta_visu_source = ColumnDataSource({})
-        self.param.watch(
-            self.get_run_and_channel,
-            ["period", "run", "channel"],
-            precedence=2,
-            queued=True,
-        )
+        # get_run_and_channel is rendered via its @param.depends decorator; a
+        # param.watch registration on top of that would compute it twice per
+        # change. Only genuine state updaters are watchers.
         self.param.watch(
             self.update_strings, ["period", "run", "sort_by"], precedence=1, queued=True
         )
@@ -76,6 +73,7 @@ class GedMonitoring(Monitoring):
 
         if self.run_dict:
             self.update_strings()
+            self._get_metadata()
 
     @param.depends("period", "run", "channel")
     def get_run_and_channel(self, event=None):  # noqa: ARG002
@@ -84,9 +82,7 @@ class GedMonitoring(Monitoring):
             ret = pn.pane.Markdown(
                 f"### {self.run_dict[self.run]['experiment']}-{self.period}-{self.run} | Cal. Details | Channel {self.channel}"
             )
-            log.debug(
-                "Time to get run and channel:", extra={"time": time.time() - start_time}
-            )
+            log.debug("Time to get run and channel: %.3fs", time.time() - start_time)
         except Exception:
             log.debug("Could not build run/channel header", exc_info=True)
             ret = pn.pane.Markdown("###")
@@ -110,7 +106,7 @@ class GedMonitoring(Monitoring):
         self.rawid_to_name = {
             int(v["daq"]["rawid"]): v["name"] for v in self.channel_map.values()
         }
-        log.debug("Time to update strings:", extra={"time": time.time() - start_time})
+        log.debug("Time to update strings: %.3fs", time.time() - start_time)
 
     def _get_metadata(self, event=None):  # noqa: ARG002
         start_time = time.time()
@@ -217,8 +213,15 @@ class GedMonitoring(Monitoring):
             self.meta_df = df_out
 
         except KeyError:
-            pass
-        log.debug("Time to get metadata:", extra={"time": time.time() - start_time})
+            # Keep the previous table but make schema drift visible instead of
+            # silently serving stale metadata.
+            log.warning(
+                "Could not rebuild the metadata table for run %s; "
+                "the displayed table may be stale",
+                self.run,
+                exc_info=True,
+            )
+        log.debug("Time to get metadata: %.3fs", time.time() - start_time)
 
     @param.depends("run")
     def view_meta(self):
@@ -228,7 +231,7 @@ class GedMonitoring(Monitoring):
             formatters={"Proc.": BooleanFormatter(), "Usabl.": BooleanFormatter()},
             frozen_columns=[0],
         )
-        log.debug("Time to get meta:", extra={"time": time.time() - start_time})
+        log.debug("Time to get meta: %.3fs", time.time() - start_time)
         return ret
 
     @param.depends("run", "meta_visu_plots")
@@ -243,14 +246,13 @@ class GedMonitoring(Monitoring):
         meta_visu_source, meta_visu_xlabels = visu.get_plot_source_and_xlabels(
             meta_visu_chan_dict, meta_visu_channel_map, strings_dict
         )
-        figure = None
         figure = self.meta_visu_plots_dict[self.meta_visu_plots](
             meta_visu_source,
             meta_visu_chan_dict,
             meta_visu_channel_map,
             meta_visu_xlabels,
         )
-        log.debug("Time to get meta visu:", extra={"time": time.time() - start_time})
+        log.debug("Time to get meta visu: %.3fs", time.time() - start_time)
         return figure
 
     def build_sidebar(self, sidebar_instance=None):
@@ -308,8 +310,8 @@ class GedMonitoring(Monitoring):
         return sidebar
 
     def build_meta_pane(self, widget_widths=130):
-        self.update_strings(None)
-        self._get_metadata(None)
+        # update_strings/_get_metadata already ran in __init__ (and re-run via
+        # watchers on period/run changes); no need to redo the work here.
         meta_param_currentValue = pn.pane.Markdown(f"## {self.meta_visu_plots}")
         meta_param = pn.widgets.MenuButton(
             name="Visualization",
@@ -358,9 +360,9 @@ class GedMonitoring(Monitoring):
             ged_monitoring = cls(
                 base_path=path,
                 notebook=notebook,
-                run_dict=monitoring_instance.params.run_dict,
-                period=monitoring_instance.params.period,
-                prod_config=monitoring_instance.params.prod_config,
+                run_dict=monitoring_instance.param.run_dict,
+                period=monitoring_instance.param.period,
+                prod_config=monitoring_instance.param.prod_config,
             )
         else:
             ged_monitoring = cls(
@@ -400,6 +402,8 @@ def run_dashboard_meta() -> None:
     args = argparser.parse_args()
 
     config = read_config(args.config_file)
-    meta_panes = GedMonitoring.display_meta(config.base, args.widget_widths)
+    meta_panes = GedMonitoring.display_meta(
+        config.base, widget_widths=args.widget_widths
+    )
     print("Starting Meta. Monitoring on port ", args.port)  # noqa: T201
     pn.serve(meta_panes, port=args.port, show=False)
