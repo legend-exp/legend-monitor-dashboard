@@ -52,6 +52,8 @@ dependencies = [
     "pylegendmeta>=1.2.5",
     "plotly",
     "pyyaml",
+    # comment-preserving round-trip edits of the metadata yaml files
+    "ruamel.yaml>=0.18",
     "scipy",
     "seaborn",
     "tables>=3.8.0",
@@ -92,12 +94,16 @@ dashboard                = "legenddashboard.dashboard:run_dashboard"
 dashboard-cal                = "legenddashboard.geds.cal.cal_monitoring:run_dashboard_cal"
 dashboard-phy               = "legenddashboard.geds.phy.phy_monitoring:run_dashboard_phy"
 dashboard-meta                = "legenddashboard.geds.ged_monitoring:run_dashboard_meta"
+dashboard-metaedit                = "legenddashboard.metadata.meta_monitoring:run_dashboard_metaedit"
 dashboard-llama                = "legenddashboard.llama.llama_monitoring:run_dashboard_llama"
 dashboard-spms                = "legenddashboard.spms.sipm_monitoring:run_dashboard_spms"
 dashboard-muon                = "legenddashboard.muon.muon_monitoring:run_dashboard_muon"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.package-data]
+"legenddashboard.metadata" = ["git_askpass.sh"]
 
 [tool.setuptools.package-dir]
 "" = "src"

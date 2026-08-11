@@ -30,14 +30,33 @@ ENV PYTHONUNBUFFERED=1
 # 3.10), so they were written by matplotlib >= 3.10 -- NOT the 3.9.2 reported by
 # the current dataflow env. Pin to the exact version that generated the plots;
 # confirm it and adjust the patch level if rendering still fails.
-RUN uv pip install legend_dashboard==0.0.8 "matplotlib>=3.10,<3.11"
+# ruamel.yaml is a dependency of the (unreleased) Metadata editor page; keep
+# it pre-installed so the next pin bump only swaps the dashboard package.
+RUN uv pip install legend_dashboard==0.0.8 "matplotlib>=3.10,<3.11" "ruamel.yaml>=0.18"
 
 WORKDIR /app
 
 # tmp must be a writable directory: CSV downloads are written there. An empty
 # string would make them land in the working directory.
-RUN python3 -c 'import yaml; yaml.dump({"paths":{"base":"/srv/tmp-auto", "cal":"/srv/tmp-auto", "phy":"", "llama":"", "sipm":"", "muon":"", "tmp":"/tmp"}}, open("dashboard-config.yaml","w"))'
-RUN git config --system --add safe.directory /srv/tmp-auto/inputs
+# metadata_edit is the editable legend-metadata clone for the Metadata editor
+# page; it lives in the (always writable) home directory and is cloned /
+# pulled on startup, so it is ephemeral per pod -- fine, finished edits are
+# pushed to the user's fork, and the page warns about un-pushed edits.
+# Per-user workspaces (git worktrees of the datasets submodule) are created at
+# runtime under /home/dashboard/metadata-edit-workspaces by the same uid that
+# runs git, so no safe.directory entries are needed for them (and the
+# safe.directory `/*` glob would be silently ignored by this image's git 2.39
+# anyway -- it needs git >= 2.46).
+RUN python3 -c 'import yaml; yaml.dump({"paths":{"base":"/srv/tmp-auto", "cal":"/srv/tmp-auto", "phy":"", "llama":"", "sipm":"", "muon":"", "tmp":"/tmp", "metadata_edit":"/home/dashboard/metadata-edit"}}, open("dashboard-config.yaml","w"))'
+RUN git config --system --add safe.directory /srv/tmp-auto/inputs \
+    && git config --system --add safe.directory /home/dashboard/metadata-edit \
+    && git config --system --add safe.directory /home/dashboard/metadata-edit/datasets \
+    && git config --system --add safe.directory /home/dashboard/metadata-edit/hardware/configuration \
+    && git config --system --add safe.directory /home/dashboard/metadata-edit/hardware/detectors
+
+# Upstream URL of the metadata repo cloned for the editor (submodule URLs are
+# rewritten from SSH to HTTPS automatically).
+ENV METADATA_EDIT_URL="https://github.com/legend-exp/legend-metadata"
 
 # NERSC spin requires containers to run as a non-root user.
 RUN useradd --uid 1000 --create-home dashboard \

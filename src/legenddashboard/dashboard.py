@@ -248,6 +248,22 @@ def build_dashboard(
         main_tabs.append(
             ("MetaData", ged_monitor.build_meta_pane(widget_widths=widget_widths))
         )
+    if "metaedit" not in disable_page and "metadata_edit" in config:
+        from legenddashboard.metadata.meta_monitoring import MetaMonitoring
+
+        meta_monitor = MetaMonitoring(
+            base_path=cal_path,
+            meta_path=config.metadata_edit,
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            name="L200 Metadata Editor",
+        )
+        main_tabs.append(
+            ("Metadata Editor", meta_monitor.build_metadata_pane(widget_widths))
+        )
     if "llama" not in disable_page:
         llama_monitor = LlamaMonitoring(
             llama_path=llama_path,
@@ -377,6 +393,23 @@ def run_dashboard() -> None:
     args = argparser.parse_args()
 
     img_dir, logo_dir = get_paths()
+
+    # Clone-or-update the editable metadata checkout for the Metadata editor
+    # page before serving (also prunes per-user workspace worktrees: clean
+    # ones are removed, ones with un-pushed edits are kept). Python-side (not
+    # an entrypoint script) so local runs and the container behave
+    # identically; failures only disable the editor page, never the dashboard.
+    if "metaedit" not in args.disable_page:
+        from legenddashboard.util import read_config
+
+        _paths = read_config(args.config_file)
+        if "metadata_edit" in _paths:
+            from legenddashboard.metadata import meta_git
+
+            meta_git.ensure_clone(
+                _paths.metadata_edit,
+                os.environ.get("METADATA_EDIT_URL", meta_git.DEFAULT_URL),
+            )
 
     def _build_dash():
         # Build a fresh dashboard per session so each user gets independent

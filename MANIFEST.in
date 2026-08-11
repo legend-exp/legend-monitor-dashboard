@@ -3,3 +3,4 @@ include LICENSE
 recursive-include src/legenddashboard/information *.md *.png *.svg
 recursive-include src/legenddashboard/logos *.svg *.png
 recursive-include src/legenddashboard/templates *.html
+include src/legenddashboard/metadata/git_askpass.sh
