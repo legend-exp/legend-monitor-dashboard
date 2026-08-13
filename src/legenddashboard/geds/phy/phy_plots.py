@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import numpy as np
+import dataclasses
+
 import pandas as pd
 from bokeh.models import (
+    BoxAnnotation,
     ColumnDataSource,
     DatetimeTickFormatter,
     LinearAxis,
     Range1d,
-    ZoomInTool,
-    ZoomOutTool,
 )
-from bokeh.palettes import Category20, Turbo256
 from bokeh.plotting import figure
 from seaborn import color_palette
 
@@ -31,6 +30,9 @@ phy_plots_vals_dict = {
     "PSD Classifier": "AoeCustom",
 }
 phy_unit_vals = ["Relative", "Absolute"]
+# NOTE: these dicts are widget option lists + the v1 fallback vocabulary only;
+# on the contract-v2 path labels/units come from the run manifest and per-key
+# attrs (single source of truth is the producer's config/settings.py).
 phy_plots_sc_vals_dict = {
     "None": False,
     "DAQ Temp. Left 1": "DaqLeft_Temp1",
@@ -59,9 +61,11 @@ def phy_plot_vsTime(
     data_sc,
     sc_param,
 ):
-    # add two hours to UTC index
+    # add two hours to UTC index (CET display convention); shallow-copy first —
+    # mutating a caller-owned (possibly cached) frame in place is not allowed
     if data_string.index[0].utcoffset() != pd.Timedelta(hours=2):
-        data_string.index += pd.Timedelta(hours=2)
+        data_string = data_string.copy(deep=False)
+        data_string.index = data_string.index + pd.Timedelta(hours=2)
 
     data_high_res = data_string.copy()
     data_high_res["datetime"] = data_high_res.index
@@ -160,9 +164,14 @@ def phy_plot_vsTime(
     p.yaxis.axis_label_text_font_size = "20px"
     p.xaxis.formatter = DatetimeTickFormatter(days="%Y/%m/%d")
 
-    # y-range for % unit plots
-    label = plot_info.loc["label"].iloc[0]
-    unit = plot_info.loc["unit"].iloc[0]
+    _apply_y_range(p, plot_info.loc["label"].iloc[0], plot_info.loc["unit"].iloc[0])
+    _add_sc_overlay(p, data_sc, sc_param, resample_unit)
+
+    return p
+
+
+def _apply_y_range(p, label, unit):
+    """Fixed y-ranges by parameter label (shared by v1 and v2 time plots)."""
     if unit == "%":
         if label == "Noise":
             p.y_range = Range1d(-150, 150)
@@ -179,70 +188,96 @@ def phy_plot_vsTime(
     elif label == "Noise":
         p.y_range = Range1d(-150, 150)
 
-    # slow-control data
-    if not data_sc.empty:
-        y_range_name = f"{sc_param}_range"
-        y_min = data_sc["value"].min() * 0.99
-        y_max = data_sc["value"].max() * 1.01
-        p.extra_y_ranges = {y_range_name: Range1d(start=y_min, end=y_max)}
-        unit = data_sc["unit"][0]
-        p.add_layout(
-            LinearAxis(
-                y_range_name=y_range_name,
-                axis_label=f"{sc_param} [{unit}]",
-                axis_label_text_font_size="20px",
-            ),
-            "right",
+
+def _add_sc_overlay(p, data_sc, sc_param, resample_unit):
+    """Overlay a slow-control series on a secondary y-axis (shared v1/v2)."""
+    if data_sc is None or data_sc.empty:
+        return
+    y_range_name = f"{sc_param}_range"
+    y_min = data_sc["value"].min() * 0.99
+    y_max = data_sc["value"].max() * 1.01
+    p.extra_y_ranges = {y_range_name: Range1d(start=y_min, end=y_max)}
+    unit = data_sc["unit"][0]
+    p.add_layout(
+        LinearAxis(
+            y_range_name=y_range_name,
+            axis_label=f"{sc_param} [{unit}]",
+            axis_label_text_font_size="20px",
+        ),
+        "right",
+    )
+
+    sc_data = data_sc.copy()
+    sc_data["tstamp"] = pd.to_datetime(sc_data["tstamp"], origin="unix", utc=True)
+    sc_data = sc_data.set_index("tstamp")["value"]
+    if resample_unit != "0min":
+        sc_data_resampled = sc_data.resample(resample_unit).mean()
+        p.line(
+            sc_data.index,
+            sc_data.values,
+            color="black",
+            alpha=0.2,
+            legend_label=sc_param,
+            y_range_name=y_range_name,
+            line_width=2,
+        )
+        p.line(
+            sc_data_resampled.index,
+            sc_data_resampled.values,
+            color="black",
+            legend_label=sc_param,
+            y_range_name=y_range_name,
+            line_width=2,
+        )
+    else:
+        p.line(
+            sc_data.index,
+            sc_data.values,
+            color="black",
+            legend_label=sc_param,
+            y_range_name=y_range_name,
+            line_width=2,
         )
 
-        # resampling
-        sc_data = data_sc.copy()
-        sc_data["tstamp"] = pd.to_datetime(sc_data["tstamp"], origin="unix", utc=True)
-        sc_data = sc_data.set_index("tstamp")["value"]
-        if resample_unit != "0min":
-            sc_data_resampled = sc_data.resample(resample_unit).mean()
-            p.line(
-                sc_data.index,
-                sc_data.values,
-                color="black",
-                alpha=0.2,
-                legend_label=sc_param,
-                y_range_name=y_range_name,
-                line_width=2,
-            )
-            p.line(
-                sc_data_resampled.index,
-                sc_data_resampled.values,
-                color="black",
-                legend_label=sc_param,
-                y_range_name=y_range_name,
-                line_width=2,
-            )
-        else:
-            p.line(
-                sc_data.index,
-                sc_data.values,
-                color="black",
-                legend_label=sc_param,
-                y_range_name=y_range_name,
-                line_width=2,
-            )
 
-    return p
+@dataclasses.dataclass
+class PlotMeta:
+    """Display metadata handed from the monitoring view to plot functions."""
+
+    label: str
+    unit: str
+    abs_unit: str
+    flag_display: str  # e.g. "Pulser Events"
+    param_display: str  # e.g. "Cal. Gain"
+    string: str
+    run: str
+    period: str
+    experiment: str
 
 
-def phy_plot_histogram(
-    data_string,
-    plot_info,
-    plot_type,
-    resample_unit,
-    string,
-    run,
-    period,
-    run_dict,
-    channels,
-    channel_map,
+def phy_plot_binned_vsTime(
+    mean_df,
+    std_df,
+    min_df,
+    max_df,
+    meta: PlotMeta,
+    flagged_ranges=(),
+    data_sc=None,
+    sc_param=False,
+    cadence_label="1min",
 ):
+    """Time view of contract-v2 binned stats: mean line, +-1 sigma band, min/max envelope.
+
+    All frames share a tz-aware UTC DatetimeIndex and detector-name columns;
+    no client-side resampling happens here — the cadence was chosen at read
+    time and is stated on the x-axis label.
+    """
+    shift = pd.Timedelta(hours=2)  # CET display convention, as in phy_plot_vsTime
+    index = mean_df.index + shift
+
+    n_channels = len(mean_df.columns)
+    colors = color_palette("hls", max(n_channels, 1)).as_hex()
+
     p = figure(
         width=1000,
         height=600,
@@ -251,104 +286,156 @@ def phy_plot_histogram(
         output_backend="webgl",
         active_scroll="ywheel_zoom",
     )
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'].iloc[0]} | {string}"
+    p.title.text = (
+        f"{meta.experiment}-{meta.period}-{meta.run} | "
+        f"Phy. {meta.flag_display} | {meta.param_display} | {meta.string}"
+    )
     p.title.align = "center"
     p.title.text_font_size = "25px"
-    p.hover.formatters = {"$x": "printf", "$snap_y": "printf"}
-    p.hover.tooltips = [
-        (
-            f"{plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]}",
-            "$x{%0.2f}",
-        ),
-        ("Counts", "$snap_y"),
-        ("Detector", "$name"),
-    ]
-
     p.hover.mode = "vline"
 
-    level = 1
-    zoom_in = ZoomInTool(
-        level=level, dimensions="height", factor=0.5
-    )  # set specific zoom factor
-    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
-    p.add_tools(zoom_in, zoom_out)
-    # p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
-
-    len_colours = len(data_string.columns)
-    colours = Turbo256[len_colours] if len_colours > 19 else Category20[len_colours]
-
-    for position, data_channel in data_string.groupby("position"):
-        # generate histogram
-        # needed for cuspEmax because with geant outliers not possible to view normal histo
-        hrange = {"keV": [0, 2500]}
-        # take full range if not specified
-        x_min = (
-            hrange[plot_info["unit"]][0]
-            if plot_info["unit"] in hrange
-            else data_channel[plot_info["parameter"]].min()
-        )
-        x_max = (
-            hrange[plot_info["unit"]][1]
-            if plot_info["unit"] in hrange
-            else data_channel[plot_info["parameter"]].max()
-        )
-
-        # --- bin width
-        # bwidth = {"keV": 2.5}  # what to do with binning???
-        # bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else None
-        # no_bins = int((x_max - x_min) / bin_width) if bin_width else 50
-        # counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=no_bins, range=(x_min, x_max))
-        # bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
-
-        # --- bin width
-        bwidth = {"keV": 2.5}
-        bin_width = bwidth.get(plot_info["unit"], 1)
-
-        # Compute number of bins
-        if bin_width:
-            bin_no = (
-                bin_width / 5 if "AoE" not in plot_info["parameter"] else bin_width / 50
-            )
-            bin_no = bin_no / 2 if "Corrected" in plot_info["parameter"] else bin_no
-            bin_no = bin_width if "AoE" not in plot_info["parameter"] else bin_no
-
-            bin_edges = (
-                np.arange(x_min, x_max + bin_width, bin_no)
-                if plot_info["unit_label"] == "%"
-                else np.arange(x_min, x_max + bin_width, bin_no)
-            )
-        else:
-            bin_edges = 50
-        counts_ch, bins_ch = np.histogram(
-            data_channel[plot_info["parameter"]], bins=bin_edges, range=(x_min, x_max)
-        )
-        bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
-        # create plot histo
-        histo_df = pd.DataFrame(
+    hover_renderers = []
+    for i, det in enumerate(mean_df.columns):
+        mean = mean_df[det].to_numpy()
+        std = std_df[det].to_numpy()
+        source = ColumnDataSource(
             {
-                "counts": counts_ch,
-                "bins": bins_ch,
-                "position": position,
-                "cc4_id": data_channel["cc4_id"].unique()[0],
+                "datetime": index,
+                "mean": mean,
+                "std": std,
+                "band_lo": mean - std,
+                "band_hi": mean + std,
+                "min": min_df[det].to_numpy(),
+                "max": max_df[det].to_numpy(),
             }
         )
-        # plot
-        p.line(
-            "bins",
-            "counts",
-            source=histo_df,
-            color=colours[position - 1],
-            legend_label=f"{data_channel['name'].unique()[0]}",
-            name=f"ch {data_channel['channel'].unique()[0]}",
-            line_width=2,
+        # min/max envelope, +-1 sigma band, mean line — one legend entry per detector
+        # so click-to-hide toggles the trio together
+        p.varea(
+            x="datetime",
+            y1="min",
+            y2="max",
+            source=source,
+            fill_color=colors[i],
+            fill_alpha=0.08,
+            legend_label=det,
         )
+        p.varea(
+            x="datetime",
+            y1="band_lo",
+            y2="band_hi",
+            source=source,
+            fill_color=colors[i],
+            fill_alpha=0.18,
+            legend_label=det,
+        )
+        line = p.line(
+            x="datetime",
+            y="mean",
+            source=source,
+            color=colors[i],
+            line_width=2,
+            legend_label=det,
+            name=det,
+        )
+        hover_renderers.append(line)
+
+    p.hover.renderers = hover_renderers
+    p.hover.tooltips = [
+        ("Time", "$x{%F %H:%M:%S CET}"),
+        (f"Mean {meta.label} ({meta.unit})", "@mean{0.2f}"),
+        ("std dev", "@std{0.2f}"),
+        ("min-max", "@min{0.2f} - @max{0.2f}"),
+        ("Detector", "$name"),
+    ]
+    p.hover.formatters = {"$x": "datetime", "$source": "printf"}
 
     if p.legend:
         p.legend.location = "bottom_left"
         p.legend.click_policy = "hide"
-    p.xaxis.axis_label = f"{plot_info['label']} [{plot_info['unit_label']}]"
+
+    if len(index):
+        start_time_str = pd.to_datetime(index[0]).strftime("%d/%m/%Y %H:%M:%S")
+        p.xaxis.axis_label = (
+            f"Time (CET), {cadence_label} bins, starting: {start_time_str}"
+        )
     p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = f"{meta.label} [{meta.unit}]"
+    p.yaxis.axis_label_text_font_size = "20px"
+    p.xaxis.formatter = DatetimeTickFormatter(days="%Y/%m/%d")
+
+    # ignore-keys ranges: kept in the data, displayed shaded
+    window_lo, window_hi = (index[0], index[-1]) if len(index) else (None, None)
+    shown_flag = False
+    for raw_lo, raw_hi, _reason in flagged_ranges:
+        shifted_lo, shifted_hi = raw_lo + shift, raw_hi + shift
+        if window_lo is not None and (shifted_hi < window_lo or shifted_lo > window_hi):
+            continue
+        p.add_layout(
+            BoxAnnotation(
+                left=shifted_lo,
+                right=shifted_hi,
+                fill_color="orange",
+                fill_alpha=0.12,
+                level="underlay",
+            )
+        )
+        shown_flag = True
+    if shown_flag:
+        p.varea(
+            x=[index[0]],
+            y1=[float("nan")],
+            y2=[float("nan")],
+            fill_color="orange",
+            fill_alpha=0.3,
+            legend_label="flagged (ignore-keys)",
+        )
+
+    _apply_y_range(p, meta.label, meta.unit)
+    _add_sc_overlay(p, data_sc, sc_param, "0min")
+
+    return p
+
+
+def phy_plot_dist_histogram(dist, meta: PlotMeta):
+    """Distribution view from the contract-v2 1-D histogram (all detectors).
+
+    ``dist`` is the (edges, counts, attrs) tuple from
+    ``contract_reader.read_dist``. The distribution is filled from every
+    detector's samples, so the string selector does not filter it.
+    """
+    edges, counts, _attrs = dist
+
+    p = figure(
+        width=1000,
+        height=600,
+        tools="pan,box_zoom,ywheel_zoom,hover,reset,save",
+        output_backend="webgl",
+        active_scroll="ywheel_zoom",
+    )
+    p.title.text = (
+        f"{meta.experiment}-{meta.period}-{meta.run} | "
+        f"Phy. {meta.flag_display} | {meta.param_display} | all detectors"
+    )
+    p.title.align = "center"
+    p.title.text_font_size = "25px"
+
+    p.quad(
+        top=counts,
+        bottom=0,
+        left=edges[:-1],
+        right=edges[1:],
+        fill_color="steelblue",
+        line_color="white",
+        fill_alpha=0.8,
+    )
+    p.hover.tooltips = [
+        (f"{meta.label} ({meta.unit})", "$x{0.2f}"),
+        ("Counts", "$y{0}"),
+    ]
+    p.xaxis.axis_label = f"{meta.label} [{meta.unit}]"
     p.yaxis.axis_label = "Counts"
+    p.xaxis.axis_label_text_font_size = "20px"
     p.yaxis.axis_label_text_font_size = "20px"
 
     return p

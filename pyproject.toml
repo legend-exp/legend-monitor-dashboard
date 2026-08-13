@@ -74,6 +74,10 @@ write_to = "src/legenddashboard/_version.py"
 test = [
     "pytest>=6",
     "pytest-cov>=3",
+    # producer-side fixtures for the contract-v2 reader tests only;
+    # the dashboard runtime reads v2 files with plain h5py
+    "boost-histogram",
+    "uhi>=1.1",
 ]
 dev = [
     "legend_dashboard[test]",

@@ -14,6 +14,7 @@ from bokeh.plotting import figure
 
 from legenddashboard.geds import phy
 from legenddashboard.geds.ged_monitoring import GedMonitoring
+from legenddashboard.geds.phy import contract_reader
 from legenddashboard.util import logo_path, read_config
 
 log = logging.getLogger(__name__)
@@ -68,6 +69,7 @@ class PhyMonitoring(GedMonitoring):
         self._phy_sc_plotted = False
 
     @param.depends(
+        "period",
         "run",
         "string",
         "sort_by",
@@ -79,84 +81,33 @@ class PhyMonitoring(GedMonitoring):
         "phy_plots_sc_vals",
     )
     def update_plots(self):
+        """Render the phy view: contract-v2 when a run manifest exists, else v1."""
         start_time = time.time()
-        data_file = (
-            Path(self.phy_path)
-            / "generated/plt/hit/phy"
-            / self.period
-            / self.run
-            / f"l200-{self.period}-{self.run}-phy-geds.hdf"
-        )
-        data_file_sc = (
-            Path(self.phy_path)
-            / "generated/plt/hit/phy"
-            / self.period
-            / self.run
-            / f"l200-{self.period}-{self.run}-phy-slow_control.hdf"
-        )
+        experiment = self.run_dict[self.run]["experiment"]
+        run_dir = Path(self.phy_path) / "generated/plt/hit/phy" / self.period / self.run
 
-        # Create empty plot inc case of errors
+        manifest = contract_reader.find_manifest(
+            self.phy_path, self.period, self.run, experiment
+        )
+        if manifest is not None:
+            p = self._update_plots_v2(manifest, run_dir, experiment)
+        else:
+            p = self._update_plots_v1(run_dir, experiment)
+
+        msg = f"Time to get phy plot: {time.time() - start_time}"
+        log.debug(msg)
+        return p
+
+    def _empty_figure(self, reason="No data"):
         p = figure(width=1000, height=600)
-        p.title.text = f"No data for run {self.run_dict[self.run]['experiment']}-{self.period}-{self.run}"
+        experiment = self.run_dict[self.run]["experiment"]
+        p.title.text = f"{reason} for run {experiment}-{self.period}-{self.run}"
         p.title.align = "center"
         p.title.text_font_size = "25px"
+        return p
 
-        # return empty plot if no data exists for run
-        if not Path(data_file).exists():
-            msg = f"Time to get phy plot: {time.time() - start_time}"
-            log.debug(msg)
-            return p
-
-        # get filekeys to check if key exists
-        with h5py.File(data_file, "r") as f:
-            filekeys = list(f.keys())
-
-        # load dataframe for current plot value and get all data from selected string
-        channel_names = self.strings_dict.get(self.string, [])
-        if not channel_names:
-            msg = f"No channel_names found for string {self.string}"
-            log.error(msg)
-            return p
-
-        channels = [
-            self.name_to_rawid[name]
-            for name in channel_names
-            if name in self.name_to_rawid
-        ]
-        phy_data_key = f"{phy.phy_plots_types_dict[self.phy_plots_types]}_{phy.phy_plots_vals_dict[self.phy_plots]}"
-        if "pulser" in phy_data_key:
-            if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
-                return p
-            phy_plot_info = pd.read_hdf(
-                data_file, key=f"{phy_data_key.split('_pulser')[0]}_info"
-            )
-            if "Diff" in phy_data_key:
-                phy_plot_info.loc["label"].iloc[0] = "Gain to Pulser Difference"
-            else:
-                phy_plot_info.loc["label"].iloc[0] = "Gain to Pulser Ratio"
-        else:
-            if f"{phy_data_key}_info" not in filekeys:
-                return p
-            phy_plot_info = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
-        abs_unit = phy_plot_info.loc["unit"].iloc[0]
-
-        if self.phy_units == "Relative":
-            if f"{phy_data_key}_var" not in filekeys:
-                return p
-            phy_data_df = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
-            phy_plot_info.loc["unit", phy_plot_info.columns[0]] = "%"
-        else:
-            if phy_data_key not in filekeys:
-                return p
-            phy_data_df = pd.read_hdf(data_file, key=phy_data_key)
-
-        # load mean values
-        if f"{phy_data_key}_mean" not in filekeys:
-            return p
-        phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
-
-        # get sc data if selected
-        # if self.phy_plots_sc and self.phy_units == "Relative" and os.path.exists(data_file_sc):
+    def _read_sc(self, data_file_sc):
+        """Slow-control frame for the current selection (empty when off)."""
         if (
             phy.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
             and Path(data_file_sc).exists()
@@ -168,6 +119,158 @@ class PhyMonitoring(GedMonitoring):
         else:
             data_sc = pd.DataFrame()
             self._phy_sc_plotted = False
+        return data_sc
+
+    # ------------------------------------------------------------------
+    # contract-v2 path
+    # ------------------------------------------------------------------
+
+    def _update_plots_v2(self, manifest, run_dir, experiment):
+        data_file = contract_reader.geds_file_from_manifest(manifest, run_dir)
+        if data_file is None or not data_file.exists():
+            return self._empty_figure("Manifest names no geds file")
+
+        flag = phy.phy_plots_types_dict[self.phy_plots_types]
+        param_name = phy.phy_plots_vals_dict[self.phy_plots]
+        relative = self.phy_units == "Relative"
+        key_param = param_name + ("_var" if relative else "")
+
+        keys = contract_reader.available_keys(manifest)
+        if f"{flag}_{key_param}" not in keys:
+            return self._empty_figure(f"Key {flag}_{key_param} missing")
+
+        series = contract_reader.read_binned(
+            data_file,
+            flag,
+            key_param,
+            contract_reader.snap_cadence(
+                self.phy_resampled, manifest.get("cadences", ["1min"])
+            ),
+        )
+
+        label, unit = contract_reader.label_and_unit(
+            manifest, series.attrs, param_name, relative
+        )
+        if "pulser01ana" in param_name:
+            label = (
+                "Gain to Pulser Difference"
+                if "Diff" in param_name
+                else "Gain to Pulser Ratio"
+            )
+        base_series_attrs = series.attrs if not relative else {}
+        abs_unit = base_series_attrs.get("unit", unit)
+
+        # detector-name columns straight from the contract
+        names = [
+            n for n in self.strings_dict.get(self.string, []) if n in series.detectors
+        ]
+        if not names:
+            return self._empty_figure(f"No detectors of string {self.string} in data")
+
+        meta = phy.PlotMeta(
+            label=label,
+            unit=unit,
+            abs_unit=abs_unit,
+            flag_display=self.phy_plots_types,
+            param_display=self.phy_plots,
+            string=str(self.string),
+            run=self.run,
+            period=self.period,
+            experiment=experiment,
+        )
+
+        if self.phy_plot_style == "Histogram":
+            if f"{flag}_{key_param}_dist" not in keys:
+                return self._empty_figure("No distribution stored")
+            return phy.phy_plot_dist_histogram(
+                contract_reader.read_dist(data_file, flag, key_param), meta
+            )
+
+        cadence = contract_reader.snap_cadence(
+            self.phy_resampled, manifest.get("cadences", ["1min"])
+        )
+        data_file_sc = (
+            run_dir / f"{experiment}-{self.period}-{self.run}-phy-slow_control.hdf"
+        )
+        return phy.phy_plot_binned_vsTime(
+            mean_df=series.to_frame("mean")[names],
+            std_df=series.to_frame("std")[names],
+            min_df=series.to_frame("min")[names],
+            max_df=series.to_frame("max")[names],
+            meta=meta,
+            flagged_ranges=contract_reader.flagged_ranges(manifest),
+            data_sc=self._read_sc(data_file_sc),
+            sc_param=self.phy_plots_sc_vals,
+            cadence_label=cadence,
+        )
+
+    # ------------------------------------------------------------------
+    # v1 fallback (pre-manifest files)
+    # ------------------------------------------------------------------
+
+    def _update_plots_v1(self, run_dir, experiment):
+        data_file = run_dir / f"{experiment}-{self.period}-{self.run}-phy-geds.hdf"
+        data_file_sc = (
+            run_dir / f"{experiment}-{self.period}-{self.run}-phy-slow_control.hdf"
+        )
+
+        # return empty plot if no data exists for run
+        if not Path(data_file).exists():
+            return self._empty_figure("No data")
+
+        if self.phy_plot_style == "Histogram":
+            return self._empty_figure("Histogram view requires v2 monitoring files")
+
+        # get filekeys to check if key exists
+        with h5py.File(data_file, "r") as f:
+            filekeys = list(f.keys())
+
+        # load dataframe for current plot value and get all data from selected string
+        channel_names = self.strings_dict.get(self.string, [])
+        if not channel_names:
+            msg = f"No channel_names found for string {self.string}"
+            log.error(msg)
+            return self._empty_figure(f"No channels for string {self.string}")
+
+        channels = [
+            self.name_to_rawid[name]
+            for name in channel_names
+            if name in self.name_to_rawid
+        ]
+        phy_data_key = f"{phy.phy_plots_types_dict[self.phy_plots_types]}_{phy.phy_plots_vals_dict[self.phy_plots]}"
+        if "pulser" in phy_data_key:
+            if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
+                return self._empty_figure("Info key missing")
+            phy_plot_info = pd.read_hdf(
+                data_file, key=f"{phy_data_key.split('_pulser')[0]}_info"
+            )
+            if "Diff" in phy_data_key:
+                phy_plot_info.loc["label"].iloc[0] = "Gain to Pulser Difference"
+            else:
+                phy_plot_info.loc["label"].iloc[0] = "Gain to Pulser Ratio"
+        else:
+            if f"{phy_data_key}_info" not in filekeys:
+                return self._empty_figure("Info key missing")
+            phy_plot_info = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+        abs_unit = phy_plot_info.loc["unit"].iloc[0]
+
+        if self.phy_units == "Relative":
+            if f"{phy_data_key}_var" not in filekeys:
+                return self._empty_figure(f"Key {phy_data_key}_var missing")
+            phy_data_df = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
+            phy_plot_info.loc["unit", phy_plot_info.columns[0]] = "%"
+        else:
+            if phy_data_key not in filekeys:
+                return self._empty_figure(f"Key {phy_data_key} missing")
+            phy_data_df = pd.read_hdf(data_file, key=phy_data_key)
+
+        # load mean values
+        if f"{phy_data_key}_mean" not in filekeys:
+            return self._empty_figure(f"Key {phy_data_key}_mean missing")
+        phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
+
+        # get sc data if selected
+        data_sc = self._read_sc(data_file_sc)
 
         # check if channel selection actually exists in data
         channels = [
@@ -188,7 +291,7 @@ class PhyMonitoring(GedMonitoring):
         phy_data_df_mean = phy_data_df_mean.rename(columns=self.rawid_to_name)
 
         # plot data
-        p = phy.phy_plot_style_dict[self.phy_plot_style](
+        return phy.phy_plot_vsTime(
             phy_data_df,
             phy_data_df_mean,
             phy_plot_info,
@@ -203,10 +306,6 @@ class PhyMonitoring(GedMonitoring):
             data_sc,
             self.phy_plots_sc_vals,
         )
-        msg = f"Time to get phy plot: {time.time()-start_time}"
-        log.debug(msg)
-        # self.bokeh_pane.object = p
-        return p
 
     def build_phy_pane(self, widget_widths=140):
         """
