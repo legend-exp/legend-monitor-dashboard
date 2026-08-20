@@ -280,10 +280,12 @@ def build_dashboard(
     )
     main_tabs.append(("Information", build_info_pane(info_path)))
 
-    # Single Tabs holds every pane; dynamic=False keeps all tab divs in the DOM
-    # so Bokeh can embed every root reliably (the GoldenTemplate/Firefox fix).
+    # Single Tabs holds every pane (the GoldenTemplate/Firefox embed fix:
+    # Panel owns the tab divs). dynamic=True renders a tab's content when it
+    # is first opened, so a run switch only re-renders the visible tab
+    # instead of every page.
     l200_monitoring.main.append(
-        pn.Tabs(*main_tabs, sizing_mode="stretch_both", dynamic=False)
+        pn.Tabs(*main_tabs, sizing_mode="stretch_both", dynamic=True)
     )
 
     return l200_monitoring

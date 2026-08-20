@@ -435,7 +435,7 @@ class PhyMonitoring(GedMonitoring):
             pn.Row(phy_gspec),
             # loading_indicator greys the stale figure during the re-render
             # round trip instead of leaving it frozen
-            pn.param.ParamMethod(self.update_plots, loading_indicator=True),
+            pn.param.ParamMethod(self.update_plots, lazy=True, loading_indicator=True),
             name="Phy. Monitoring",
             sizing_mode="stretch_width",
         )

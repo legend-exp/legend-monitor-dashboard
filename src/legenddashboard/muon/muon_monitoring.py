@@ -177,7 +177,12 @@ class MuonMonitoring(Monitoring):
                 muon_cal_param,
             ),
             pn.Row("## Current Plot:", muon_cal_param_currentValue),
-            pn.Row(self.view_muon_cal, sizing_mode="scale_both"),
+            pn.Row(
+                pn.param.ParamMethod(
+                    self.view_muon_cal, lazy=True, loading_indicator=True
+                ),
+                sizing_mode="scale_both",
+            ),
             name="Muon Cal. Plots",
             sizing_mode="scale_both",
         )
@@ -206,7 +211,12 @@ class MuonMonitoring(Monitoring):
                 muon_mon_param,
             ),
             pn.Row("## Current Plot:", muon_mon_param_currentValue),
-            pn.Row(self.view_muon_mon, sizing_mode="scale_both"),
+            pn.Row(
+                pn.param.ParamMethod(
+                    self.view_muon_mon, lazy=True, loading_indicator=True
+                ),
+                sizing_mode="scale_both",
+            ),
             name="Muon Mon. Plots",
             sizing_mode="scale_both",
         )
