@@ -17,14 +17,17 @@ histograms with plain h5py/json/numpy/pandas and must NEVER import
     <geds file>.hdf::{flag}_{param}_mean          pandas frame of run means
     <geds file>.hdf::detector_map                 pandas frame (name,rawid,string,...)
 
-All read results are cached keyed on ``(path, st_mtime_ns, ...)`` so a
-rebuilt file invalidates naturally; every accessor hands out fresh copies so
-plot code can never corrupt the cache.
+All read results are cached keyed on ``(path, st_mtime_ns, st_size, ...)`` so
+a rebuilt file invalidates naturally (size guards against filesystems whose
+mtime granularity is coarser than a rewrite); every accessor hands out fresh
+copies so plot code can never corrupt the cache.
 """
 
+from __future__ import annotations
+
+import contextlib
 import dataclasses
 import json
-import os
 from pathlib import Path
 
 import h5py
@@ -37,6 +40,13 @@ _manifest_cache = LRUDict(maxsize=64)
 _series_cache = LRUDict(maxsize=64)
 _frame_cache = LRUDict(maxsize=128)
 
+
+def _stat_key(path) -> tuple[int, int]:
+    """(st_mtime_ns, st_size) — the cache-invalidation fingerprint of a file."""
+    st = Path(path).stat()
+    return st.st_mtime_ns, st.st_size
+
+
 # ---------------------------------------------------------------------------
 # manifest
 # ---------------------------------------------------------------------------
@@ -48,7 +58,7 @@ def find_manifest(
     """Load the run manifest, or None (→ v1 fallback) if absent/incompatible.
 
     Absence is never cached (a later pipeline run may create the file); parsed
-    content is cached per (path, mtime).
+    content is cached per (path, mtime, size).
     """
     path = (
         Path(phy_path)
@@ -58,12 +68,11 @@ def find_manifest(
         / f"{experiment}-{period}-{run}-manifest.json"
     )
     try:
-        mtime = path.stat().st_mtime_ns
+        key = (str(path), *_stat_key(path))
     except OSError:
         return None
-    key = (str(path), mtime)
     if key not in _manifest_cache:
-        with open(path) as f:
+        with path.open() as f:
             _manifest_cache[key] = json.load(f)
     manifest = _manifest_cache[key]
     if manifest.get("schema_version") != 2:
@@ -115,6 +124,7 @@ def snap_cadence(minutes: int, cadences: list) -> str:
 
     0 means "finest"; ties resolve to the finer cadence.
     """
+
     def _minutes(cadence: str) -> int:
         return int(cadence.removesuffix("min"))
 
@@ -157,7 +167,7 @@ def _uncamel(name: str) -> str:
 
 @dataclasses.dataclass(frozen=True)
 class BinnedSeries:
-    """(time × detector) binned stats read from one hist group."""
+    """(time x detector) binned stats read from one hist group."""
 
     time_edges: np.ndarray  # unix seconds, length n_bins + 1
     detectors: tuple
@@ -169,7 +179,7 @@ class BinnedSeries:
     attrs: dict
 
     def to_frame(self, stat: str = "mean") -> pd.DataFrame:
-        """One statistic as a fresh frame (UTC DatetimeIndex × detector cols).
+        """One statistic as a fresh frame (UTC DatetimeIndex x detector cols).
 
         Always returns newly allocated data — consumers may mutate freely.
         """
@@ -186,7 +196,8 @@ class BinnedSeries:
         elif stat == "max":
             data = self.maxs.copy()
         else:
-            raise ValueError(f"unknown stat {stat!r}")
+            msg = f"unknown stat {stat!r}"
+            raise ValueError(msg)
         index = pd.to_datetime(self.time_edges[:-1].copy(), unit="s", utc=True)
         index.name = "datetime"
         return pd.DataFrame(
@@ -195,11 +206,10 @@ class BinnedSeries:
 
 
 def read_binned(hdf_path, flag: str, param: str, cadence: str) -> BinnedSeries:
-    """Read one (flag, param, cadence) hist group; cached per file mtime."""
+    """Read one (flag, param, cadence) hist group; cached per file mtime+size."""
     hdf_path = str(hdf_path)
-    mtime = os.stat(hdf_path).st_mtime_ns
     hist_key = f"hist/{flag}_{param}/{cadence}"
-    cache_key = (hdf_path, mtime, hist_key)
+    cache_key = (hdf_path, *_stat_key(hdf_path), hist_key)
     if cache_key not in _series_cache:
         _series_cache[cache_key] = _load_binned(hdf_path, hist_key)
     return _series_cache[cache_key]
@@ -235,9 +245,8 @@ def _load_binned(hdf_path: str, hist_key: str) -> BinnedSeries:
 def read_dist(hdf_path, flag: str, param: str) -> tuple:
     """(edges, counts, attrs) of the 1-D distribution histogram."""
     hdf_path = str(hdf_path)
-    mtime = os.stat(hdf_path).st_mtime_ns
     key = f"hist/{flag}_{param}_dist"
-    cache_key = (hdf_path, mtime, key)
+    cache_key = (hdf_path, *_stat_key(hdf_path), key)
     if cache_key not in _series_cache:
         with h5py.File(hdf_path, "r") as f:
             group = f[key]
@@ -255,14 +264,11 @@ def read_dist(hdf_path, flag: str, param: str) -> tuple:
 def _decode_attrs(attrs: dict) -> dict:
     out = {}
     for name, value in attrs.items():
-        if isinstance(value, bytes):
-            value = value.decode()
-        if isinstance(value, str) and value[:1] in "[{":
-            try:
-                value = json.loads(value)
-            except (json.JSONDecodeError, ValueError):
-                pass
-        out[name] = value
+        decoded = value.decode() if isinstance(value, bytes) else value
+        if isinstance(decoded, str) and decoded[:1] in "[{":
+            with contextlib.suppress(json.JSONDecodeError, ValueError):
+                decoded = json.loads(decoded)
+        out[name] = decoded
     return out
 
 
@@ -274,8 +280,7 @@ def _decode_attrs(attrs: dict) -> dict:
 def read_frame(hdf_path, key: str) -> pd.DataFrame:
     """Cached pd.read_hdf; always returns a copy."""
     hdf_path = str(hdf_path)
-    mtime = os.stat(hdf_path).st_mtime_ns
-    cache_key = (hdf_path, mtime, key)
+    cache_key = (hdf_path, *_stat_key(hdf_path), key)
     if cache_key not in _frame_cache:
         _frame_cache[cache_key] = pd.read_hdf(hdf_path, key=key)
     return _frame_cache[cache_key].copy()

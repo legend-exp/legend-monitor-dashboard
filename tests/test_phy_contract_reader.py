@@ -6,6 +6,8 @@ dashboard code — plus one hand-written plain-h5py layout pin so the reader
 contract survives even without the vendored tree.
 """
 
+from __future__ import annotations
+
 import subprocess
 import sys
 from pathlib import Path
@@ -23,7 +25,7 @@ LMON_SRC = REPO / "legend-data-monitor" / "src"
 DETS = ["V02160A", "V02160B", "P00574A"]
 
 
-@pytest.fixture()
+@pytest.fixture
 def produced(tmp_path):
     """Write a v2 file + manifest with the vendored producer."""
     sys.path.insert(0, str(LMON_SRC))
@@ -43,7 +45,10 @@ def produced(tmp_path):
         run_dir.mkdir(parents=True)
         hdf = run_dir / "l200-p19-r001-phy-geds-schema2.hdf"
         keys = writer.write_binned_series(
-            str(hdf), "IsPulser", "Trapemax", binned,
+            str(hdf),
+            "IsPulser",
+            "Trapemax",
+            binned,
             attrs={"unit": "ADC", "label": "trapEmax", "limits": [None, None]},
         )
         keys.append(
@@ -54,7 +59,9 @@ def produced(tmp_path):
         means = pd.DataFrame([v.mean() * np.ones(len(DETS))], columns=DETS)
         keys.append(writer.write_frame(str(hdf), "IsPulser_Trapemax_mean", means))
         writer.write_manifest(
-            str(run_dir), "p19", "r001",
+            str(run_dir),
+            "p19",
+            "r001",
             {hdf.name: {"keys": sorted(keys), "cadences": ["1min", "10min", "60min"]}},
             package_version="test",
         )
@@ -74,23 +81,27 @@ def test_roundtrip_against_producer(produced):
     for cadence in ("1min", "10min", "60min"):
         series = contract_reader.read_binned(hdf, "IsPulser", "Trapemax", cadence)
         assert series.detectors == tuple(DETS)
-        expected = binned if cadence == "1min" else binned.rebin(
-            {"10min": 10, "60min": 60}[cadence]
+        expected = (
+            binned
+            if cadence == "1min"
+            else binned.rebin({"10min": 10, "60min": 60}[cadence])
         )
         for stat in ("mean", "count", "min", "max"):
             got = series.to_frame(stat)
             want = expected.to_frame(stat)
             assert got.index.tz is not None
             np.testing.assert_allclose(
-                got.to_numpy(), want.to_numpy(), equal_nan=True, rtol=1e-9
+                # producer stores values/variances as float32
+                got.to_numpy(),
+                want.to_numpy(),
+                equal_nan=True,
+                rtol=1e-6,
             )
         # std matches sqrt of producer variance where count > 1
         got_std = series.to_frame("std").to_numpy()
         want_var = expected.to_frame("variance").to_numpy()
         mask = ~np.isnan(want_var)
-        np.testing.assert_allclose(
-            got_std[mask] ** 2, want_var[mask], rtol=1e-9
-        )
+        np.testing.assert_allclose(got_std[mask] ** 2, want_var[mask], rtol=1e-5)
 
     edges, counts, attrs = contract_reader.read_dist(hdf, "IsPulser", "Trapemax")
     assert len(edges) == len(counts) + 1
@@ -183,7 +194,9 @@ def test_plain_h5py_layout_pin(tmp_path):
         f.attrs["lmon_schema_version"] = 2
         g = f.create_group("hist/IsPulser_X/1min")
         a0 = g.create_group("ref_axes/axis_0")
-        a0.attrs.update({"bins": n_bins, "lower": 0.0, "upper": 240.0, "type": "regular"})
+        a0.attrs.update(
+            {"bins": n_bins, "lower": 0.0, "upper": 240.0, "type": "regular"}
+        )
         g.create_group("ref_axes/axis_1").create_dataset("categories", data=dets)
         st = g.create_group("storage")
         st.create_dataset("counts", data=np.ones((n_bins + 2, len(dets) + 1)))
@@ -204,12 +217,12 @@ def test_no_lmon_import(tmp_path):
     script = (
         "import sys\n"
         "from legenddashboard.geds.phy import contract_reader\n"
-        "assert contract_reader.find_manifest(r'%s', 'p', 'r') is None\n"
+        f"assert contract_reader.find_manifest(r'{tmp_path}', 'p', 'r') is None\n"
         "assert not any(m.startswith('legend_data_monitor') for m in sys.modules)\n"
-        "print('clean')\n" % tmp_path
+        "print('clean')\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True
+        [sys.executable, "-c", script], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
     assert "clean" in result.stdout
