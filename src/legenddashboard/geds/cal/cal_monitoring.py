@@ -3,19 +3,17 @@ from __future__ import annotations
 import argparse
 import io
 import logging
-import pickle as pkl
-import shelve
 import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import panel as pn
 import param
-from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 
 import legenddashboard.geds.string_visulization as visu
 from legenddashboard.geds import cal
+from legenddashboard.geds.cal.shelf_cache import render_png, shelf_entry, shelf_keys
 from legenddashboard.geds.ged_monitoring import GedMonitoring
 from legenddashboard.util import get_par_cache, logo_path, read_config, sorter
 
@@ -25,18 +23,6 @@ log = logging.getLogger(__name__)
 plt.rcParams["font.size"] = 10
 plt.rcParams["figure.figsize"] = (16, 6)
 plt.rcParams["figure.dpi"] = 100
-
-
-def _rehome_figure(fig):
-    """Attach a fresh Agg canvas to a figure unpickled from a shelve.
-
-    Unpickled figures have no canvas. Constructing a ``FigureCanvasAgg``
-    registers itself on the figure without going through pyplot, so nothing
-    accumulates in pyplot's process-global figure registry (which previously
-    leaked one figure per detailed-plot view, across all sessions).
-    """
-    FigureCanvasAgg(fig)
-    return fig
 
 
 class CalMonitoring(GedMonitoring):
@@ -80,10 +66,8 @@ class CalMonitoring(GedMonitoring):
         # per interaction. Only genuine state updaters are watchers; they are
         # registered before any view pane (same precedence -> registration
         # order -> shelves are loaded before the views that show them render)
-        # and before the initial update_plot_dict call so its channel
-        # assignment triggers the channel-shelve load.
+        # and before the initial update_plot_dict call.
         self.param.watch(self.update_plot_dict, ["run_dict", "run"])
-        self.param.watch(self.update_channel_plot_dict, ["channel"])
         self.update_plot_dict()
 
     @param.depends("run_dict", "run", "sort_by", "plot_types_download")
@@ -265,9 +249,7 @@ class CalMonitoring(GedMonitoring):
             plt_base / f"dsp/cal/{self.period}/{self.run}" / f"{file_stem}-plt_dsp"
         )
 
-        with shelve.open(self.plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-            channels = list(shelf.keys())
-            self.common_dict = shelf["common"]
+        channels = shelf_keys(self.plot_dict)
         if "common" in channels:
             channels.remove("common")
         if not channels:
@@ -281,26 +263,39 @@ class CalMonitoring(GedMonitoring):
         )
 
         self.channel_objects = channels
-        if self.channel in channels:
-            # Keep the user's channel; no event fires, so refresh explicitly.
-            self.update_channel_plot_dict()
-        else:
-            # Fires the channel watcher, which runs update_channel_plot_dict.
+        if self.channel not in channels:  # keep the user's channel when valid
             self.channel = channels[0]
 
         self.update_strings()
         log.debug("Time to update plot dict: %.3fs", time.time() - start_time)
 
-    def update_channel_plot_dict(self, *events):  # noqa: ARG002
-        start_time = time.time()
-        log.debug("Updating channel plot dict for %s", self.channel)
-        with shelve.open(self.plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL) as shelf:
-            self.plot_dict_ch = shelf[self.channel[:9]]
-        with shelve.open(
-            self.dsp_plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL
-        ) as shelf:
-            self.dsp_dict = shelf[self.channel[:9]]
-        log.debug("Time to update channel plot dict: %.3fs", time.time() - start_time)
+    # Shelve contents are loaded lazily through the process-wide cache, so a
+    # run switch costs a key listing and only the views actually shown pay
+    # for unpickling (once per file version, shared by all sessions).
+    @property
+    def common_dict(self):
+        return shelf_entry(self.plot_dict, "common")
+
+    @property
+    def plot_dict_ch(self):
+        return shelf_entry(self.plot_dict, self.channel[:9])
+
+    @property
+    def dsp_dict(self):
+        return shelf_entry(self.dsp_plot_dict, self.channel[:9])
+
+    def _png_pane(self, get_figure):
+        """Rasterise a cached (shared) figure once; serve PNG bytes after."""
+        key = (
+            str(self.plot_dict),
+            self.run_dict[self.run]["timestamp"],
+            self.channel,
+            self.parameter,
+            self.plot_type_details,
+        )
+        return pn.pane.PNG(
+            io.BytesIO(render_png(key, get_figure)), sizing_mode="scale_width"
+        )
 
     @param.depends("parameter", watch=True)
     def update_plot_type_details(self):
@@ -315,21 +310,23 @@ class CalMonitoring(GedMonitoring):
         fig_pane = pn.pane.Matplotlib(Figure(), sizing_mode="scale_width")
         try:
             if self.parameter == "A/E":
-                fig = _rehome_figure(self.plot_dict_ch["aoe"][self.plot_type_details])
-                fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
+                fig_pane = self._png_pane(
+                    lambda: self.plot_dict_ch["aoe"][self.plot_type_details]
+                )
             elif self.parameter == "Baseline":
-                fig = _rehome_figure(self.plot_dict_ch["ecal"][self.plot_type_details])
-                fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
+                fig_pane = self._png_pane(
+                    lambda: self.plot_dict_ch["ecal"][self.plot_type_details]
+                )
             elif self.parameter == "PZ":
-                fig = _rehome_figure(self.dsp_dict["pz"][self.plot_type_details])
-                fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
+                fig_pane = self._png_pane(
+                    lambda: self.dsp_dict["pz"][self.plot_type_details]
+                )
             elif self.parameter == "Optimisation":
-                fig = _rehome_figure(
-                    self.dsp_dict[
+                fig_pane = self._png_pane(
+                    lambda: self.dsp_dict[
                         f"{self.plot_type_details.split('_')[0]}_optimisation"
                     ][f"{self.plot_type_details.split('_')[1]}_space"]
                 )
-                fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             elif self.plot_type_details in {"spectrum", "logged_spectrum"}:
                 fig = cal.plot_spectrum(
                     self.plot_dict_ch["ecal"][self.parameter]["spectrum"],
@@ -351,10 +348,11 @@ class CalMonitoring(GedMonitoring):
                 fig = cal.track_peaks(self.plot_dict_ch["ecal"][self.parameter])
                 fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             else:
-                fig = _rehome_figure(
-                    self.plot_dict_ch["ecal"][self.parameter][self.plot_type_details]
+                fig_pane = self._png_pane(
+                    lambda: self.plot_dict_ch["ecal"][self.parameter][
+                        self.plot_type_details
+                    ]
                 )
-                fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
         except Exception:
             log.exception(
                 "Failed to build detailed plot '%s'/'%s' for channel %s",

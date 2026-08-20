@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import importlib.resources
 import logging
+import os
+import pickle
 import threading
+import time
 import weakref
 from collections import OrderedDict
 from datetime import UTC, datetime
@@ -217,6 +220,64 @@ def get_par_cache():
     return _par_cache
 
 
+# Parsing a par_hit yaml takes seconds even with libyaml (millions of scalar
+# nodes); unpickling the parsed dict takes milliseconds. The on-disk pickle
+# cache lives under the configured tmp path and is keyed on the yaml's stat,
+# so it survives restarts and is shared between server processes.
+_par_disk_cache: Path | None = None
+
+
+def configure_par_disk_cache(tmp_path) -> None:
+    """Enable the on-disk par cache under ``tmp_path`` (None disables)."""
+    global _par_disk_cache  # noqa: PLW0603
+    if tmp_path is None:
+        _par_disk_cache = None
+        return
+    path = Path(tmp_path) / "legenddashboard-par-cache"
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        log.warning("par disk cache disabled: cannot create %s", path)
+        _par_disk_cache = None
+    else:
+        _par_disk_cache = path
+
+
+def _read_pars(pars_path: Path):
+    if _par_disk_cache is None:
+        return Props.read_from(pars_path)
+    st = pars_path.stat()
+    pickled = _par_disk_cache / f"{pars_path.stem}-{st.st_mtime_ns}-{st.st_size}.pkl"
+    if pickled.exists():
+        try:
+            with pickled.open("rb") as f:
+                return pickle.load(f)
+        except Exception:  # corrupt/partial file: fall through and rebuild
+            log.warning("discarding unreadable par cache %s", pickled, exc_info=True)
+    pars = Props.read_from(pars_path)
+    tmp = pickled.with_suffix(f".{os.getpid()}.tmp")
+    try:
+        with tmp.open("wb") as f:
+            pickle.dump(pars, f, protocol=pickle.HIGHEST_PROTOCOL)
+        tmp.replace(pickled)  # atomic: readers never see a partial file
+    except OSError:
+        log.warning("could not write par cache %s", pickled, exc_info=True)
+        tmp.unlink(missing_ok=True)
+    return pars
+
+
+def run_pars_path(prod_config, tier, period, run, run_info) -> Path:
+    """Path of the par_<tier> yaml for one calibration run."""
+    return (
+        Path(prod_config["paths"][f"par_{tier}"])
+        / f"cal/{period}/{run}"
+        / (
+            f"{run_info['experiment']}-{period}-{run}-cal-"
+            f"{run_info['timestamp']}-par_{tier}.yaml"
+        )
+    )
+
+
 def load_run_pars(prod_config, tier, period, run, run_info, cache_data=None):
     """Load the par_<tier> file for one calibration run via the shared cache.
 
@@ -228,18 +289,33 @@ def load_run_pars(prod_config, tier, period, run, run_info, cache_data=None):
         cached = cache_data[tier].get(cache_key)
         if cached is not None:
             return cached
-    pars_path = (
-        Path(prod_config["paths"][f"par_{tier}"])
-        / f"cal/{period}/{run}"
-        / (
-            f"{run_info['experiment']}-{period}-{run}-cal-"
-            f"{run_info['timestamp']}-par_{tier}.yaml"
-        )
-    )
-    pars = Props.read_from(pars_path)
+    pars = _read_pars(run_pars_path(prod_config, tier, period, run, run_info))
     if cache_data is not None:
         cache_data[tier][cache_key] = pars
     return pars
+
+
+def prewarm_run_pars(base_path, periods=None, n_periods=1) -> None:
+    """Parse (or unpickle) the par files of the latest ``n_periods`` periods.
+
+    Meant to run once at server start so the first clicks of a session do
+    not pay the multi-second yaml parse; newest runs first.
+    """
+    prod_config = get_dataflow_config(base_path)
+    periods = periods if periods is not None else get_run_dict(base_path)
+    start = time.time()
+    for period in sorted(periods)[-n_periods:][::-1]:
+        for run in sorted(periods[period])[::-1]:
+            for tier in ("hit", "dsp"):
+                try:
+                    load_run_pars(
+                        prod_config, tier, period, run, periods[period][run], _par_cache
+                    )
+                except Exception:
+                    log.warning("prewarm: could not load %s %s/%s", tier, period, run)
+    log.info(
+        "prewarmed par files for %d period(s) in %.0fs", n_periods, time.time() - start
+    )
 
 
 class PeriodRefreshRegistry:

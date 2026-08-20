@@ -410,6 +410,20 @@ def run_dashboard() -> None:
                 os.environ.get("METADATA_EDIT_URL", meta_git.DEFAULT_URL),
             )
 
+    # Parsed par files are cached on disk under paths.tmp (restart-proof) and
+    # the latest period is parsed up front, so a session's first clicks do
+    # not pay the multi-second yaml parse.
+    if "cal" not in args.disable_page:
+        from legenddashboard.util import (
+            configure_par_disk_cache,
+            prewarm_run_pars,
+            read_config,
+        )
+
+        _paths = read_config(args.config_file)
+        configure_par_disk_cache(_paths.get("tmp"))
+        prewarm_run_pars(_paths.cal, n_periods=1)
+
     def _build_dash():
         # Build a fresh dashboard per session so each user gets independent
         # widget state. The heavy, read-only data (metadata catalogs and parsed
