@@ -431,7 +431,9 @@ class PhyMonitoring(GedMonitoring):
             pn.Row("## Current Plot:", physics_param_currentValue),
             # pn.Row("## Current SC Plot:", sc_param_currentValue),
             pn.Row(phy_gspec),
-            self.update_plots,  # pn.panel(self.update_plots), #pn.pane.Bokeh(self.update_plots(), sizing_mode="scale_width"),
+            # loading_indicator greys the stale figure during the re-render
+            # round trip instead of leaving it frozen
+            pn.param.ParamMethod(self.update_plots, loading_indicator=True),
             name="Phy. Monitoring",
             sizing_mode="stretch_width",
         )

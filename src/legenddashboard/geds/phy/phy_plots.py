@@ -273,7 +273,9 @@ def phy_plot_binned_vsTime(
     time and is stated on the x-axis label.
     """
     shift = pd.Timedelta(hours=2)  # CET display convention, as in phy_plot_vsTime
-    index = mean_df.index + shift
+    # drop the tz *after* shifting: bokeh serializes tz-aware indexes as object
+    # arrays element by element, which dominates the update round trip
+    index = (mean_df.index + shift).tz_localize(None)
 
     n_channels = len(mean_df.columns)
     colors = color_palette("hls", max(n_channels, 1)).as_hex()
@@ -368,7 +370,8 @@ def phy_plot_binned_vsTime(
     window_lo, window_hi = (index[0], index[-1]) if len(index) else (None, None)
     shown_flag = False
     for raw_lo, raw_hi, _reason in flagged_ranges:
-        shifted_lo, shifted_hi = raw_lo + shift, raw_hi + shift
+        shifted_lo = (raw_lo + shift).tz_localize(None)
+        shifted_hi = (raw_hi + shift).tz_localize(None)
         if window_lo is not None and (shifted_hi < window_lo or shifted_lo > window_hi):
             continue
         p.add_layout(
