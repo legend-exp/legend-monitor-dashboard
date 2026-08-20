@@ -112,7 +112,7 @@ class PhyMonitoring(GedMonitoring):
             phy.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
             and Path(data_file_sc).exists()
         ):
-            data_sc = pd.read_hdf(
+            data_sc = contract_reader.read_frame(
                 data_file_sc, phy.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
             )
             self._phy_sc_plotted = True
@@ -241,8 +241,8 @@ class PhyMonitoring(GedMonitoring):
         if "pulser" in phy_data_key:
             if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
                 return self._empty_figure("Info key missing")
-            phy_plot_info = pd.read_hdf(
-                data_file, key=f"{phy_data_key.split('_pulser')[0]}_info"
+            phy_plot_info = contract_reader.read_frame(
+                data_file, f"{phy_data_key.split('_pulser')[0]}_info"
             )
             if "Diff" in phy_data_key:
                 phy_plot_info.loc["label"].iloc[0] = "Gain to Pulser Difference"
@@ -251,23 +251,25 @@ class PhyMonitoring(GedMonitoring):
         else:
             if f"{phy_data_key}_info" not in filekeys:
                 return self._empty_figure("Info key missing")
-            phy_plot_info = pd.read_hdf(data_file, key=f"{phy_data_key}_info")
+            phy_plot_info = contract_reader.read_frame(
+                data_file, f"{phy_data_key}_info"
+            )
         abs_unit = phy_plot_info.loc["unit"].iloc[0]
 
         if self.phy_units == "Relative":
             if f"{phy_data_key}_var" not in filekeys:
                 return self._empty_figure(f"Key {phy_data_key}_var missing")
-            phy_data_df = pd.read_hdf(data_file, key=f"{phy_data_key}_var")
+            phy_data_df = contract_reader.read_frame(data_file, f"{phy_data_key}_var")
             phy_plot_info.loc["unit", phy_plot_info.columns[0]] = "%"
         else:
             if phy_data_key not in filekeys:
                 return self._empty_figure(f"Key {phy_data_key} missing")
-            phy_data_df = pd.read_hdf(data_file, key=phy_data_key)
+            phy_data_df = contract_reader.read_frame(data_file, phy_data_key)
 
         # load mean values
         if f"{phy_data_key}_mean" not in filekeys:
             return self._empty_figure(f"Key {phy_data_key}_mean missing")
-        phy_data_df_mean = pd.read_hdf(data_file, key=f"{phy_data_key}_mean")
+        phy_data_df_mean = contract_reader.read_frame(data_file, f"{phy_data_key}_mean")
 
         # get sc data if selected
         data_sc = self._read_sc(data_file_sc)

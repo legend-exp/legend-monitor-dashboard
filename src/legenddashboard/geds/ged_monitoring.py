@@ -13,6 +13,7 @@ from bokeh.models.widgets.tables import BooleanFormatter
 import legenddashboard.geds.string_visulization as visu
 from legenddashboard.base import Monitoring
 from legenddashboard.util import (
+    LRUDict,
     get_characterization,
     get_production,
     logo_path,
@@ -22,6 +23,8 @@ from legenddashboard.util import (
 )
 
 log = logging.getLogger(__name__)
+
+_meta_df_cache = LRUDict(maxsize=64)
 
 meta_visu_plots_dict = {
     "Usability": visu.plot_visu_usability,
@@ -110,6 +113,14 @@ class GedMonitoring(Monitoring):
 
     def _get_metadata(self, *events):  # noqa: ARG002
         start_time = time.time()
+        # The table is a pure function of the channel map at the run's
+        # timestamp; ged, cal and phy instances all rebuild it on every run
+        # change, so share one build per process (copied: Tabulator may edit).
+        cache_key = (self.base_path, self.run_dict[self.run]["timestamp"], self.sort_by)
+        cached = _meta_df_cache.get(cache_key)
+        if cached is not None:
+            self.meta_df = cached.copy()
+            return
         try:
             chan_dict, channel_map = self.chan_dict, self.channel_map
 
@@ -210,7 +221,8 @@ class GedMonitoring(Monitoring):
             )
             df_out = df_out.drop(["characterization", "production"], axis=1)
             df_out = df_out.astype({"Proc.": "bool", "Usabl.": "bool"})
-            self.meta_df = df_out
+            _meta_df_cache[cache_key] = df_out
+            self.meta_df = df_out.copy()
 
         except KeyError:
             # Keep the previous table but make schema drift visible instead of

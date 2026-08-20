@@ -7,6 +7,7 @@ import importlib.resources
 import os
 import secrets
 import sys
+import threading
 from pathlib import Path
 
 import panel as pn
@@ -411,8 +412,8 @@ def run_dashboard() -> None:
             )
 
     # Parsed par files are cached on disk under paths.tmp (restart-proof) and
-    # the latest period is parsed up front, so a session's first clicks do
-    # not pay the multi-second yaml parse.
+    # parsed up front, so a session's first clicks do not pay the
+    # multi-second yaml parse.
     if "cal" not in args.disable_page:
         from legenddashboard.util import (
             configure_par_disk_cache,
@@ -422,7 +423,10 @@ def run_dashboard() -> None:
 
         _paths = read_config(args.config_file)
         configure_par_disk_cache(_paths.get("tmp"))
-        prewarm_run_pars(_paths.cal, n_periods=1)
+        prewarm_run_pars(_paths.cal, n_periods=1)  # latest period: before serving
+        threading.Thread(  # the rest: in the background
+            target=prewarm_run_pars, args=(_paths.cal,), daemon=True
+        ).start()
 
     def _build_dash():
         # Build a fresh dashboard per session so each user gets independent

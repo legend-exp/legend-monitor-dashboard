@@ -295,16 +295,18 @@ def load_run_pars(prod_config, tier, period, run, run_info, cache_data=None):
     return pars
 
 
-def prewarm_run_pars(base_path, periods=None, n_periods=1) -> None:
+def prewarm_run_pars(base_path, periods=None, n_periods=None) -> None:
     """Parse (or unpickle) the par files of the latest ``n_periods`` periods.
 
     Meant to run once at server start so the first clicks of a session do
-    not pay the multi-second yaml parse; newest runs first.
+    not pay the multi-second yaml parse; newest runs first. ``None`` warms
+    every period.
     """
     prod_config = get_dataflow_config(base_path)
     periods = periods if periods is not None else get_run_dict(base_path)
     start = time.time()
-    for period in sorted(periods)[-n_periods:][::-1]:
+    selected = sorted(periods) if n_periods is None else sorted(periods)[-n_periods:]
+    for period in selected[::-1]:
         for run in sorted(periods[period])[::-1]:
             for tier in ("hit", "dsp"):
                 try:
@@ -314,7 +316,9 @@ def prewarm_run_pars(base_path, periods=None, n_periods=1) -> None:
                 except Exception:
                     log.warning("prewarm: could not load %s %s/%s", tier, period, run)
     log.info(
-        "prewarmed par files for %d period(s) in %.0fs", n_periods, time.time() - start
+        "prewarmed par files for %d period(s) in %.0fs",
+        len(selected),
+        time.time() - start,
     )
 
 
