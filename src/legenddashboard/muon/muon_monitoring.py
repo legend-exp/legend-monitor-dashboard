@@ -35,7 +35,7 @@ class MuonMonitoring(Monitoring):
     )
     data_dict = param.Dict({})
 
-    @param.depends("run", watch=True)
+    @param.depends("run_dict", "run", watch=True)
     def _get_muon_data(self):
         start_time = time.time()
         data_file = f"{self.muon_path}/generated/plt/phy/{self.period}/dsp/{self.run}/dashboard_period_{self.period}_run_{self.run}.shelve"
@@ -53,7 +53,7 @@ class MuonMonitoring(Monitoring):
                 self.muon_data_dict = arrays_dict
         log.debug("Time to get muon data:", extra={"time": time.time() - start_time})
 
-    @param.depends("run", "muon_plots_cal")
+    @param.depends("run_dict", "run", "muon_plots_cal")
     def view_muon_cal(self):
         start_time = time.time()
         if not bool(self.muon_data_dict):
@@ -111,7 +111,7 @@ class MuonMonitoring(Monitoring):
             )
             return p
 
-    @param.depends("run", "muon_plots_mon")
+    @param.depends("run_dict", "run", "muon_plots_mon")
     def view_muon_mon(self):
         start_time = time.time()
         if not bool(self.muon_data_dict):
@@ -142,7 +142,7 @@ class MuonMonitoring(Monitoring):
         )
         return p
 
-    @param.depends("run")
+    @param.depends("run_dict", "run")
     def view_meta(self):
         start_time = time.time()
         ret = pn.widgets.Tabulator(

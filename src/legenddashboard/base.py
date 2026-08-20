@@ -98,29 +98,20 @@ class Monitoring(param.Parameterized):
                 raise RuntimeError(msg)
             self.period_objects = list(self.periods)
             self.period = list(self.periods)[-1]
-            self._get_period_data(None)
+            self._get_period_data()
+            # Only the discovering instance owns the period -> run cascade.
+            # Instances fed by refs (periods=..., run=...) must never assign
+            # those parameters: assigning a ref-bound param deletes the ref.
+            self.param.watch(self._get_period_data, ["period"], precedence=0)
 
-        self.param.watch(self._get_period_data, ["period"], precedence=0)
-
-    def _get_period_data(self, event=None):  # noqa: ARG002
-        self.run_dict = self.periods[self.period]
-
-        self.run_objects = list(self.run_dict)
-        # Always land on the latest run of the (new) period. If the run id is
-        # unchanged (run ids repeat across periods), trigger explicitly so
-        # dependent views still refresh for the new period.
-        last_run = list(self.run_dict)[-1]
-        if self.run == last_run:
-            self.param.trigger("run")
-        else:
-            self.run = last_run
+    def _get_period_data(self, *events):  # noqa: ARG002
+        run_dict = self.periods[self.period]
 
         start_period = sorted(self.periods)[0]
         start_run = sorted(self.periods[start_period])[0]
         end_period = sorted(self.periods)[-1]
         end_run = sorted(self.periods[end_period])[-1]
-
-        self.param["date_range"].bounds = (
+        date_range = (
             datetime.strptime(
                 self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
             )
@@ -130,15 +121,17 @@ class Monitoring(param.Parameterized):
             )
             + dtt.timedelta(minutes=110),
         )
-        self.date_range = (
-            datetime.strptime(
-                self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-            )
-            - dtt.timedelta(minutes=100),
-            datetime.strptime(
-                self.periods[end_period][end_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-            )
-            + dtt.timedelta(minutes=110),
+        self.param["date_range"].bounds = date_range
+
+        # One batch: ref-following instances receive run_dict, run and
+        # date_range together, so their views render once with consistent
+        # state. Views key on run_dict (not period) so a new period whose
+        # latest run id repeats the current one still refreshes.
+        self.param.update(
+            run_dict=run_dict,
+            run_objects=list(run_dict),
+            run=list(run_dict)[-1],
+            date_range=date_range,
         )
 
     def _refresh_periods(self):

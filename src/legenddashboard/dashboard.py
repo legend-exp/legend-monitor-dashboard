@@ -159,7 +159,6 @@ def build_dashboard(
             period=base_monitor.param.period,
             run=base_monitor.param.run,
             date_range=base_monitor.param.date_range,
-            channel=ged_monitor.param.channel,
             sort_by=ged_monitor.param.sort_by,
             name="L200 Cal Monitoring",
         )

@@ -77,18 +77,16 @@ class CalMonitoring(GedMonitoring):
         # The view_*/download_* methods are re-rendered by Panel through their
         # @param.depends decorators (they are placed directly in the panes);
         # additional param.watch registrations would compute every plot twice
-        # per interaction. Only genuine state updaters are watchers, and they
-        # must be registered before the initial update_plot_dict call so its
-        # channel assignment triggers the channel-shelve load.
-        self.param.watch(
-            self.update_plot_dict, ["period", "run"], precedence=2, queued=True
-        )
-        self.param.watch(
-            self.update_channel_plot_dict, ["channel"], precedence=2, queued=True
-        )
-        self.update_plot_dict(None)
+        # per interaction. Only genuine state updaters are watchers; they are
+        # registered before any view pane (same precedence -> registration
+        # order -> shelves are loaded before the views that show them render)
+        # and before the initial update_plot_dict call so its channel
+        # assignment triggers the channel-shelve load.
+        self.param.watch(self.update_plot_dict, ["run_dict", "run"])
+        self.param.watch(self.update_channel_plot_dict, ["channel"])
+        self.update_plot_dict()
 
-    @param.depends("period", "run", "sort_by", "plot_types_download")
+    @param.depends("run_dict", "run", "sort_by", "plot_types_download")
     def download_summary_files(self, event=None):  # noqa: ARG002
         start_time = time.time()
         try:
@@ -132,7 +130,7 @@ class CalMonitoring(GedMonitoring):
         log.debug("Time to download summary files: %.3fs", time.time() - start_time)
         return ret
 
-    @param.depends("period", "run", "sort_by", "plot_type_summary")
+    @param.depends("run_dict", "run", "sort_by", "plot_type_summary")
     def view_summary(self, event=None):  # noqa: ARG002
         start_time = time.time()
         figure = None
@@ -216,7 +214,7 @@ class CalMonitoring(GedMonitoring):
         log.debug("Time to get summary plot: %.3fs", time.time() - start_time)
         return figure
 
-    @param.depends("period", "date_range", "sort_by", "string", "plot_type_tracking")
+    @param.depends("run_dict", "date_range", "sort_by", "string", "plot_type_tracking")
     def view_tracking(self, event=None):  # noqa: ARG002
         figure = None
         try:
@@ -250,7 +248,7 @@ class CalMonitoring(GedMonitoring):
             )
         return figure
 
-    def update_plot_dict(self, event=None):  # noqa: ARG002
+    def update_plot_dict(self, *events):  # noqa: ARG002
         start_time = time.time()
         run_info = self.run_dict[self.run]
         file_stem = (
@@ -283,8 +281,8 @@ class CalMonitoring(GedMonitoring):
         )
 
         self.channel_objects = channels
-        if self.channel == channels[0]:
-            # No change event fires -> refresh the channel shelves explicitly.
+        if self.channel in channels:
+            # Keep the user's channel; no event fires, so refresh explicitly.
             self.update_channel_plot_dict()
         else:
             # Fires the channel watcher, which runs update_channel_plot_dict.
@@ -293,7 +291,7 @@ class CalMonitoring(GedMonitoring):
         self.update_strings()
         log.debug("Time to update plot dict: %.3fs", time.time() - start_time)
 
-    def update_channel_plot_dict(self, event=None):  # noqa: ARG002
+    def update_channel_plot_dict(self, *events):  # noqa: ARG002
         start_time = time.time()
         log.debug("Updating channel plot dict for %s", self.channel)
         with shelve.open(self.plot_dict, "r", protocol=pkl.HIGHEST_PROTOCOL) as shelf:
@@ -312,7 +310,7 @@ class CalMonitoring(GedMonitoring):
         self.plot_type_details = plots[0]
         log.debug("Time to update plot type details: %.3fs", time.time() - start_time)
 
-    @param.depends("period", "run", "channel", "parameter", "plot_type_details")
+    @param.depends("run_dict", "run", "channel", "parameter", "plot_type_details")
     def view_details(self, event=None):  # noqa: ARG002
         fig_pane = pn.pane.Matplotlib(Figure(), sizing_mode="scale_width")
         try:

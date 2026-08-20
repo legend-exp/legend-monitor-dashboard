@@ -69,7 +69,7 @@ class PhyMonitoring(GedMonitoring):
         self._phy_sc_plotted = False
 
     @param.depends(
-        "period",
+        "run_dict",
         "run",
         "string",
         "sort_by",

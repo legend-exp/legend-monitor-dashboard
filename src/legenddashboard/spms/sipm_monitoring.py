@@ -50,7 +50,7 @@ class SiPMMonitoring(Monitoring):
     def update_barrels(self):
         start_time = time.time()
         self.sipm_out_dict, self.sipm_chmap = sorter(
-            self.path,
+            self.base_path,
             self.run_dict[self.run]["timestamp"],
             key=self.sipm_sort_by,
             spms=True,
@@ -62,7 +62,7 @@ class SiPMMonitoring(Monitoring):
 
         log.debug("Time to update barrels:", extra={"time": time.time() - start_time})
 
-    @param.depends("run", watch=True)
+    @param.depends("run_dict", "run", watch=True)
     def _get_sipm_data(self):
         start_time = time.time()
         data_file = self.sipm_path + f"{self.period}_{self.run}_spmmon.hdf"
@@ -80,7 +80,7 @@ class SiPMMonitoring(Monitoring):
             )
 
         self.sipm_out_dict, self.sipm_chmap = sorter(
-            self.path,
+            self.base_path,
             self.run_dict[self.run]["timestamp"],
             key=self.sipm_sort_by,
             spms=True,
