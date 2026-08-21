@@ -65,10 +65,8 @@ class Monitoring(param.Parameterized):
     def __init__(self, base_path, notebook=False, **params):
         if notebook is True:
             output_notebook(INLINE)
-        self.base_path = base_path
+        super().__init__(base_path=base_path, **params)
         self.sort_obj = get_sort_dets(base_path)
-
-        super().__init__(**params)
 
         if "date_range" not in params:
             now = datetime.now()

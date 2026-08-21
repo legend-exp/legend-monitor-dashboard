@@ -79,7 +79,8 @@ class sort_dets:
             for entry in chmap_catalog.entries[system]:
                 try:
                     db = meta.channelmap(
-                        datetime.fromtimestamp(entry.valid_from, tz=UTC), system=system
+                        datetime.fromtimestamp(entry.valid_from, tz=UTC),
+                        category=system,
                     )
                     new_entry = Catalog.Entry(entry.valid_from, db)
                     chmap_entries[system].append(new_entry)
@@ -96,7 +97,7 @@ class sort_dets:
             status_entries[system] = []
             for entry in status_catalog.entries[system]:
                 db = textdb.on(
-                    datetime.fromtimestamp(entry.valid_from, tz=UTC), system=system
+                    datetime.fromtimestamp(entry.valid_from, tz=UTC), category=system
                 )
                 new_entry = Catalog.Entry(entry.valid_from, db)
                 status_entries[system].append(new_entry)
@@ -452,8 +453,8 @@ def sorter(
 
 def _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj):
     if sort_dets_obj is not None:
-        chmap = sort_dets_obj.chmaps.valid_for(timestamp, system=datatype)
-        det_status = sort_dets_obj.statuses.valid_for(timestamp, system=datatype)
+        chmap = sort_dets_obj.chmaps.valid_for(timestamp, category=datatype)
+        det_status = sort_dets_obj.statuses.valid_for(timestamp, category=datatype)
     else:
         prod_config = get_dataflow_config(path)
 
@@ -463,7 +464,7 @@ def _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj):
 
         det_status_path = prod_config["paths"]["detector_status"]
         det_status = LegendMetadata(path=det_status_path, lazy=True).statuses.on(
-            timestamp, system=datatype
+            timestamp, category=datatype
         )
 
     out_dict = {}
