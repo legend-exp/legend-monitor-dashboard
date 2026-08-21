@@ -9,6 +9,7 @@ legend title) is replaced as noted in the docstrings.
 
 from __future__ import annotations
 
+import itertools
 from math import pi
 
 import numpy as np
@@ -16,9 +17,11 @@ import pandas as pd
 from bokeh.models import (
     BoxAnnotation,
     ColumnDataSource,
+    CustomJS,
     FactorRange,
     HoverTool,
     Label,
+    LinearAxis,
     Range1d,
     Span,
     Whisker,
@@ -443,5 +446,97 @@ def param_stability(
             formatters={"@t": "datetime"},
         )  # fmt: skip
     )
+    plot_style.finish_legend(p, "bottom_left")
+    return p
+
+
+# ---------------------------------------------------------------------------
+# forced-trigger summary (lmon plots/summary.py)
+# ---------------------------------------------------------------------------
+
+
+def _steps(p, index, values, color, label, hover=True):
+    """steps-mid line (matplotlib ``drawstyle="steps-mid"``)."""
+    return p.step(
+        x=plot_style.utc_naive(index), y=np.asarray(values, dtype=float), mode="center",
+        color=color, line_width=1.2, legend_label=label,
+    )  # fmt: skip
+
+
+def _link_percent_axis(p, avg_total_forced_mhz, label="FT failure fraction (%)"):
+    """Secondary axis in percent of the average forced-trigger rate (mHz/kg).
+
+    Mirrors ``secondary_yaxis`` in the pipeline: the percent range follows
+    the primary range through a CustomJS so zooming keeps them consistent.
+    """
+    if not avg_total_forced_mhz:
+        return
+    scale = 100.0 / avg_total_forced_mhz
+    pct = Range1d(start=0, end=1)
+    p.extra_y_ranges = {"pct": pct}
+    p.add_layout(LinearAxis(y_range_name="pct", axis_label=label), "right")
+    p.y_range.js_on_change(
+        "start", CustomJS(args={"pct": pct, "s": scale}, code="pct.start = cb_obj.start * s;")
+    )  # fmt: skip
+    p.y_range.js_on_change(
+        "end", CustomJS(args={"pct": pct, "s": scale}, code="pct.end = cb_obj.end * s;")
+    )  # fmt: skip
+    p.yaxis[1].axis_label_text_font_size = "12px"
+
+
+def ft_per_string(rates, period, run, string, avg_total_forced_mhz, colors):
+    """FT failure rate per detector of one string (lmon ``_ft_string_figure``).
+
+    ``colors`` is an iterator over the shared tab20 cycle (advanced across
+    strings, as in the pipeline).
+    """
+    p = plot_style.make_figure(
+        f"{period} - {run} - string {string}", x_datetime=True, height=450,
+        tools="pan,box_zoom,wheel_zoom,reset,save",
+    )  # fmt: skip
+    for det in rates.columns:
+        _steps(p, rates.index, rates[det], next(colors), str(det))
+    finite = rates.to_numpy(dtype=float)
+    finite = finite[np.isfinite(finite)]
+    top = float(finite.max()) if finite.size else 1.0
+    p.y_range = Range1d(-0.02 * top, top * 1.1 or 1.0)
+    _link_percent_axis(p, avg_total_forced_mhz)
+    p.yaxis[0].axis_label = "Normalized FT failure rate (mHz/kg)"
+    p.grid.grid_line_color = None
+    plot_style.finish_legend(p, "top_left", ncols=2)
+    return p
+
+
+def ft_all_strings(per_string, period, run):
+    """Combined FT failure rate, one steps line per string."""
+    p = plot_style.make_figure(
+        f"{period} - {run} - All strings", x_datetime=True, height=450,
+        tools="pan,box_zoom,wheel_zoom,reset,save",
+    )  # fmt: skip
+    colors = itertools.cycle(plot_style.TAB20)
+    for string in per_string.columns:
+        _steps(
+            p, per_string.index, per_string[string], next(colors), f"String {string}"
+        )
+    p.yaxis.axis_label = "Normalized FT failure rate (mHz/kg)"
+    p.grid.grid_line_color = None
+    plot_style.finish_legend(p, "top_left", ncols=2)
+    return p
+
+
+def ft_survival(surviving_frac, period):
+    """FT surviving-events fraction over all strings (lmon ``_ft_sf_figure``)."""
+    p = plot_style.make_figure(
+        f"{period} - All strings combined", x_datetime=True, height=350,
+        tools="pan,box_zoom,wheel_zoom,reset,save",
+    )  # fmt: skip
+    series = (
+        surviving_frac.iloc[:, 0]
+        if isinstance(surviving_frac, pd.DataFrame)
+        else surviving_frac
+    )
+    _steps(p, series.index, series, "red", "FT surviving events")
+    p.yaxis.axis_label = "FT surviving events (%)"
+    p.grid.grid_line_color = None
     plot_style.finish_legend(p, "bottom_left")
     return p

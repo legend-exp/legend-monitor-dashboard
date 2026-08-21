@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import logging
 import time
 
@@ -22,7 +23,8 @@ DETECTOR_SUMMARY_TITLES = (
     "pulser_stab_uncalib",
 )
 STABILITY_PARAMETERS = ("TrapemaxCtcCal", "Trapemax", "Baseline", "BlStd")
-FAMILIES = ("Detector summary", "Param. stability", "Gain shift")
+FAMILIES = ("Detector summary", "Param. stability", "Gain shift", "FT summary")
+FT_KINDS = ("per string", "all strings", "survival fraction")
 PER_DETECTOR_FAMILIES = ("Param. stability", "Gain shift")
 
 
@@ -73,6 +75,17 @@ class PhyShifterMonitoring(GedMonitoring):
                 kind
                 for kind in ("corr", "uncorr")
                 if period_reader.has_key(f, f"gain_shift/{kind}/{self.run}")
+            ]
+        if self.shifter_family == "FT summary":
+            keys = {
+                "per string": "per_detector",
+                "all strings": "per_string",
+                "survival fraction": "survival_fraction",
+            }
+            return [
+                kind
+                for kind in FT_KINDS
+                if period_reader.has_key(f, f"ft_summary/{keys[kind]}/{self.run}")
             ]
         return []
 
@@ -162,7 +175,60 @@ class PhyShifterMonitoring(GedMonitoring):
             )
         if self.shifter_family in PER_DETECTOR_FAMILIES:
             return self._build_per_detector()
+        if self.shifter_family == "FT summary":
+            return self._build_ft()
         return plot_style.empty_figure(f"{self.shifter_family}: not implemented")
+
+    def _build_ft(self):
+        f = self._phy_file()
+        kind = self.shifter_metric
+        if kind == "all strings":
+            frame = period_reader.read_optional(f, f"ft_summary/per_string/{self.run}")
+            if frame is None:
+                return self._missing(f"ft_summary/per_string/{self.run}")
+            return shifter_plots.ft_all_strings(frame, self.period, self.run)
+        if kind == "survival fraction":
+            frame = period_reader.read_optional(
+                f, f"ft_summary/survival_fraction/{self.run}"
+            )
+            if frame is None:
+                return self._missing(f"ft_summary/survival_fraction/{self.run}")
+            return shifter_plots.ft_survival(frame, self.period)
+        rates = period_reader.read_optional(f, f"ft_summary/per_detector/{self.run}")
+        if rates is None:
+            return self._missing(f"ft_summary/per_detector/{self.run}")
+        total = period_reader.read_optional(f, f"ft_summary/total_forced/{self.run}")
+        avg_mhz = (
+            float(total.iloc[:, 0].mean()) / 3600 * 1000 if total is not None else None
+        )
+        # one tab20 cycle across all strings, advanced to the selected string
+        dmap = period_reader.detector_map(self.phy_path, self.period, self.run)
+        colors = itertools.cycle(plot_style.TAB20)
+        string_label = self._string_number()
+        if dmap is not None and "string" in dmap:
+            ordered = dmap.sort_values(["string", "position"])
+            dets = []
+            for string, group in ordered.groupby("string", sort=True):
+                names = [d for d in group["name"] if d in rates.columns]
+                if str(string) == str(string_label):
+                    dets = names
+                    break
+                for _ in names:
+                    next(colors)
+        else:
+            dets = [
+                d for d in self.strings_dict.get(self.string, []) if d in rates.columns
+            ]
+        if not dets:
+            return self._missing(f"FT rates for string {self.string}")
+        return shifter_plots.ft_per_string(
+            rates[dets], self.period, self.run, string_label, avg_mhz, colors
+        )
+
+    def _string_number(self):
+        """The sidebar string ("String:01") as the pipeline's plain number."""
+        digits = "".join(ch for ch in str(self.string) if ch.isdigit())
+        return int(digits) if digits else self.string
 
     def _build_per_detector(self):
         f = self._phy_file()

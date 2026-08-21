@@ -219,3 +219,43 @@ def test_gain_shift_without_res_columns():
     )
     assert not any(isinstance(a, Label) for a in p.center)
     assert len(p.renderers) == 3  # trace + two marker sets
+
+
+def _hourly(n=24, cols=("V1", "V2")):
+    idx = pd.date_range("2026-07-01", periods=n, freq="1h")
+    rng = np.random.default_rng(3)
+    return pd.DataFrame(rng.random((n, len(cols))) * 0.3, index=idx, columns=list(cols))
+
+
+def test_ft_per_string_has_percent_axis_and_shared_cycle():
+    import itertools
+
+    from legenddashboard.geds.phy import plot_style
+
+    colors = itertools.cycle(plot_style.TAB20)
+    next(colors)  # a previous string consumed one colour
+    p = shifter_plots.ft_per_string(_hourly(), "p19", "r001", 1, 2.0, colors)
+    assert len(p.yaxis) == 2
+    assert p.yaxis[1].axis_label == "FT failure fraction (%)"
+    assert p.renderers[0].glyph.line_color == plot_style.TAB20[1]
+    assert p.renderers[0].glyph.mode == "center"
+    assert p.legend[0].ncols == 2
+
+
+def test_ft_per_string_without_total_forced_has_single_axis():
+    import itertools
+
+    from legenddashboard.geds.phy import plot_style
+
+    p = shifter_plots.ft_per_string(
+        _hourly(), "p19", "r001", 1, None, itertools.cycle(plot_style.TAB20)
+    )
+    assert len(p.yaxis) == 1
+
+
+def test_ft_all_strings_and_survival():
+    p = shifter_plots.ft_all_strings(_hourly(cols=("1", "4")), "p19", "r001")
+    assert [i.label["value"] for i in p.legend[0].items] == ["String 1", "String 4"]
+    p2 = shifter_plots.ft_survival(_hourly(cols=("survival_fraction",)), "p19")
+    assert p2.renderers[0].glyph.line_color == "red"
+    assert p2.yaxis.axis_label == "FT surviving events (%)"
