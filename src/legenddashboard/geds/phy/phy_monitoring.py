@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import h5py
+import numpy as np
 import pandas as pd
 import panel as pn
 import param
@@ -14,7 +15,7 @@ from bokeh.plotting import figure
 
 from legenddashboard.geds import phy
 from legenddashboard.geds.ged_monitoring import GedMonitoring
-from legenddashboard.geds.phy import contract_reader
+from legenddashboard.geds.phy import contract_reader, period_reader, plot_style
 from legenddashboard.util import logo_path, read_config
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,11 @@ class PhyMonitoring(GedMonitoring):
     phy_units = param.ObjectSelector(
         default=phy.phy_unit_vals[0], objects=phy.phy_unit_vals, label="Units"
     )
+    phy_pulser_corr = param.ObjectSelector(
+        default=next(iter(phy.phy_pulser_corr_dict)),
+        objects=list(phy.phy_pulser_corr_dict),
+        label="Pulser corr.",
+    )
     # phy_plots_sc        = param.Boolean(default=False, label="SC")
     phy_plots_sc_vals = param.ObjectSelector(
         default=next(iter(phy.phy_plots_sc_vals_dict)),
@@ -67,6 +73,67 @@ class PhyMonitoring(GedMonitoring):
             figure(width=1000, height=600), sizing_mode="scale_width"
         )
         self._phy_sc_plotted = False
+        self._phy_value_menu = None
+        # menus follow the run's manifest: registered before the view so a run
+        # change re-populates them before the plot renders
+        self.param.watch(
+            self._update_menus, ["run_dict", "run", "phy_plots_types", "phy_plots"]
+        )
+        if self.run_dict:
+            self._update_menus()
+
+    def _manifest(self):
+        if not self.run_dict or self.run not in self.run_dict:
+            return None
+        return contract_reader.find_manifest(
+            self.phy_path, self.period, self.run, self.run_dict[self.run]["experiment"]
+        )
+
+    def _param_key(self):
+        """Contract parameter name for the current value + pulser correction."""
+        return phy.phy_plots_vals_dict[self.phy_plots] + phy.phy_pulser_corr_dict.get(
+            self.phy_pulser_corr, ""
+        )
+
+    def _update_menus(self, *events):  # noqa: ARG002
+        """Offer only the flags/values the run's manifest lists (v1: everything)."""
+        manifest = self._manifest()
+        if manifest is None:
+            types = list(phy.phy_plots_types_dict)
+            values = list(phy.phy_plots_vals_dict)
+        else:
+            keys = contract_reader.available_keys(manifest)
+            types = [
+                t
+                for t, flag in phy.phy_plots_types_dict.items()
+                if any(f"{flag}_{p}" in keys for p in phy.phy_plots_vals_dict.values())
+            ] or list(phy.phy_plots_types_dict)
+            flag = phy.phy_plots_types_dict[
+                self.phy_plots_types if self.phy_plots_types in types else types[0]
+            ]
+            values = [
+                v for v, p in phy.phy_plots_vals_dict.items() if f"{flag}_{p}" in keys
+            ] or list(phy.phy_plots_vals_dict)
+        self.param.phy_plots_types.objects = types
+        self.param.phy_plots.objects = values
+        if self._phy_value_menu is not None:
+            self._phy_value_menu.items = values
+        if self.phy_plots_types not in types:
+            self.phy_plots_types = types[0]
+        if self.phy_plots not in values:
+            self.phy_plots = values[0]
+        # pulser corrections exist only for some parameters
+        if manifest is None:
+            corrs = list(phy.phy_pulser_corr_dict)
+        else:
+            base = f"{flag}_{phy.phy_plots_vals_dict[self.phy_plots]}"
+            corrs = [
+                c for c, suffix in phy.phy_pulser_corr_dict.items()
+                if f"{base}{suffix}" in keys
+            ] or ["None"]  # fmt: skip
+        self.param.phy_pulser_corr.objects = corrs
+        if self.phy_pulser_corr not in corrs:
+            self.phy_pulser_corr = corrs[0]
 
     @param.depends(
         "run_dict",
@@ -78,6 +145,7 @@ class PhyMonitoring(GedMonitoring):
         "phy_plot_style",
         "phy_resampled",
         "phy_units",
+        "phy_pulser_corr",
         "phy_plots_sc_vals",
     )
     def update_plots(self):
@@ -99,12 +167,29 @@ class PhyMonitoring(GedMonitoring):
         return p
 
     def _empty_figure(self, reason="No data"):
-        p = figure(width=1000, height=600)
         experiment = self.run_dict[self.run]["experiment"]
-        p.title.text = f"{reason} for run {experiment}-{self.period}-{self.run}"
-        p.title.align = "center"
-        p.title.text_font_size = "25px"
-        return p
+        return plot_style.empty_figure(
+            f"{reason} for run {experiment}-{self.period}-{self.run}", height=600
+        )
+
+    def _fwhm_by_detector(self):
+        """Qββ FWHM (keV) per detector for the selected run, from the period file."""
+        rows = period_reader.read_optional(
+            period_reader.period_file(self.phy_path, self.period),
+            f"cal_points/{self.run}",
+        )
+        if rows is None or "res" not in rows or "detector" not in rows:
+            return {}
+        last = rows.sort_values("run_start").groupby("detector").tail(1)
+        out = {}
+        for det, raw in zip(last["detector"], last["res"], strict=False):
+            try:
+                res = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite(res):
+                out[str(det)] = res
+        return out
 
     def _read_sc(self, data_file_sc):
         """Slow-control frame for the current selection (empty when off)."""
@@ -131,7 +216,7 @@ class PhyMonitoring(GedMonitoring):
             return self._empty_figure("Manifest names no geds file")
 
         flag = phy.phy_plots_types_dict[self.phy_plots_types]
-        param_name = phy.phy_plots_vals_dict[self.phy_plots]
+        param_name = self._param_key()
         relative = self.phy_units == "Relative"
         key_param = param_name + ("_var" if relative else "")
 
@@ -151,12 +236,6 @@ class PhyMonitoring(GedMonitoring):
         label, unit = contract_reader.label_and_unit(
             manifest, series.attrs, param_name, relative
         )
-        if "pulser01ana" in param_name:
-            label = (
-                "Gain to Pulser Difference"
-                if "Diff" in param_name
-                else "Gain to Pulser Ratio"
-            )
         base_series_attrs = series.attrs if not relative else {}
         abs_unit = base_series_attrs.get("unit", unit)
 
@@ -179,11 +258,12 @@ class PhyMonitoring(GedMonitoring):
             experiment=experiment,
         )
 
+        limits = contract_reader.limits(series.attrs)
         if self.phy_plot_style == "Histogram":
             if f"{flag}_{key_param}_dist" not in keys:
                 return self._empty_figure("No distribution stored")
             return phy.phy_plot_dist_histogram(
-                contract_reader.read_dist(data_file, flag, key_param), meta
+                contract_reader.read_dist(data_file, flag, key_param), meta, limits
             )
 
         cadence = contract_reader.snap_cadence(
@@ -202,6 +282,13 @@ class PhyMonitoring(GedMonitoring):
             data_sc=self._read_sc(data_file_sc),
             sc_param=self.phy_plots_sc_vals,
             cadence_label=cadence,
+            limits=limits,
+            # the pipeline's ±FWHM/2 threshold applies to the calibrated gain
+            fwhm=(
+                self._fwhm_by_detector()
+                if param_name == "TrapemaxCtcCal" and not relative
+                else None
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -237,7 +324,9 @@ class PhyMonitoring(GedMonitoring):
             for name in channel_names
             if name in self.name_to_rawid
         ]
-        phy_data_key = f"{phy.phy_plots_types_dict[self.phy_plots_types]}_{phy.phy_plots_vals_dict[self.phy_plots]}"
+        phy_data_key = (
+            f"{phy.phy_plots_types_dict[self.phy_plots_types]}_{self._param_key()}"
+        )
         if "pulser" in phy_data_key:
             if f"{phy_data_key.split('_pulser')[0]}_info" not in filekeys:
                 return self._empty_figure("Info key missing")
@@ -354,6 +443,32 @@ class PhyMonitoring(GedMonitoring):
             show_name=False,
             sort=False,
         )
+        physics_param_style = pn.Param(
+            self.param,
+            widgets={
+                "phy_plot_style": {
+                    "widget_type": pn.widgets.RadioBoxGroup,
+                    "inline": True,
+                }
+            },
+            parameters=["phy_plot_style"],
+            show_labels=False,
+            show_name=False,
+            sort=False,
+        )
+        physics_param_corr = pn.Param(
+            self.param,
+            widgets={
+                "phy_pulser_corr": {
+                    "widget_type": pn.widgets.RadioBoxGroup,
+                    "inline": True,
+                }
+            },
+            parameters=["phy_pulser_corr"],
+            show_labels=False,
+            show_name=False,
+            sort=False,
+        )
         physics_param_types = pn.Param(
             self.param,
             widgets={
@@ -384,6 +499,7 @@ class PhyMonitoring(GedMonitoring):
             physics_param_currentValue.object = f"## {event.new}"
 
         physics_param.on_click(update_phy_plots)
+        self._phy_value_menu = physics_param
 
         # SC
         # sc_param_currentValue = pn.pane.Markdown(f"## Not selected or no data available")
@@ -403,18 +519,25 @@ class PhyMonitoring(GedMonitoring):
 
         sc_param.on_click(update_sc_plots)
 
-        phy_gspec = pn.GridSpec(width=3 * widget_widths + 10, max_height=800)
+        def header(name):
+            return pn.widgets.Button(
+                name=name, button_type="primary", width=widget_widths, disabled=True
+            )
+
+        phy_gspec = pn.GridSpec(width=5 * widget_widths + 20, max_height=800)
         phy_gspec[:, 0] = physics_param_types
         phy_gspec[:, 1] = pn.Spacer(width=5)
-        phy_gspec[0, 2] = pn.widgets.Button(
-            name="Units", button_type="primary", width=widget_widths, disabled=True
-        )
+        phy_gspec[0, 2] = header("Units")
         phy_gspec[1, 2] = physics_param_units
         phy_gspec[:, 3] = pn.Spacer(width=5)
-        phy_gspec[0, 4] = pn.widgets.Button(
-            name="Resampled", button_type="primary", width=widget_widths, disabled=True
-        )
+        phy_gspec[0, 4] = header("Resampled")
         phy_gspec[1, 4] = physics_param_resampled
+        phy_gspec[:, 5] = pn.Spacer(width=5)
+        phy_gspec[0, 6] = header("Style")
+        phy_gspec[1, 6] = physics_param_style
+        phy_gspec[:, 7] = pn.Spacer(width=5)
+        phy_gspec[0, 8] = header("Pulser corr.")
+        phy_gspec[1, 8] = physics_param_corr
         # phy_gspec[:, 5] = pn.Spacer(width=5)
         # phy_gspec[0, 6] = pn.widgets.Button(name="Show Slow Control", button_type='danger', width=widget_widths, disabled=True)
         # phy_gspec[1, 6] = sc_param_selected
@@ -436,7 +559,7 @@ class PhyMonitoring(GedMonitoring):
             # loading_indicator greys the stale figure during the re-render
             # round trip instead of leaving it frozen
             pn.param.ParamMethod(self.update_plots, lazy=True, loading_indicator=True),
-            name="Phy. Monitoring",
+            name="Phy. Expert",
             sizing_mode="stretch_width",
         )
 
