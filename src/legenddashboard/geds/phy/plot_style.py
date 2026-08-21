@@ -289,6 +289,7 @@ __all__ = [
     "SPMS_TYPES",
     "SPMS_VALUES",
     "TAB20",
+    "Label",
     "empty_figure",
     "finish_legend",
     "legend_proxy",

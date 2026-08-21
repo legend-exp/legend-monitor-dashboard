@@ -93,3 +93,44 @@ def test_expert_every_offered_combination(monitors):
                         assert p.renderers, f"{flag}/{value}/{corr}/{style}/{units}"
                         n_ok += 1
     assert n_ok > 0
+
+
+def test_sipm_page_every_view(monitors):
+    from legenddashboard.geds.phy import contract_reader
+    from legenddashboard.spms.sipm_monitoring import SiPMMonitoring
+
+    mon = SiPMMonitoring(base_path=PRODENV, phy_path=PHY_TREE, name="sipm")
+    with_spms = [
+        run
+        for run in mon.run_dict
+        if (m := contract_reader.find_manifest(PHY_TREE, mon.period, run)) is not None
+        and contract_reader.file_from_manifest(m, ".", "spms") is not None
+    ]
+    if not with_spms:
+        pytest.skip("no run with an spms contract")
+    mon.run = with_spms[-1]
+    n = 0
+    for view in mon.param.sipm_view.objects:
+        mon.sipm_view = view
+        obj = mon.update_sipm_plot()
+        assert _has_content(obj), view
+        n += 1
+    mon.sipm_view = "Explorer"
+    for grouping in mon.param.sipm_group_by.objects:
+        mon.sipm_group_by = grouping
+        for group in list(mon.param.sipm_group.objects)[:2]:
+            mon.sipm_group = group
+            for flag in list(mon.param.sipm_plots_types.objects):
+                mon.sipm_plots_types = flag
+                for value in list(mon.param.sipm_plots.objects):
+                    mon.sipm_plots = value
+                    for units in mon.param.sipm_units.objects:
+                        mon.sipm_units = units
+                        for style in mon.param.sipm_plot_style.objects:
+                            mon.sipm_plot_style = style
+                            p = mon.update_sipm_plot()
+                            assert (
+                                p.renderers
+                            ), f"{grouping}/{group}/{flag}/{value}/{units}/{style}"
+                            n += 1
+    print(f"\nsipm rendered {n}")

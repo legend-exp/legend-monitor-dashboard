@@ -439,19 +439,17 @@ def gen_run_dict(path):
 _sorter_cache = LRUDict(maxsize=256)
 
 
-def sorter(
-    path, timestamp, key="String", datatype="cal", spms=False, sort_dets_obj=None
-):
-    cache_key = (str(path), timestamp, key, datatype, spms)
+def sorter(path, timestamp, key="String", datatype="cal", sort_dets_obj=None):
+    cache_key = (str(path), timestamp, key, datatype)
     cached = _sorter_cache.get(cache_key)
     if cached is not None:
         return cached
-    result = _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj)
+    result = _sorter_uncached(path, timestamp, key, datatype, sort_dets_obj)
     _sorter_cache[cache_key] = result
     return result
 
 
-def _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj):
+def _sorter_uncached(path, timestamp, key, datatype, sort_dets_obj):
     if sort_dets_obj is not None:
         chmap = sort_dets_obj.chmaps.valid_for(timestamp, category=datatype)
         det_status = sort_dets_obj.statuses.valid_for(timestamp, category=datatype)
@@ -466,22 +464,9 @@ def _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj):
         det_status = LegendMetadata(path=det_status_path, lazy=True).statuses.on(
             timestamp, category=datatype
         )
-
     out_dict = {}
-    # SiPMs sorting
-    if spms:
-        chmap = chmap.map("system", unique=False)["spms"]
-        if key == "Barrel":
-            mapping = chmap.map("name")
-            for pos in ["top", "bottom"]:
-                for barrel in ["IB", "OB"]:
-                    out_dict[f"{barrel}-{pos}"] = [
-                        k
-                        for k, entry in sorted(mapping.items())
-                        if barrel in entry["location"]["fiber"]
-                        and pos in entry["location"]["position"]
-                    ]
-        return out_dict, chmap
+    # SiPM grouping (barrel/fiber/position) comes from the spms contract's
+    # detector_map; this sorter is germanium-only.
 
     # Daq needs special item as sort on tertiary key
     if key == "DAQ":

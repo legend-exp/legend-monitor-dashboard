@@ -100,7 +100,6 @@ dashboard-phy               = "legenddashboard.geds.phy.phy_monitoring:run_dashb
 dashboard-meta                = "legenddashboard.geds.ged_monitoring:run_dashboard_meta"
 dashboard-metaedit                = "legenddashboard.metadata.meta_monitoring:run_dashboard_metaedit"
 dashboard-llama                = "legenddashboard.llama.llama_monitoring:run_dashboard_llama"
-dashboard-spms                = "legenddashboard.spms.sipm_monitoring:run_dashboard_spms"
 dashboard-muon                = "legenddashboard.muon.muon_monitoring:run_dashboard_muon"
 
 [tool.setuptools]

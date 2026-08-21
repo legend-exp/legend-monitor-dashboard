@@ -57,8 +57,6 @@ def build_dashboard(
     cal_path = config.cal
     # path to physics data
     phy_path = config.phy
-    # path to sipm data
-    sipm_path = config.sipm
     # path to muon data
     muon_path = config.muon
     # tmp path for caching
@@ -229,8 +227,8 @@ def build_dashboard(
         )
     if "spm" not in disable_page:
         sipm_monitor = SiPMMonitoring(
-            sipm_path=sipm_path,
             base_path=cal_path,
+            phy_path=phy_path,
             run_dict=base_monitor.param.run_dict,
             periods=base_monitor.param.periods,
             period=base_monitor.param.period,
@@ -238,14 +236,7 @@ def build_dashboard(
             date_range=base_monitor.param.date_range,
             name="L200 SiPM Monitoring",
         )
-        main_tabs.append(
-            (
-                "SiPM",
-                sipm_monitor.build_spm_pane(
-                    widget_widths=widget_widths,
-                ),
-            )
-        )
+        main_tabs.append(("SiPM", sipm_monitor.build_sipm_pane(widget_widths)))
 
     if "muon" not in disable_page:
         muon_monitor = MuonMonitoring(
