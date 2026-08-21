@@ -192,18 +192,24 @@ class PhyMonitoring(GedMonitoring):
         return out
 
     def _read_sc(self, data_file_sc):
-        """Slow-control frame for the current selection (empty when off)."""
-        if (
-            phy.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
-            and Path(data_file_sc).exists()
-        ):
-            data_sc = contract_reader.read_frame(
-                data_file_sc, phy.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
+        """Slow-control frame for the current selection (empty when off).
+
+        The contract publishes slow control in the period file under
+        ``slow_control/<param>/<run>``; the legacy run-level file is still
+        read when present (older trees).
+        """
+        key = phy.phy_plots_sc_vals_dict[self.phy_plots_sc_vals]
+        data_sc = None
+        if key:
+            data_sc = period_reader.read_optional(
+                period_reader.period_file(self.phy_path, self.period),
+                f"slow_control/{key}/{self.run}",
             )
-            self._phy_sc_plotted = True
-        else:
+            if data_sc is None and Path(data_file_sc).exists():
+                data_sc = contract_reader.read_frame(data_file_sc, key)
+        if data_sc is None:
             data_sc = pd.DataFrame()
-            self._phy_sc_plotted = False
+        self._phy_sc_plotted = not data_sc.empty
         return data_sc
 
     # ------------------------------------------------------------------

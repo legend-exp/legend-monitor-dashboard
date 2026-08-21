@@ -168,15 +168,40 @@ def phy_plot_vsTime(
     return p
 
 
+def _sc_series(data_sc):
+    """(series, unit, lower, upper) from either slow-control frame layout.
+
+    Contract layout (period file ``slow_control/<param>/<run>``): UTC
+    DatetimeIndex, columns value/unit/lower_lim/upper_lim. Legacy run file:
+    positional index with a unix ``tstamp`` column.
+    """
+    if "tstamp" in data_sc.columns:
+        index = pd.to_datetime(data_sc["tstamp"], origin="unix", unit="s", utc=True)
+        series = pd.Series(data_sc["value"].to_numpy(dtype=float), index=index)
+    else:
+        series = data_sc["value"].astype(float)
+    series.index = plot_style.utc_naive(pd.DatetimeIndex(series.index))
+    unit = str(data_sc["unit"].iloc[0]) if "unit" in data_sc else ""
+    limits = []
+    for col in ("lower_lim", "upper_lim"):
+        value = float(data_sc[col].iloc[0]) if col in data_sc else float("nan")
+        limits.append(value if np.isfinite(value) else None)
+    return series, unit, limits[0], limits[1]
+
+
 def _add_sc_overlay(p, data_sc, sc_param, resample_unit):
-    """Overlay a slow-control series on a secondary y-axis (shared v1/v2)."""
+    """Overlay a slow-control series on a secondary y-axis (shared v1/v2).
+
+    Limit lines are drawn when the contract carries lower/upper limits.
+    """
     if data_sc is None or data_sc.empty:
         return
+    series, unit, lower, upper = _sc_series(data_sc)
     y_range_name = f"{sc_param}_range"
-    y_min = data_sc["value"].min() * 0.99
-    y_max = data_sc["value"].max() * 1.01
-    p.extra_y_ranges = {y_range_name: Range1d(start=y_min, end=y_max)}
-    unit = data_sc["unit"][0]
+    bounds = [v for v in (series.min(), series.max(), lower, upper) if v is not None]
+    y_min, y_max = min(bounds), max(bounds)
+    pad = 0.05 * (y_max - y_min or 1.0)
+    p.extra_y_ranges = {y_range_name: Range1d(start=y_min - pad, end=y_max + pad)}
     p.add_layout(
         LinearAxis(
             y_range_name=y_range_name,
@@ -185,38 +210,27 @@ def _add_sc_overlay(p, data_sc, sc_param, resample_unit):
         ),
         "right",
     )
-
-    sc_data = data_sc.copy()
-    sc_data["tstamp"] = pd.to_datetime(sc_data["tstamp"], origin="unix", utc=True)
-    sc_data = sc_data.set_index("tstamp")["value"]
     if resample_unit != "0min":
-        sc_data_resampled = sc_data.resample(resample_unit).mean()
         p.line(
-            sc_data.index,
-            sc_data.values,
-            color="black",
-            alpha=0.2,
-            legend_label=sc_param,
-            y_range_name=y_range_name,
-            line_width=2,
-        )
-        p.line(
-            sc_data_resampled.index,
-            sc_data_resampled.values,
-            color="black",
-            legend_label=sc_param,
-            y_range_name=y_range_name,
-            line_width=2,
-        )
-    else:
-        p.line(
-            sc_data.index,
-            sc_data.values,
-            color="black",
-            legend_label=sc_param,
-            y_range_name=y_range_name,
-            line_width=2,
-        )
+            series.index, series.to_numpy(), color="black", alpha=0.2,
+            legend_label=sc_param, y_range_name=y_range_name, line_width=2,
+        )  # fmt: skip
+        series = series.resample(resample_unit).mean()
+    p.line(
+        series.index, series.to_numpy(), color="black", legend_label=sc_param,
+        y_range_name=y_range_name, line_width=2,
+    )  # fmt: skip
+    for value in (lower, upper):
+        if value is not None:
+            p.add_layout(
+                Span(
+                    location=value,
+                    dimension="width",
+                    line_color="black",
+                    line_dash="dotted",
+                    y_range_name=y_range_name,
+                )  # fmt: skip
+            )
 
 
 @dataclasses.dataclass

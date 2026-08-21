@@ -102,3 +102,40 @@ def test_degenerate_frames_do_not_crash(n):
     const = pd.DataFrame(5.0, index=idx, columns=DETS)
     p = phy_plots.phy_plot_binned_vsTime(const, const * 0, const, const, _meta())
     assert p.y_range.start < 5 < p.y_range.end
+
+
+def test_sc_overlay_accepts_contract_and_legacy_layouts():
+    mean, std, lo, hi = _frames()
+    idx = pd.date_range(
+        "2026-07-01", periods=10, freq="30min", tz="UTC", name="datetime"
+    )
+    contract = pd.DataFrame(
+        {
+            "value": np.linspace(20, 21, 10),
+            "unit": "degC",
+            "lower_lim": 18.0,
+            "upper_lim": 24.0,
+        },
+        index=idx,
+    )
+    p = phy_plots.phy_plot_binned_vsTime(
+        mean, std, lo, hi, _meta(), data_sc=contract, sc_param="DaqLeft_Temp1"
+    )
+    assert len(p.yaxis) == 2
+    assert "degC" in p.yaxis[1].axis_label
+    sc_spans = [
+        s for s in p.center if isinstance(s, Span) and s.y_range_name != "default"
+    ]
+    assert sorted(s.location for s in sc_spans) == [18.0, 24.0]
+    assert p.extra_y_ranges["DaqLeft_Temp1_range"].start < 18.0
+    legacy = pd.DataFrame(
+        {
+            "tstamp": idx.astype("int64") // 10**9,
+            "value": np.linspace(20, 21, 10),
+            "unit": "degC",
+        }
+    )
+    p2 = phy_plots.phy_plot_binned_vsTime(
+        mean, std, lo, hi, _meta(), data_sc=legacy, sc_param="DaqLeft_Temp1"
+    )
+    assert len(p2.yaxis) == 2
