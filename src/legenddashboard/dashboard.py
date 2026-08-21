@@ -41,6 +41,7 @@ def build_dashboard(
     from legenddashboard.geds.cal.cal_monitoring import CalMonitoring
     from legenddashboard.geds.ged_monitoring import GedMonitoring
     from legenddashboard.geds.phy.phy_monitoring import PhyMonitoring
+    from legenddashboard.geds.phy.phy_shifter import PhyShifterMonitoring
     from legenddashboard.llama.llama_monitoring import LlamaMonitoring
     from legenddashboard.muon.muon_monitoring import MuonMonitoring
     from legenddashboard.spms.sipm_monitoring import SiPMMonitoring
@@ -200,9 +201,27 @@ def build_dashboard(
                 date_range=base_monitor.param.date_range,
                 name="L200 Phy Monitoring",
             )
+        # the shifter page shares the selectors; string follows the ged sidebar
+        shifter_monitor = PhyShifterMonitoring(
+            base_path=cal_path,
+            phy_path=phy_path,
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            name="L200 Phy Shifter",
+        )
+        if "cal" not in disable_page:
+            ged_monitor.param.watch(
+                lambda e: setattr(shifter_monitor, "string", e.new), "string"
+            )
+        main_tabs.append(
+            ("Phy. Shifter", shifter_monitor.build_shifter_pane(widget_widths))
+        )
         main_tabs.append(
             (
-                "Physics",
+                "Phy. Expert",
                 phy_monitor.build_phy_pane(
                     widget_widths=widget_widths,
                 ),
