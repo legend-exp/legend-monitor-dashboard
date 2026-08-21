@@ -81,18 +81,32 @@ def find_manifest(
     return manifest
 
 
-def geds_file_from_manifest(manifest: dict, run_dir: Path) -> Path | None:
-    """Path of the geds data file named by the manifest (never hardcode names)."""
+def file_from_manifest(manifest: dict, run_dir, subsystem: str = "geds"):
+    """Path of a subsystem's data file named by the manifest (never hardcode names).
+
+    The run manifest lists one contract file per subsystem, e.g.
+    ``l200-p22-r012-phy-geds-schema2.hdf`` and ``...-phy-spms-schema2.hdf``.
+    """
     for name in manifest.get("files", {}):
-        if "-geds" in name:
+        if f"-{subsystem}" in name:
             return Path(run_dir) / name
     return None
 
 
-def available_keys(manifest: dict) -> set:
-    """All ``{flag}_{param}`` bodies present (hist prefix / cadence stripped)."""
+def geds_file_from_manifest(manifest: dict, run_dir: Path) -> Path | None:
+    return file_from_manifest(manifest, run_dir, "geds")
+
+
+def available_keys(manifest: dict, subsystem: str | None = None) -> set:
+    """All ``{flag}_{param}`` bodies present (hist prefix / cadence stripped).
+
+    Restricted to the files of one ``subsystem`` when given; otherwise the
+    union over every file in the manifest.
+    """
     bodies = set()
-    for entry in manifest.get("files", {}).values():
+    for name, entry in manifest.get("files", {}).items():
+        if subsystem is not None and f"-{subsystem}" not in name:
+            continue
         for key in entry.get("keys", []):
             body = key.removeprefix("hist/")
             head, _, tail = body.rpartition("/")

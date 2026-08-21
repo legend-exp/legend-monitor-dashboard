@@ -117,3 +117,41 @@ def test_limits():
     assert contract_reader.limits({"limits": [-0.025, 0.025]}) == (-0.025, 0.025)
     assert contract_reader.limits({}) == (None, None)
     assert contract_reader.limits({"limits": "bad"}) == (None, None)
+
+
+TWO_FILE_MANIFEST = {
+    "schema_version": 2,
+    "files": {
+        "l200-p19-r001-phy-geds-schema2.hdf": {
+            "keys": ["hist/IsPulser_Trapemax/1min", "IsPulser_Trapemax_mean"]
+        },
+        "l200-p19-r001-phy-spms-schema2.hdf": {
+            "keys": ["hist/IsBsln_NPulses/1min", "hist/All_HasAnyNoise_dist"]
+        },
+    },
+}
+
+
+def test_manifest_helpers_by_subsystem(tmp_path):
+    assert contract_reader.available_keys(TWO_FILE_MANIFEST) == {
+        "IsPulser_Trapemax",
+        "IsPulser_Trapemax_mean",
+        "IsBsln_NPulses",
+        "All_HasAnyNoise_dist",
+    }
+    assert contract_reader.available_keys(TWO_FILE_MANIFEST, "geds") == {
+        "IsPulser_Trapemax",
+        "IsPulser_Trapemax_mean",
+    }
+    assert contract_reader.available_keys(TWO_FILE_MANIFEST, "spms") == {
+        "IsBsln_NPulses",
+        "All_HasAnyNoise_dist",
+    }
+    geds = contract_reader.file_from_manifest(TWO_FILE_MANIFEST, tmp_path, "geds")
+    spms = contract_reader.file_from_manifest(TWO_FILE_MANIFEST, tmp_path, "spms")
+    assert geds.name.endswith("-geds-schema2.hdf")
+    assert spms.name.endswith("-spms-schema2.hdf")
+    assert contract_reader.geds_file_from_manifest(TWO_FILE_MANIFEST, tmp_path) == geds
+    assert (
+        contract_reader.file_from_manifest(TWO_FILE_MANIFEST, tmp_path, "muon") is None
+    )

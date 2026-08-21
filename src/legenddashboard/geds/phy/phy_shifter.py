@@ -338,7 +338,7 @@ class PhyShifterMonitoring(GedMonitoring):
                 Path(self.phy_path) / "generated/plt/hit/phy" / self.period / self.run
             )
             geds = contract_reader.geds_file_from_manifest(manifest, run_dir)
-            keys = contract_reader.available_keys(manifest)
+            keys = contract_reader.available_keys(manifest, "geds")
             if geds is not None and f"All_{par}_dist2d" in keys:
                 counts_by_flag, edges = {}, None
                 for flag in plot_style.CLASSIFIER_FLAG_LABELS:

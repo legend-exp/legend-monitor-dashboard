@@ -102,7 +102,7 @@ class PhyMonitoring(GedMonitoring):
             types = list(phy.phy_plots_types_dict)
             values = list(phy.phy_plots_vals_dict)
         else:
-            keys = contract_reader.available_keys(manifest)
+            keys = contract_reader.available_keys(manifest, "geds")
             types = [
                 t
                 for t, flag in phy.phy_plots_types_dict.items()
@@ -226,7 +226,7 @@ class PhyMonitoring(GedMonitoring):
         relative = self.phy_units == "Relative"
         key_param = param_name + ("_var" if relative else "")
 
-        keys = contract_reader.available_keys(manifest)
+        keys = contract_reader.available_keys(manifest, "geds")
         if f"{flag}_{key_param}" not in keys:
             return self._empty_figure(f"Key {flag}_{key_param} missing")
 

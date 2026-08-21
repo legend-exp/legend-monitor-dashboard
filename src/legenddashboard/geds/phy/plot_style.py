@@ -69,8 +69,53 @@ MTG_PLOT_INFO = {
     },
     "IsDischarge": {"title": "discharge_rate", "unit": "mHz", "limits": (None, 5)},
     "IsSaturated": {"title": "saturated_rate", "unit": "mHz", "limits": (None, 5)},
+    # SiPM channel-health bands, graded on the 60min bins of the spms contract
+    # (the contract's own limits attrs are all null for spms keys)
+    "IsBsln_WfMode_var": {
+        "title": "spms_baseln_stab",
+        "unit": "%",
+        "limits": (-0.05, 0.05),
+    },
+    "IsBsln_CurrFwhm_var": {
+        "title": "spms_noise_stab",
+        "unit": "%",
+        "limits": (-5, 5),
+    },
+    "IsBsln_NPulses": {
+        "title": "spms_dark_rate",
+        "unit": "per window",
+        "rolling": 6,
+        "limits": (0.002, 1.0),
+    },
+    "All_HasAnyNoise": {
+        "title": "spms_noisy_frac",
+        "unit": "fraction",
+        "limits": (None, 0.05),
+    },
 }
 MTG_BY_TITLE = {v["title"]: v for v in MTG_PLOT_INFO.values()}
+SPMS_CHECKS = (
+    "spms_baseln_stab",
+    "spms_noise_stab",
+    "spms_dark_rate",
+    "spms_noisy_frac",
+)
+
+# SiPM explorer vocabulary (display -> contract flag / parameter)
+SPMS_TYPES = {
+    "Forced trigger": "IsBsln",
+    "Physics": "IsPhysics",
+    "All events": "All",
+}
+SPMS_VALUES = {
+    "Baseline (mode)": "WfMode",
+    "Current noise FWHM": "CurrFwhm",
+    "Waveform lower HWHM": "WfLowerHwhm",
+    "Pulses per window (dark rate)": "NPulses",
+    "Light per event": "PeSum",
+    "Largest pulse per event": "PeMax",
+    "Noisy waveform fraction": "HasAnyNoise",
+}
 
 # legacy pars_to_inspect order: drives the shared tab20 cycle in the QC figures
 DEFAULT_QC_FLAGS = (
@@ -240,6 +285,9 @@ __all__ = [
     "MTG_PLOT_INFO",
     "QBB_LIN_LABEL",
     "QBB_QUAD_LABEL",
+    "SPMS_CHECKS",
+    "SPMS_TYPES",
+    "SPMS_VALUES",
     "TAB20",
     "empty_figure",
     "finish_legend",

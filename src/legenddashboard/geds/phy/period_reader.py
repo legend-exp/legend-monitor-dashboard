@@ -108,13 +108,17 @@ def read_optional(path, key: str):
     return read(path, key)
 
 
-def detector_map(phy_path, period: str, run: str, experiment="l200"):
-    """The run contract's detector map (name,rawid,string,position,usability...)."""
+def detector_map(phy_path, period: str, run: str, experiment="l200", subsystem="geds"):
+    """The run contract's detector map of one subsystem.
+
+    geds: name,rawid,string,position,processable,usability,mass_in_kg;
+    spms: name,rawid,barrel,fiber,position,processable,usability.
+    """
     manifest = contract_reader.find_manifest(phy_path, period, run, experiment)
     if manifest is None:
         return None
     run_dir = Path(phy_path) / "generated/plt/hit/phy" / period / run
-    geds = contract_reader.geds_file_from_manifest(manifest, run_dir)
+    geds = contract_reader.file_from_manifest(manifest, run_dir, subsystem)
     if geds is None or not geds.exists():
         return None
     try:

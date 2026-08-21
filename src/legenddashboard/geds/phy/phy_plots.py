@@ -284,19 +284,24 @@ def phy_plot_binned_vsTime(
     cadence_label="1min",
     limits=(None, None),
     fwhm=None,
+    envelope=True,
+    line_dashes=None,
 ):
     """Time view of contract-v2 binned stats, drawn like the pipeline figures.
 
-    Per detector: mean line, ±1sigma band, faint min/max envelope. Overlays:
-    dashed thresholds from the key's ``limits`` attrs (shaded beyond),
-    per-detector ±FWHM/2 lines when ``fwhm`` maps detector -> Qββ FWHM
-    (calibrated gain in absolute units), flagged ranges shaded. Time is UTC.
+    Per detector: mean line, ±1 sigma band, faint min/max envelope
+    (``envelope=False`` for boolean rates, whose min/max are always 0/1).
+    Overlays: dashed thresholds from ``limits`` (shaded beyond), per-detector
+    ±FWHM/2 lines when ``fwhm`` maps detector -> Qββ FWHM (calibrated gain
+    in absolute units), flagged ranges shaded. ``line_dashes`` maps a column
+    to a bokeh line dash (e.g. a fiber's bottom SiPM dashed). Time is UTC.
     """
     index = plot_style.utc_naive(mean_df.index)
 
     n_channels = len(mean_df.columns)
     colors = color_palette("hls", max(n_channels, 1)).as_hex()
     fwhm = fwhm or {}
+    line_dashes = line_dashes or {}
 
     p = plot_style.make_figure(
         f"{meta.experiment}-{meta.period}-{meta.run} | "
@@ -326,12 +331,13 @@ def phy_plot_binned_vsTime(
                 "fwhm": np.full(len(mean), np.nan if res is None else res),
             }
         )
-        # min/max envelope, ±1sigma band, mean line — one legend entry per detector
-        # so click-to-hide toggles the trio together
-        p.varea(
-            x="datetime", y1="min", y2="max", source=source,
-            fill_color=colors[i], fill_alpha=0.06, legend_label=det,
-        )  # fmt: skip
+        # min/max envelope, ±1 sigma band, mean line — one legend entry per
+        # detector so click-to-hide toggles the trio together
+        if envelope:
+            p.varea(
+                x="datetime", y1="min", y2="max", source=source,
+                fill_color=colors[i], fill_alpha=0.06, legend_label=det,
+            )  # fmt: skip
         p.varea(
             x="datetime", y1="band_lo", y2="band_hi", source=source,
             fill_color=colors[i], fill_alpha=0.2, legend_label=det,
@@ -339,6 +345,7 @@ def phy_plot_binned_vsTime(
         line = p.line(
             x="datetime", y="mean", source=source, color=colors[i],
             line_width=1.5, legend_label=det, name=det,
+            line_dash=line_dashes.get(det, "solid"),
         )  # fmt: skip
         hover_renderers.append(line)
         if res is not None and np.isfinite(res):
