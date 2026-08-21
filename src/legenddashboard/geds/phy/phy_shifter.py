@@ -21,7 +21,9 @@ DETECTOR_SUMMARY_TITLES = (
     "baseln_spike",
     "pulser_stab_uncalib",
 )
-FAMILIES = ("Detector summary",)
+STABILITY_PARAMETERS = ("TrapemaxCtcCal", "Trapemax", "Baseline", "BlStd")
+FAMILIES = ("Detector summary", "Param. stability", "Gain shift")
+PER_DETECTOR_FAMILIES = ("Param. stability", "Gain shift")
 
 
 class PhyShifterMonitoring(GedMonitoring):
@@ -32,12 +34,15 @@ class PhyShifterMonitoring(GedMonitoring):
         default=FAMILIES[0], objects=list(FAMILIES), label="Figure"
     )
     shifter_metric = param.ObjectSelector(default=None, objects=[], label="Metric")
+    shifter_detector = param.ObjectSelector(default=None, objects=[], label="Detector")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # menus follow the period file; registered before the view pane so a
         # run change re-populates them before the figure renders
-        self.param.watch(self._update_menus, ["run_dict", "run", "shifter_family"])
+        self.param.watch(
+            self._update_menus, ["run_dict", "run", "string", "shifter_family"]
+        )
         if self.run_dict:
             self._update_menus()
 
@@ -50,17 +55,46 @@ class PhyShifterMonitoring(GedMonitoring):
 
     def _metric_options(self):
         """Metric names available for the current family and run."""
+        f = self._phy_file()
         if self.shifter_family == "Detector summary":
-            present = period_reader.children(self._phy_file(), "detector_summary")
             return [
                 t
                 for t in DETECTOR_SUMMARY_TITLES
-                if t in present
-                and period_reader.has_key(
-                    self._phy_file(), f"detector_summary/{t}/{self.run}"
-                )
+                if period_reader.has_key(f, f"detector_summary/{t}/{self.run}")
+            ]
+        if self.shifter_family == "Param. stability":
+            return [
+                par
+                for par in STABILITY_PARAMETERS
+                if period_reader.has_key(f, f"param_stability/{par}/{self.run}")
+            ]
+        if self.shifter_family == "Gain shift":
+            return [
+                kind
+                for kind in ("corr", "uncorr")
+                if period_reader.has_key(f, f"gain_shift/{kind}/{self.run}")
             ]
         return []
+
+    def _detector_options(self):
+        """Detectors of the selected string (sidebar), in position order."""
+        if self.shifter_family not in PER_DETECTOR_FAMILIES:
+            return []
+        return [str(d) for d in self.strings_dict.get(self.string, [])]
+
+    def _string_position(self, detector):
+        """(string, position) of a detector from the run's detector map."""
+        dmap = period_reader.detector_map(self.phy_path, self.period, self.run)
+        if dmap is not None and "name" in dmap:
+            rows = dmap[dmap["name"] == detector]
+            if len(rows):
+                return rows.iloc[0]["string"], rows.iloc[0]["position"]
+        cal = period_reader.read_optional(self._phy_file(), f"cal_points/{self.run}")
+        if cal is not None:
+            rows = cal[cal["detector"] == detector]
+            if len(rows):
+                return rows.iloc[0]["string"], rows.iloc[0]["position"]
+        return self.string, "?"
 
     def _update_menus(self, *events):  # noqa: ARG002
         options = self._metric_options()
@@ -69,12 +103,25 @@ class PhyShifterMonitoring(GedMonitoring):
             self.shifter_metric = options[0]
         elif not options:
             self.shifter_metric = None
+        dets = self._detector_options()
+        self.param.shifter_detector.objects = dets
+        if dets and self.shifter_detector not in dets:
+            self.shifter_detector = dets[0]
+        elif not dets:
+            self.shifter_detector = None
 
     # ------------------------------------------------------------------
     # view
     # ------------------------------------------------------------------
 
-    @param.depends("run_dict", "run", "string", "shifter_family", "shifter_metric")
+    @param.depends(
+        "run_dict",
+        "run",
+        "string",
+        "shifter_family",
+        "shifter_metric",
+        "shifter_detector",
+    )
     def update_shifter_plot(self):
         start = time.time()
         try:
@@ -113,7 +160,76 @@ class PhyShifterMonitoring(GedMonitoring):
             return shifter_plots.detector_summary(
                 frame, self.shifter_metric, self.period, self.run
             )
+        if self.shifter_family in PER_DETECTOR_FAMILIES:
+            return self._build_per_detector()
         return plot_style.empty_figure(f"{self.shifter_family}: not implemented")
+
+    def _build_per_detector(self):
+        f = self._phy_file()
+        det = self.shifter_detector
+        if det is None or self.shifter_metric is None:
+            return self._missing(f"{self.shifter_family} for string {self.string}")
+        string, position = self._string_position(det)
+        cal = period_reader.read_optional(f, f"cal_points/{self.run}")
+        det_cal = None
+        if cal is not None and "detector" in cal:
+            rows = cal[cal["detector"] == det].sort_values("run_start")
+            det_cal = rows if len(rows) else None
+        pul = period_reader.read_optional(f, f"pul_cusp/kevdiff/{self.run}")
+        pul_trace = pul[det] if pul is not None and det in pul.columns else None
+
+        if self.shifter_family == "Gain shift":
+            kind = self.shifter_metric
+            frame = period_reader.read_optional(f, f"gain_shift/{kind}/{self.run}")
+            if frame is None or det not in frame.columns or frame[det].dropna().empty:
+                return self._missing(f"gain_shift/{kind}/{self.run} for {det}")
+            std = period_reader.read_optional(f, f"gain_shift/{kind}_std/{self.run}")
+            # the period-to-date trace; the selected run is highlighted
+            run_start = det_cal.iloc[-1]["run_start"] if det_cal is not None else None
+            highlight = (
+                (run_start, frame.index.max()) if run_start is not None else None
+            )
+            return shifter_plots.gain_shift(
+                frame[det],
+                std[det] if std is not None and det in std.columns else None,
+                pul_trace,
+                det_cal,
+                self.period,
+                det,
+                string,
+                position,
+                corrected=(kind == "corr" and pul_trace is not None),
+                highlight=highlight,
+            )
+
+        par = self.shifter_metric
+        frame = period_reader.read_optional(f, f"param_stability/{par}/{self.run}")
+        if frame is None or det not in frame.columns or frame[det].dropna().empty:
+            return self._missing(f"param_stability/{par}/{self.run} for {det}")
+        std = period_reader.read_optional(f, f"param_stability/{par}_std/{self.run}")
+        trace = frame[det]
+        t0, res0 = None, float("nan")
+        if det_cal is not None:
+            last = det_cal.iloc[-1]  # cal_points has no run column: latest point
+            t0 = last["run_start"]
+            res0 = float(last["res"]) if "res" in det_cal else float("nan")
+        if par == "TrapemaxCtcCal" and pul_trace is not None:
+            lo, hi = trace.index.min(), trace.index.max()
+            pul_trace = pul_trace[(pul_trace.index >= lo) & (pul_trace.index <= hi)]
+        else:
+            pul_trace = None
+        return shifter_plots.param_stability(
+            trace,
+            std[det] if std is not None and det in std.columns else None,
+            pul_trace,
+            t0,
+            res0,
+            par,
+            self.period,
+            det,
+            string,
+            position,
+        )
 
     # ------------------------------------------------------------------
     # pane
@@ -148,11 +264,29 @@ class PhyShifterMonitoring(GedMonitoring):
             show_labels=False,
             show_name=False,
         )
+        detector = pn.Param(
+            self.param,
+            widgets={
+                "shifter_detector": {
+                    "widget_type": pn.widgets.Select,
+                    "width": 2 * widget_widths,
+                }
+            },
+            parameters=["shifter_detector"],
+            show_labels=False,
+            show_name=False,
+        )
         return pn.Column(
             pn.Row(
                 pn.pane.SVG(logo_path / "Physics.svg", height=25), "## Shifter figures"
             ),
-            pn.Row(family, pn.Spacer(width=10), pn.Column("Metric", metric)),
+            pn.Row(
+                family,
+                pn.Spacer(width=10),
+                pn.Column("Metric", metric),
+                pn.Spacer(width=10),
+                pn.Column("Detector (string from sidebar)", detector),
+            ),
             pn.param.ParamMethod(
                 self.update_shifter_plot, lazy=True, loading_indicator=True
             ),

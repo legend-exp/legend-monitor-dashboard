@@ -14,9 +14,11 @@ from math import pi
 import numpy as np
 import pandas as pd
 from bokeh.models import (
+    BoxAnnotation,
     ColumnDataSource,
     FactorRange,
     HoverTool,
+    Label,
     Range1d,
     Span,
     Whisker,
@@ -184,4 +186,262 @@ def detector_summary(frame, title, period, run):
     p.xaxis.major_label_text_font_size = "8px"
     p.xgrid.grid_line_color = None
     plot_style.finish_legend(p, "top_right", title=f"{period} {run}")
+    return p
+
+
+# ---------------------------------------------------------------------------
+# per-detector stability (lmon plots/stability.py)
+# ---------------------------------------------------------------------------
+
+
+def _naive(ts):
+    ts = pd.Timestamp(ts)
+    return ts.tz_convert("UTC").tz_localize(None) if ts.tz is not None else ts
+
+
+def _trace_source(trace, trace_std):
+    """ColumnDataSource of a time series with its ±1 sigma band."""
+    index = plot_style.utc_naive(trace.index)
+    vals = trace.to_numpy(dtype=float)
+    if trace_std is not None:
+        sig = trace_std.reindex(trace.index).to_numpy(dtype=float)
+        sig = np.where(np.isfinite(sig), sig, 0.0)
+    else:
+        sig = np.zeros(len(vals))
+    return ColumnDataSource(
+        {"t": index, "v": vals, "lo": vals - sig, "hi": vals + sig, "sig": sig}
+    )
+
+
+def _draw_trace(p, source, color, label, band=True):
+    if band:
+        p.varea(
+            x="t", y1="lo", y2="hi", source=source, fill_color="black",
+            fill_alpha=0.2, legend_label="±1 sigma",
+        )  # fmt: skip
+    return p.line(
+        x="t", y="v", source=source, color=color, line_width=1.5, legend_label=label
+    )
+
+
+def _stability_title(period, string, position, detector):
+    return (
+        f"period: {period} - string: {string} - position: {position} - ged: {detector}"
+    )
+
+
+def _draw_cal_points(p, cal, quadratic=False):
+    """FEP/cal-const markers, run boundaries and stepped ±FWHM/2 segments.
+
+    Mirrors lmon ``_draw_cal_points``: markers are shifted -5 h (legacy),
+    each cal run's resolution band runs until the next run start (the last
+    one for 7 days), annotated with its FWHM value. Returns the run starts.
+    """
+    if cal is None or cal.empty:
+        return []
+    cal = cal.sort_values("run_start")
+    t0 = [_naive(t) for t in cal["run_start"]]
+    n = len(t0)
+    nan = np.full(n, np.nan)
+    res = cal["res"].astype(float).to_numpy() if "res" in cal else nan
+    res_quad = cal["res_quad"].astype(float).to_numpy() if "res_quad" in cal else nan
+    shifted = [t - pd.Timedelta(hours=5) for t in t0]
+    p.scatter(
+        x=shifted, y=cal["fep_diff"].astype(float).to_numpy(), marker="x", size=8,
+        color="black", legend_label="FEP gain",
+    )  # fmt: skip
+    p.scatter(
+        x=shifted, y=cal["cal_const_diff"].astype(float).to_numpy(), marker="x",
+        size=8, color="red", legend_label="cal. const. diff",
+    )  # fmt: skip
+    for t in t0:
+        p.add_layout(
+            Span(
+                location=t, dimension="height", line_color="dimgrey", line_dash="dashed"
+            )
+        )
+    ends = [t0[i + 1] if i < n - 1 else t0[i] + pd.Timedelta(days=7) for i in range(n)]
+    for values, color, label in (
+        (res, "blue", plot_style.QBB_LIN_LABEL),
+        (res_quad, "dodgerblue", plot_style.QBB_QUAD_LABEL),
+    ):
+        if color == "dodgerblue" and not quadratic:
+            continue
+        ok = np.isfinite(values)
+        if not ok.any():
+            continue
+        for sign in (1, -1):
+            p.segment(
+                x0=[t0[i] for i in range(n) if ok[i]],
+                x1=[ends[i] for i in range(n) if ok[i]],
+                y0=[sign * values[i] / 2 for i in range(n) if ok[i]],
+                y1=[sign * values[i] / 2 for i in range(n) if ok[i]],
+                color=color, line_width=1.5, legend_label=label,
+            )  # fmt: skip
+        for i in range(n):
+            if ok[i]:
+                p.add_layout(
+                    Label(
+                        x=t0[i],
+                        y=values[i] / 2 * (1.1 if color == "blue" else 1.5),
+                        text=f"{values[i]:.2f}",
+                        text_color=color,
+                        text_font_size="9px",
+                    )  # fmt: skip
+                )
+    return t0
+
+
+def gain_shift(
+    trace, trace_std, pul, cal, period, detector, string, position, corrected,
+    highlight=None, quadratic=False,
+):  # fmt: skip
+    """Period-to-date gain shift of one detector (lmon ``_build_gain_shift_figure``).
+
+    ``highlight``: optional (start, end) of the selected run, shaded (an
+    addition: the pipeline draws the whole period without marking a run).
+    """
+    p = plot_style.make_figure(
+        _stability_title(period, string, position, detector), x_datetime=True
+    )
+    source = _trace_source(trace, trace_std)
+    if corrected:
+        if pul is not None and not pul.dropna().empty:
+            p.line(
+                x=plot_style.utc_naive(pul.index), y=pul.to_numpy(dtype=float),
+                color=plot_style.C2, legend_label="PULS01ANA",
+            )  # fmt: skip
+        line = _draw_trace(
+            p, source, plot_style.C4, "GED corrected", trace_std is not None
+        )
+    else:
+        line = _draw_trace(
+            p, source, "dodgerblue", "GED uncorrected", trace_std is not None
+        )
+    t0 = _draw_cal_points(p, cal, quadratic)
+    if highlight is not None:
+        p.add_layout(
+            BoxAnnotation(
+                left=_naive(highlight[0]),
+                right=_naive(highlight[1]),
+                fill_color="gold",
+                fill_alpha=0.12,
+                level="underlay",
+            )  # fmt: skip
+        )
+    p.yaxis.axis_label = "Energy diff / keV"
+    if t0:
+        tmax = _naive(trace.dropna().index.max())
+        p.x_range = Range1d(
+            t0[0] - pd.Timedelta(hours=8), t0[-1] + (tmax - t0[-1]) * 1.5
+        )
+    p.add_tools(
+        HoverTool(
+            renderers=[line],
+            mode="vline",
+            tooltips=[
+                ("Time", "@t{%F %H:%M} UTC"),
+                ("diff", "@v{0.3f} keV"),
+                ("sigma", "@sig{0.3f}"),
+            ],
+            formatters={"@t": "datetime"},
+        )  # fmt: skip
+    )
+    plot_style.finish_legend(p, "bottom_left")
+    return p
+
+
+def param_stability(
+    trace, trace_std, pul, t0, res0, parameter, period, detector, string, position
+):
+    """One detector's parameter stability over a run (lmon ``_build_param_figure``).
+
+    TrapemaxCtcCal: ±FWHM/2 (``res0``, keV) threshold segments from the run
+    start ``t0`` over 7 days, annotated; other parameters: the thresholds
+    from mtg-plot-settings. A PULS01ANA trace is drawn for the corrected
+    calibrated gain when available.
+    """
+    info = plot_style.MTG_PLOT_INFO.get(parameter, {})
+    colors = info.get("colors", ("dodgerblue", "blue"))
+    corrected = parameter == "TrapemaxCtcCal" and pul is not None
+    p = plot_style.make_figure(
+        _stability_title(period, string, position, detector), x_datetime=True
+    )
+    source = _trace_source(trace, trace_std)
+    if corrected:
+        if not pul.dropna().empty:
+            p.line(
+                x=plot_style.utc_naive(pul.index), y=pul.to_numpy(dtype=float),
+                color=plot_style.C2, legend_label="PULS01ANA",
+            )  # fmt: skip
+        line = _draw_trace(
+            p, source, plot_style.C4, "GED corrected", trace_std is not None
+        )
+    else:
+        line = _draw_trace(
+            p, source, colors[0], "GED uncorrected", trace_std is not None
+        )
+
+    res0 = float("nan") if res0 is None else float(res0)
+    lo_lim, hi_lim = (
+        (-res0 / 2, res0 / 2)
+        if "Trapemax" in parameter
+        else info.get("limits", (None, None))
+    )
+    if t0 is not None:
+        t0 = _naive(t0)
+        span = [t0, t0 + pd.Timedelta(days=7)]
+        if parameter == "TrapemaxCtcCal":
+            if np.isfinite(res0):
+                for y in (res0 / 2, -res0 / 2):
+                    p.line(
+                        span,
+                        [y, y],
+                        color=colors[1],
+                        legend_label=plot_style.QBB_LIN_LABEL,
+                    )
+                p.add_layout(
+                    Label(
+                        x=t0,
+                        y=res0 / 2 * 1.1,
+                        text=f"{res0:.2f}",
+                        text_color=colors[1],
+                        text_font_size="9px",
+                    )  # fmt: skip
+                )
+            else:
+                p.add_layout(
+                    Label(
+                        x=10,
+                        y=-10,
+                        x_units="screen",
+                        y_units="screen",
+                        text="FWHM(Qββ) not in period file",
+                        text_font_size="9px",
+                        text_color="dimgray",
+                    )  # fmt: skip
+                )
+        else:
+            for value, labelled in ((hi_lim, True), (lo_lim, hi_lim is None)):
+                if value is not None and np.isfinite(value):
+                    p.line(
+                        span, [value, value], color=colors[1],
+                        legend_label="Threshold" if labelled else "Threshold",
+                    )  # fmt: skip
+        tmax = _naive(trace.dropna().index.max())
+        p.x_range = Range1d(t0 - pd.Timedelta(minutes=30), t0 + (tmax - t0) * 1.1)
+    p.yaxis.axis_label = info.get("ylabel", parameter)
+    p.add_tools(
+        HoverTool(
+            renderers=[line],
+            mode="vline",
+            tooltips=[
+                ("Time", "@t{%F %H:%M} UTC"),
+                ("value", "@v{0.3f}"),
+                ("sigma", "@sig{0.3f}"),
+            ],
+            formatters={"@t": "datetime"},
+        )  # fmt: skip
+    )
+    plot_style.finish_legend(p, "bottom_left")
     return p

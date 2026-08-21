@@ -125,3 +125,97 @@ def test_shifter_page_menus_follow_period_file(period_tree, monkeypatch):
     mon.period = "p18"
     mon._update_menus()
     assert "No period contract" in mon.update_shifter_plot().title.text
+
+
+def _trace(n=72, start="2026-07-01"):
+    idx = pd.date_range(start, periods=n, freq="1h", tz="UTC")
+    return pd.Series(np.sin(np.arange(n) / 10), index=idx, name="V1")
+
+
+def _cal_points(with_res=True):
+    cal = pd.DataFrame(
+        {
+            "detector": ["V1", "V1"],
+            "string": [1, 1],
+            "position": [1, 1],
+            "run_start": pd.to_datetime(["2026-06-24", "2026-07-01"]),
+            "fep_diff": [0.2, -0.1],
+            "cal_const_diff": [0.05, 0.02],
+        }
+    )
+    if with_res:
+        cal["res"] = [3.0, 2.6]
+    return cal
+
+
+def test_param_stability_fwhm_segments_and_thresholds():
+    p = shifter_plots.param_stability(
+        _trace(), None, None, pd.Timestamp("2026-07-01"), 2.6, "TrapemaxCtcCal",
+        "p19", "V1", 1, 1,
+    )  # fmt: skip
+    labels = [item.label["value"] for item in p.legend[0].items]
+    assert any("FWHM/2" in label for label in labels)
+    annotations = [a.text for a in p.center if isinstance(a, Label)]
+    assert "2.60" in annotations
+    assert p.yaxis.axis_label == "Energy diff / keV"
+    # baseline: fixed ±10 % thresholds from mtg-plot-settings
+    p2 = shifter_plots.param_stability(
+        _trace(), None, None, pd.Timestamp("2026-07-01"), None, "Baseline",
+        "p19", "V1", 1, 1,
+    )  # fmt: skip
+    assert "Threshold" in [item.label["value"] for item in p2.legend[0].items]
+    assert p2.yaxis.axis_label == "Baseline % variations"
+
+
+def test_param_stability_without_res_notes_it():
+    p = shifter_plots.param_stability(
+        _trace(), None, None, pd.Timestamp("2026-07-01"), float("nan"),
+        "TrapemaxCtcCal", "p19", "V1", 1, 1,
+    )  # fmt: skip
+    notes = [a.text for a in p.center if isinstance(a, Label)]
+    assert any("FWHM" in t for t in notes)
+    assert not any("FWHM/2" in i.label["value"] for i in p.legend[0].items)
+
+
+def test_param_stability_pulser_trace_and_band():
+    trace = _trace()
+    std = trace * 0 + 0.1
+    p = shifter_plots.param_stability(
+        trace, std, trace * 0.5, pd.Timestamp("2026-07-01"), 2.0, "TrapemaxCtcCal",
+        "p19", "V1", 1, 1,
+    )  # fmt: skip
+    labels = [item.label["value"] for item in p.legend[0].items]
+    assert {"PULS01ANA", "GED corrected", "±1 sigma"} <= set(labels)
+
+
+def test_gain_shift_cal_points_and_highlight():
+    trace = _trace(n=24 * 14, start="2026-06-20")
+    p = shifter_plots.gain_shift(
+        trace, None, None, _cal_points(), "p19", "V1", 1, 1, corrected=False,
+        highlight=(pd.Timestamp("2026-07-01"), trace.index.max()),
+    )  # fmt: skip
+    labels = [item.label["value"] for item in p.legend[0].items]
+    assert {"GED uncorrected", "FEP gain", "cal. const. diff"} <= set(labels)
+    assert any("FWHM/2" in label for label in labels)
+    vlines = [s for s in p.center if isinstance(s, Span) and s.dimension == "height"]
+    assert len(vlines) == 2  # one per cal run start
+    assert any(isinstance(a, BoxAnnotation) for a in p.center)
+    assert sorted(a.text for a in p.center if isinstance(a, Label)) == ["2.60", "3.00"]
+    assert p.x_range.start < pd.Timestamp("2026-06-24")
+
+
+def test_gain_shift_without_res_columns():
+    trace = _trace(n=24 * 14, start="2026-06-20")
+    p = shifter_plots.gain_shift(
+        trace,
+        None,
+        None,
+        _cal_points(with_res=False),
+        "p19",
+        "V1",
+        1,
+        1,
+        corrected=False,
+    )
+    assert not any(isinstance(a, Label) for a in p.center)
+    assert len(p.renderers) == 3  # trace + two marker sets
