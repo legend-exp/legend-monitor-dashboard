@@ -28,6 +28,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import json
+import re
 from pathlib import Path
 
 import h5py
@@ -141,23 +142,60 @@ def label_and_unit(
     label = attrs.get("label")
     unit = attrs.get("unit")
     if label is None or unit is None:
-        vocab = manifest.get("key_vocabulary", {}).get("parameters", {})
-        entry = vocab.get(_uncamel(param_name), {})
-        label = label or entry.get("label") or param_name
-        unit = unit or entry.get("unit") or ""
+        vocab_label, vocab_unit = vocab_entry(manifest, param_name)
+        label = label or vocab_label
+        unit = unit or vocab_unit
     if relative:
         unit = "%"
     return label, unit
 
 
-def _uncamel(name: str) -> str:
-    """TrapemaxCtcCal -> trapemax_ctc_cal (inverse of the producer's _camel)."""
-    out = []
-    for ch in name:
-        if ch.isupper() and out:
-            out.append("_")
-        out.append(ch.lower())
-    return "".join(out)
+# contract key suffixes the producer appends to a parameter (peeled in order)
+_RELATIONS = (
+    ("_pulser01anaRatio", " / pulser01ana", "a. u."),
+    ("_pulser01anaDiff", " - pulser01ana", None),
+)
+
+
+def _letters(name: str) -> str:
+    return re.sub("[^a-z0-9]", "", name.lower())
+
+
+def vocab_entry(manifest: dict, param_name: str) -> tuple:
+    """(label, unit) of a contract parameter name from the manifest vocabulary.
+
+    The producer names keys ``"".join(w.capitalize() for w in p.split("_"))``
+    (``trapEmax_ctc_cal`` -> ``TrapemaxCtcCal``), which a character-wise
+    un-camelling cannot invert; instead the vocabulary is mapped forward.
+    Pulser-relation suffixes extend the label as the producer does.
+    """
+    name = param_name
+    for suffix in ("_var", "_mean"):
+        name = name.removesuffix(suffix)
+    relation, unit_override = "", None
+    for suffix, text, unit in _RELATIONS:
+        if name.endswith(suffix):
+            name = name.removesuffix(suffix)
+            relation, unit_override = text, unit
+            break
+    vocab = manifest.get("key_vocabulary", {}).get("parameters", {})
+    forward = {"".join(w.capitalize() for w in k.split("_")): k for k in vocab}
+    key = forward.get(name)
+    if key is None:
+        loose = {_letters(k): k for k in vocab}
+        key = loose.get(_letters(name))
+    entry = vocab.get(key, {}) if key else {}
+    label = (entry.get("label") or name) + relation
+    unit = unit_override or entry.get("unit") or ""
+    return label, unit
+
+
+def limits(attrs: dict) -> tuple:
+    """(lower, upper) thresholds from a hist group's attrs (None when unset)."""
+    raw = attrs.get("limits")
+    if not isinstance(raw, list | tuple) or len(raw) != 2:
+        return (None, None)
+    return tuple(None if v is None else float(v) for v in raw)
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +281,12 @@ def _load_binned(hdf_path: str, hist_key: str) -> BinnedSeries:
 
 
 def read_dist(hdf_path, flag: str, param: str) -> tuple:
-    """(edges, counts, attrs) of the 1-D distribution histogram."""
+    """(edges, counts, attrs) of the 1-D distribution histogram.
+
+    ``attrs["flow"]`` carries the (underflow, overflow) entry counts: the
+    producer ranges the histogram on the 0.5-99.5 percentiles, so the tails
+    live in the flow bins.
+    """
     hdf_path = str(hdf_path)
     key = f"hist/{flag}_{param}_dist"
     cache_key = (hdf_path, *_stat_key(hdf_path), key)
@@ -253,11 +296,43 @@ def read_dist(hdf_path, flag: str, param: str) -> tuple:
             ax0 = group["ref_axes/axis_0"].attrs
             n_bins = int(ax0["bins"])
             edges = np.linspace(float(ax0["lower"]), float(ax0["upper"]), n_bins + 1)
-            counts = group["storage/values"][1:-1]
+            values = group["storage/values"][...]
+            counts = values[1:-1]
             attrs = _decode_attrs(dict(group.attrs))
+            attrs["flow"] = (float(values[0]), float(values[-1]))
         edges.setflags(write=False)
         counts.setflags(write=False)
         _series_cache[cache_key] = (edges, counts, attrs)
+    return _series_cache[cache_key]
+
+
+def read_dist2d(hdf_path, flag: str, classifier: str) -> tuple:
+    """(edges, {detector: counts}) of a classifier's 2-D distribution.
+
+    Layout: ``hist/{flag}_{classifier}_dist2d`` with a regular value axis
+    (axis_0, flow bins stripped) and a detector category axis (axis_1).
+    """
+    hdf_path = str(hdf_path)
+    key = f"hist/{flag}_{classifier}_dist2d"
+    cache_key = (hdf_path, *_stat_key(hdf_path), key)
+    if cache_key not in _series_cache:
+        with h5py.File(hdf_path, "r") as f:
+            group = f[key]
+            ax0 = group["ref_axes/axis_0"].attrs
+            n_bins = int(ax0["bins"])
+            edges = np.linspace(float(ax0["lower"]), float(ax0["upper"]), n_bins + 1)
+            detectors = [
+                name.decode() if isinstance(name, bytes) else str(name)
+                for name in group["ref_axes/axis_1/categories"][...]
+            ]
+            values = group["storage/values"][1:-1, : len(detectors)]
+        edges.setflags(write=False)
+        by_det = {}
+        for i, det in enumerate(detectors):
+            col = np.array(values[:, i])
+            col.setflags(write=False)
+            by_det[det] = col
+        _series_cache[cache_key] = (edges, by_det)
     return _series_cache[cache_key]
 
 

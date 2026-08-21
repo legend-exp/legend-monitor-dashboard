@@ -173,7 +173,7 @@ def test_flagged_ranges_both_formats():
 def test_label_unit_fallbacks():
     manifest = {
         "key_vocabulary": {
-            "parameters": {"trapemax_ctc_cal": {"label": "Cal. gain", "unit": "keV"}}
+            "parameters": {"trapEmax_ctc_cal": {"label": "Cal. gain", "unit": "keV"}}
         }
     }
     label, unit = contract_reader.label_and_unit(
@@ -216,8 +216,10 @@ def test_plain_h5py_layout_pin(tmp_path):
 def test_no_lmon_import(tmp_path):
     script = (
         "import sys\n"
-        "from legenddashboard.geds.phy import contract_reader\n"
+        "from legenddashboard.geds.phy import contract_reader, period_reader\n"
+        "from legenddashboard.geds.phy import plot_style  # noqa: F401\n"
         f"assert contract_reader.find_manifest(r'{tmp_path}', 'p', 'r') is None\n"
+        f"assert period_reader.list_keys(r'{tmp_path}/none.hdf') == ()\n"
         "assert not any(m.startswith('legend_data_monitor') for m in sys.modules)\n"
         "print('clean')\n"
     )
