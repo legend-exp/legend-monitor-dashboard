@@ -5,12 +5,18 @@ from __future__ import annotations
 import itertools
 import logging
 import time
+from pathlib import Path
 
 import panel as pn
 import param
 
 from legenddashboard.geds.ged_monitoring import GedMonitoring
-from legenddashboard.geds.phy import period_reader, plot_style, shifter_plots
+from legenddashboard.geds.phy import (
+    contract_reader,
+    period_reader,
+    plot_style,
+    shifter_plots,
+)
 from legenddashboard.util import logo_path
 
 log = logging.getLogger(__name__)
@@ -23,7 +29,25 @@ DETECTOR_SUMMARY_TITLES = (
     "pulser_stab_uncalib",
 )
 STABILITY_PARAMETERS = ("TrapemaxCtcCal", "Trapemax", "Baseline", "BlStd")
-FAMILIES = ("Detector summary", "Param. stability", "Gain shift", "FT summary")
+FAMILIES = (
+    "Detector summary",
+    "Param. stability",
+    "Gain shift",
+    "FT summary",
+    "Event rate QC",
+    "QC rates",
+    "QC average",
+    "QC classifiers",
+)
+CLASSIFIERS = (
+    "IsValidBlSlopeClassifier",
+    "IsValidTailRmsClassifier",
+    "IsValidPzSlopeClassifier",
+    "IsValidBlSlopeRmsClassifier",
+    "IsValidBlPolyRmsClassifier",
+    "IsValidCuspeminClassifier",
+    "IsValidCuspemaxClassifier",
+)
 FT_KINDS = ("per string", "all strings", "survival fraction")
 PER_DETECTOR_FAMILIES = ("Param. stability", "Gain shift")
 
@@ -87,6 +111,18 @@ class PhyShifterMonitoring(GedMonitoring):
                 for kind in FT_KINDS
                 if period_reader.has_key(f, f"ft_summary/{keys[kind]}/{self.run}")
             ]
+        if self.shifter_family in ("QC rates", "QC average"):
+            flags = period_reader.flags_for(f, self.run)
+            if self.shifter_family == "QC average":
+                avg = period_reader.read_optional(f, f"qc_average/{self.run}")
+                if avg is not None and "flag" in avg:
+                    flags = list(dict.fromkeys(avg["flag"].astype(str)))
+            ordered = [fl for fl in plot_style.DEFAULT_QC_FLAGS if fl in flags]
+            return ordered + [fl for fl in flags if fl not in ordered]
+        if self.shifter_family == "QC classifiers":
+            frac = period_reader.read_optional(f, f"qc_classifier_frac/{self.run}")
+            present = set(frac["classifier"].astype(str)) if frac is not None else set()
+            return [c for c in CLASSIFIERS if c in present]
         return []
 
     def _detector_options(self):
@@ -177,7 +213,158 @@ class PhyShifterMonitoring(GedMonitoring):
             return self._build_per_detector()
         if self.shifter_family == "FT summary":
             return self._build_ft()
+        if self.shifter_family == "Event rate QC":
+            frame = period_reader.read_optional(
+                self._phy_file(), f"event_rate_qc/{self.run}"
+            )
+            if frame is None:
+                return self._missing(f"event_rate_qc/{self.run}")
+            return shifter_plots.event_rate_qc(frame, self.period, self.run)
+        if self.shifter_family == "QC rates":
+            return self._build_qc_rates()
+        if self.shifter_family == "QC average":
+            return self._build_qc_average()
+        if self.shifter_family == "QC classifiers":
+            return self._build_classifiers()
         return plot_style.empty_figure(f"{self.shifter_family}: not implemented")
+
+    def _string_groups(self):
+        """{string: [(name, position)]} from the run's detector map (processable)."""
+        dmap = period_reader.detector_map(self.phy_path, self.period, self.run)
+        groups = {}
+        if dmap is not None and {"name", "string", "position"} <= set(dmap.columns):
+            if "processable" in dmap:
+                dmap = dmap[dmap["processable"].astype(bool)]
+            for string, group in dmap.sort_values(["string", "position"]).groupby(
+                "string", sort=True
+            ):
+                groups[int(string)] = [
+                    (str(n), int(p))
+                    for n, p in zip(group["name"], group["position"], strict=False)
+                ]
+        else:
+            for string, names in self.strings_dict.items():
+                digits = "".join(ch for ch in str(string) if ch.isdigit())
+                groups[int(digits) if digits else string] = [
+                    (str(n), i + 1) for i, n in enumerate(names)
+                ]
+        return groups
+
+    def _build_qc_rates(self):
+        f = self._phy_file()
+        flag = self.shifter_metric
+        rates = period_reader.read_optional(f, f"qc_rate_series/{flag}/{self.run}")
+        if flag is None or rates is None:
+            return self._missing(f"qc_rate_series/{flag}/{self.run}")
+        avg = period_reader.read_optional(f, f"qc_average/{self.run}")
+        avg_rates = {}
+        if avg is not None:
+            sub = avg[avg["flag"].astype(str) == flag]
+            avg_rates = dict(
+                zip(sub["detector"].astype(str), sub["rate_mhz"], strict=False)
+            )
+        groups = self._string_groups()
+        string = self._string_number()
+        # the tab20 cycle advances over all (flag, string) figures before this one
+        colors = itertools.cycle(plot_style.TAB20)
+        flags = self.param.shifter_metric.objects
+        for fl in flags:
+            for st, dets in groups.items():
+                if fl == flag and st == string:
+                    dets_here = dets
+                    break
+                for name, _ in dets:
+                    if name in rates.columns:
+                        next(colors)
+            else:
+                continue
+            break
+        else:
+            return self._missing(f"string {self.string} in the detector map")
+        return shifter_plots.qc_rate_series(
+            rates, dets_here, avg_rates, flag, self.period, self.run, string, colors
+        )
+
+    def _build_qc_average(self):
+        f = self._phy_file()
+        flag = self.shifter_metric
+        avg = period_reader.read_optional(f, f"qc_average/{self.run}")
+        if flag is None or avg is None:
+            return self._missing(f"qc_average/{self.run}")
+        sub = avg[avg["flag"].astype(str) == flag]
+        rate_by_name = dict(
+            zip(sub["detector"].astype(str), sub["rate_mhz"], strict=False)
+        )
+        groups = {
+            st: [n for n, _ in dets] for st, dets in self._string_groups().items()
+        }
+        dead = period_reader.read_optional(f, f"dead_time/{self.run}")
+        dead_pct = (
+            float(dead["dead_time_pct"].iloc[0])
+            if dead is not None and "dead_time_pct" in dead and len(dead)
+            else None
+        )
+        return shifter_plots.qc_average(
+            rate_by_name, groups, flag, dead_pct, self.period, self.run
+        )
+
+    def _build_classifiers(self):
+        f = self._phy_file()
+        par = self.shifter_metric
+        if par is None:
+            return self._missing(f"qc_classifier_frac/{self.run}")
+        frac = period_reader.read_optional(f, f"qc_classifier_frac/{self.run}")
+        string = self._string_number()
+        dets = self._string_groups().get(string, [])
+        fracs = {}
+        frac_rows = None
+        if frac is not None:
+            frac_rows = frac[frac["classifier"].astype(str) == par]
+            fracs = {
+                (str(d), str(t)): float(v)
+                for d, t, v in zip(
+                    frac_rows["detector"],
+                    frac_rows["event_type"],
+                    frac_rows["percent_in_range"],
+                    strict=False,
+                )  # fmt: skip
+            }
+        # per-detector histograms need the run contract's dist2d groups
+        manifest = contract_reader.find_manifest(
+            self.phy_path, self.period, self.run, self.run_dict[self.run]["experiment"]
+        )
+        if manifest is not None:
+            run_dir = (
+                Path(self.phy_path) / "generated/plt/hit/phy" / self.period / self.run
+            )
+            geds = contract_reader.geds_file_from_manifest(manifest, run_dir)
+            keys = contract_reader.available_keys(manifest)
+            if geds is not None and f"All_{par}_dist2d" in keys:
+                counts_by_flag, edges = {}, None
+                for flag in plot_style.CLASSIFIER_FLAG_LABELS:
+                    if f"{flag}_{par}_dist2d" in keys:
+                        edges, counts_by_flag[flag] = contract_reader.read_dist2d(
+                            geds, flag, par
+                        )
+                return shifter_plots.classifier_grid(
+                    edges,
+                    counts_by_flag,
+                    dets,
+                    fracs,
+                    par,
+                    self.period,
+                    self.run,
+                    string,
+                )
+        if frac_rows is None or frac_rows.empty:
+            return self._missing(f"qc_classifier_frac/{self.run} for {par}")
+        names = {n for n, _ in dets}
+        rows = frac_rows[frac_rows["detector"].astype(str).isin(names)]
+        if rows.empty:
+            return self._missing(f"{par} fractions for string {self.string}")
+        return shifter_plots.classifier_fraction_bars(
+            rows, par, self.period, self.run, string
+        )
 
     def _build_ft(self):
         f = self._phy_file()

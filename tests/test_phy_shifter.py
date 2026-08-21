@@ -259,3 +259,84 @@ def test_ft_all_strings_and_survival():
     p2 = shifter_plots.ft_survival(_hourly(cols=("survival_fraction",)), "p19")
     assert p2.renderers[0].glyph.line_color == "red"
     assert p2.yaxis.axis_label == "FT surviving events (%)"
+
+
+def test_qc_rate_series_threshold_only_for_discharge_and_saturated():
+    import itertools
+
+    from legenddashboard.geds.phy import plot_style
+
+    rates = _hourly()
+    dets = [("V1", 1), ("V2", 2), ("V9", 3)]
+    p = shifter_plots.qc_rate_series(
+        rates, dets, {"V1": 1.234, "V2": 0.5}, "IsDischarge", "p19", "r001", 1,
+        itertools.cycle(plot_style.TAB20),
+    )  # fmt: skip
+    labels = [i.label["value"] for i in p.legend[0].items]
+    assert "V1 - pos 1 - 1.23 mHz" in labels
+    assert "5 mHz upper threshold" in labels
+    assert [s.location for s in _spans(p)] == [5]
+    p2 = shifter_plots.qc_rate_series(
+        rates, dets, {}, "IsValidBlSlope", "p19", "r001", 1,
+        itertools.cycle(plot_style.TAB20),
+    )  # fmt: skip
+    assert _spans(p2) == []
+    assert "V1 - pos 1 - nan mHz" in [i.label["value"] for i in p2.legend[0].items]
+
+
+def test_qc_average_log_axis_keeps_empty_slots_and_dead_time_title():
+    groups = {1: ["V1", "V2"], 4: ["B1"]}
+    p = shifter_plots.qc_average(
+        {"V1": 2.0, "B1": 0.0}, groups, "IsDischarge", 0.0173, "p19", "r001"
+    )
+    assert p.x_range.factors == ["V1", "V2", "B1"]
+    assert p.renderers[0].data_source.data["det"] == ["V1"]  # zero dropped on log axis
+    assert "tot dead time 0.017%" in p.title.text
+    assert [s.location for s in _spans(p)] == [5]
+    texts = [a.text for a in p.center if isinstance(a, Label)]
+    assert sorted(texts) == ["String 1", "String 4"]
+
+
+def test_classifier_grid_and_fraction_fallback():
+    edges = np.linspace(-15, 15.4, 77)
+    counts = {
+        "All": {"V1": np.ones(76), "V2": np.ones(76)},
+        "IsPulser": {"V1": np.ones(76)},
+    }
+    fracs = {("V1", "All"): 99.0, ("V1", "IsPulser"): 100.0}
+    layout = shifter_plots.classifier_grid(
+        edges, counts, [("V1", 1), ("V2", 2), ("V3", 3)], fracs,
+        "IsValidBlSlopeClassifier", "p19", "r001", 1,
+    )  # fmt: skip
+    grid = layout[1].object  # bokeh GridPlot: children are (figure, row, col)
+    figs = [child[0] for child in grid.children]
+    assert len(figs) == 2  # V3 has no histogram -> skipped like the pipeline
+    labels = [i.label["value"] for i in figs[0].legend[0].items]
+    assert "All events - 99.0%" in labels
+    assert "TP - 100.0%" in labels
+    assert (figs[0].x_range.start, figs[0].x_range.end) == (-10, 10)
+
+    frac = pd.DataFrame(
+        {
+            "classifier": ["IsValidBlSlopeClassifier"] * 4,
+            "detector": ["V1", "V1", "V2", "V2"],
+            "string": [1, 1, 1, 1],
+            "event_type": ["All", "IsPulser", "All", "IsPulser"],
+            "percent_in_range": [99.0, 100.0, 98.0, 97.0],
+        }
+    )
+    p = shifter_plots.classifier_fraction_bars(
+        frac, "IsValidBlSlopeClassifier", "p19", "r001", 1
+    )
+    assert p.x_range.factors == ["V1", "V2"]
+    assert [i.label["value"] for i in p.legend[0].items] == ["All events", "TP"]
+
+
+def test_event_rate_qc_series_and_mass_title():
+    frame = _hourly(cols=("all_events", "failing_qc", "surviving_qc"))
+    frame["on_mass_kg"] = 123.456
+    p = shifter_plots.event_rate_qc(frame, "p19", "r001")
+    labels = [i.label["value"] for i in p.legend[0].items]
+    assert labels == ["All events", "Failing QC", "Surviving QC"]
+    assert p.legend[0].title == "ON mass = 123.5 kg"
+    assert len(p.renderers[0].data_source.data["x"]) == len(frame) + 1  # trailing edge

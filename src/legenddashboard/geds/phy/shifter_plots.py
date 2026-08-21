@@ -14,6 +14,8 @@ from math import pi
 
 import numpy as np
 import pandas as pd
+import panel as pn
+from bokeh.layouts import gridplot
 from bokeh.models import (
     BoxAnnotation,
     ColumnDataSource,
@@ -26,6 +28,7 @@ from bokeh.models import (
     Span,
     Whisker,
 )
+from bokeh.transform import dodge
 
 from legenddashboard.geds.phy import plot_style
 
@@ -539,4 +542,239 @@ def ft_survival(surviving_frac, period):
     p.yaxis.axis_label = "FT surviving events (%)"
     p.grid.grid_line_color = None
     plot_style.finish_legend(p, "bottom_left")
+    return p
+
+
+# ---------------------------------------------------------------------------
+# quality cuts (lmon plots/qc.py) and event-rate QC (plots/summary.py)
+# ---------------------------------------------------------------------------
+
+_THRESHOLDED_FLAGS = ("IsDischarge", "IsSaturated")
+
+
+def _qc_threshold(p, flag):
+    """5 mHz upper threshold with shaded exclusion (IsDischarge/IsSaturated)."""
+    if flag not in _THRESHOLDED_FLAGS:
+        return
+    limit = plot_style.MTG_PLOT_INFO[flag]["limits"][1]
+    plot_style.threshold(p, limit, above=True, label=f"{limit} mHz upper threshold")
+
+
+def qc_rate_series(rates, dets, avg_rates, flag, period, run, string, colors):
+    """1 h QC rate per detector of one string (lmon ``_rate_series_figure``).
+
+    ``dets``: (name, position) pairs in string order; ``avg_rates``: name ->
+    integrated rate (mHz) for the legend; ``colors``: the shared tab20
+    iterator (advanced across flags and strings, as in the pipeline).
+    """
+    p = plot_style.make_figure(
+        f"{period} {run} - String: {string}", x_datetime=True, height=400,
+        tools="pan,box_zoom,wheel_zoom,reset,save",
+    )  # fmt: skip
+    drawn = 0
+    for name, pos in dets:
+        if name not in rates.columns:
+            continue
+        avg = avg_rates.get(name, float("nan"))
+        label = f"{name} - pos {pos} - {round(float(avg), 2)} mHz"
+        _steps(p, rates.index, rates[name], next(colors), label)
+        drawn += 1
+    if not drawn:
+        return plot_style.empty_figure(
+            f"{flag}: no detectors of string {string} in {run}"
+        )
+    _qc_threshold(p, flag)
+    p.yaxis.axis_label = f"{period} {run} - 1h {flag} rate (mHz)"
+    p.grid.grid_line_color = None
+    plot_style.finish_legend(p, "top_right")
+    return p
+
+
+def qc_average(rate_by_name, string_groups, flag, dead_time_pct, period, run):
+    """Per-detector integrated QC rate on a log axis (lmon ``_average_figure``).
+
+    ``rate_by_name``: name -> mHz; ``string_groups``: {string: [names]} in
+    string/position order (detectors without a rate keep their slot).
+    """
+    factors, strings, xs, ys = [], [], [], []
+    for string, names in string_groups.items():
+        for name in names:
+            if name in factors:
+                continue
+            factors.append(name)
+            strings.append(string)
+            rate = rate_by_name.get(name)
+            if rate is not None and np.isfinite(rate) and rate > 0:
+                xs.append(name)
+                ys.append(float(rate))
+    title = f"period: {period} - run: {run} - passing {flag}"
+    if flag == "IsDischarge":
+        title += (
+            " - tot dead time unavailable"
+            if dead_time_pct is None
+            else f" - tot dead time {dead_time_pct:.3f}%"
+        )
+    if not factors:
+        return plot_style.empty_figure(title + " (no detectors)")
+    p = plot_style.make_figure(
+        title, x_range=FactorRange(*factors), y_axis_type="log", height=400,
+        tools="pan,box_zoom,wheel_zoom,reset,save",
+    )  # fmt: skip
+    source = ColumnDataSource({"det": xs, "rate": ys})
+    glyph = p.scatter(x="det", y="rate", source=source, color="dodgerblue", size=7)
+    p.add_tools(
+        HoverTool(renderers=[glyph], tooltips=[("Detector", "@det"), ("Rate", "@rate{0.3f} mHz")])
+    )  # fmt: skip
+    y_lo = min(ys) / 2 if ys else 0.1
+    y_hi = max(ys) * 2 if ys else 10
+    p.y_range = Range1d(y_lo, y_hi)
+    plot_style.string_separators(p, factors, strings, y_lo * (y_hi / y_lo) ** 0.05)
+    _qc_threshold(p, flag)
+    p.yaxis.axis_label = f"Average rate {flag}=True (mHz)"
+    p.xaxis.major_label_orientation = pi / 2
+    p.xaxis.major_label_text_font_size = "8px"
+    p.grid.grid_line_color = None
+    plot_style.finish_legend(p, "top_right")
+    return p
+
+
+def classifier_grid(edges, counts_by_flag, dets, fracs, par, period, run, string):
+    """Per-detector classifier distributions of one string (lmon ``_classifier_figure``).
+
+    ``counts_by_flag``: event-type flag -> {detector: counts}; ``fracs``:
+    (detector, flag) -> percent in [-5, 5]. One small log-y figure per
+    detector (step outlines per event type), ±5 lines with the outer region
+    shaded, x fixed to [-10, 10]; returned as a Bokeh grid.
+    """
+    figures = []
+    all_counts = counts_by_flag.get("All", {})
+    for name, pos in dets:
+        if name not in all_counts:
+            continue
+        p = plot_style.make_figure(
+            "", width=420, height=260, x_range=Range1d(-10, 10), y_axis_type="log",
+            tools="pan,box_zoom,wheel_zoom,reset,save",
+        )  # fmt: skip
+        p.sizing_mode = "fixed"
+        for (flag, label), color in zip(
+            plot_style.CLASSIFIER_FLAG_LABELS.items(),
+            plot_style.MPL_CYCLE,
+            strict=False,
+        ):
+            counts = counts_by_flag.get(flag, {}).get(name)
+            if counts is None:
+                counts = np.zeros(len(edges) - 1)
+            perc = fracs.get((name, flag), float("nan"))
+            y = np.where(np.asarray(counts, dtype=float) > 0, counts, np.nan)
+            p.step(
+                x=edges[:-1], y=y, mode="after", color=color, line_width=1.2,
+                legend_label=f"{label} - {perc:.1f}%",
+            )  # fmt: skip
+        for x in (-5, 5):
+            p.add_layout(
+                Span(
+                    location=x,
+                    dimension="height",
+                    line_color="black",
+                    line_dash="dashed",
+                )
+            )
+        p.add_layout(
+            BoxAnnotation(
+                right=-5, fill_color="darkgray", fill_alpha=0.2, level="underlay"
+            )
+        )
+        p.add_layout(
+            BoxAnnotation(
+                left=5, fill_color="darkgray", fill_alpha=0.2, level="underlay"
+            )
+        )
+        p.xaxis.axis_label = "Classifiers"
+        p.yaxis.axis_label = "Counts"
+        p.grid.grid_line_color = None
+        plot_style.finish_legend(p, "top_right", title=f"{name} (pos {pos})")
+        figures.append(p)
+    if not figures:
+        return plot_style.empty_figure(
+            f"{par}: no classifier histograms for string {string}"
+        )
+    ncols = max(1, int(np.ceil(np.sqrt(len(figures)))))
+    grid = gridplot(figures, ncols=ncols, toolbar_location="right")
+    return pn.Column(
+        pn.pane.Markdown(f"### {period} {run} - string {string} - {par}"),
+        pn.pane.Bokeh(grid),
+    )
+
+
+def classifier_fraction_bars(frac, par, period, run, string):
+    """In-range fraction per detector and event type (fallback without dist2d).
+
+    ``frac``: qc_classifier_frac rows of one classifier and string.
+    """
+    rows = frac.sort_values(["string", "detector"]) if "string" in frac else frac
+    dets = list(dict.fromkeys(rows["detector"].astype(str)))
+    flags = [
+        f for f in plot_style.CLASSIFIER_FLAG_LABELS if f in set(rows["event_type"])
+    ]
+    if not dets or not flags:
+        return plot_style.empty_figure(
+            f"{par}: no classifier fractions for string {string}"
+        )
+    p = plot_style.make_figure(
+        f"{period} {run} - string {string} - {par}: events within ±5",
+        x_range=FactorRange(*dets), height=400, tools="pan,box_zoom,wheel_zoom,reset,save",
+    )  # fmt: skip
+    width = 0.8 / len(flags)
+    for i, (flag, color) in enumerate(zip(flags, plot_style.MPL_CYCLE, strict=False)):
+        sub = rows[rows["event_type"] == flag]
+        by_det = dict(
+            zip(sub["detector"].astype(str), sub["percent_in_range"], strict=False)
+        )
+        perc = [float(by_det.get(d, np.nan)) for d in dets]
+        offset = -0.4 + width * (i + 0.5)
+        p.vbar(
+            x=dodge("det", offset, range=p.x_range), top="perc", width=width * 0.9,
+            source=ColumnDataSource({"det": dets, "perc": perc}), color=color, alpha=0.8,
+            legend_label=plot_style.CLASSIFIER_FLAG_LABELS[flag],
+        )  # fmt: skip
+    p.y_range = Range1d(0, 105)
+    p.yaxis.axis_label = "Events within ±5 (%)"
+    p.xaxis.major_label_orientation = pi / 2
+    p.xaxis.major_label_text_font_size = "8px"
+    plot_style.finish_legend(p, "bottom_left")
+    return p
+
+
+def event_rate_qc(frame, period, run):
+    """QC-split hourly event rate (lmon ``_event_rate_figure``)."""
+    series = (
+        ("all_events", "All events"),
+        ("delayed_discharges", "Delayed discharges"),
+        ("failing_qc", "Failing QC"),
+        ("surviving_qc", "Surviving QC"),
+    )
+    p = plot_style.make_figure(
+        f"{period} {run} - event rate by QC outcome", x_datetime=True, height=380,
+        tools="pan,box_zoom,wheel_zoom,reset,save",
+    )  # fmt: skip
+    on_mass = (
+        float(frame["on_mass_kg"].iloc[0]) if "on_mass_kg" in frame else float("nan")
+    )
+    for column, label in series:
+        if column not in frame.columns:
+            continue
+        rate = frame[column].dropna()
+        if rate.empty:
+            continue
+        index = plot_style.utc_naive(rate.index)
+        edges = index.append(pd.DatetimeIndex([index[-1] + pd.Timedelta(hours=1)]))
+        values = np.append(rate.to_numpy(dtype=float), rate.to_numpy(dtype=float)[-1])
+        p.step(
+            x=edges, y=values, mode="after", color=plot_style.EVENT_RATE_COLORS[column],
+            line_width=1.5, legend_label=label,
+        )  # fmt: skip
+    p.yaxis.axis_label = "Hourly rate normalized by ON mass (mHz/kg)"
+    p.grid.grid_line_color = None
+    title = f"ON mass = {on_mass:.1f} kg" if np.isfinite(on_mass) else None
+    plot_style.finish_legend(p, "top_right", title=title)
     return p
