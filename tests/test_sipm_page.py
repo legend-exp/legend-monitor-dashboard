@@ -118,8 +118,8 @@ def tree(tmp_path):
                 {
                     "pe_a": [0.02] * 4,
                     "pe_m": [1.0] * 4,
-                    "threshold_a": [3.0] * 4,
-                    "source": ["lar/p17/r005/l200-par_hit-overwrite.yaml"] * 4,
+                    "threshold_a": [0.5] * 4,
+                    "source": ["lar/p17/r005/x.yaml"] * 3 + ["lar/p19/r001/x.yaml"],
                 },
                 index=pd.Index(SIPMS, name="name"),
             ),  # fmt: skip
@@ -222,9 +222,9 @@ def test_summaries(tree):
     assert list(p.y_range.factors) == ["spms_dark_rate", "spms_noisy_frac"]
     mon.sipm_view = "PE calibration"
     col = mon.update_sipm_plot()
-    assert "newest override p17/r005" in col[0].object
-    assert "3 period(s) behind p20" in col[0].object
-    assert "keep older values" in col[0].object
+    # the producer resolves the override per SiPM, so a run mixes sources
+    assert "3 SiPM(s) from p17/r005 (3 period(s) behind p20)" in col[0].object
+    assert "1 SiPM(s) from p19/r001 (1 period(s) behind p20)" in col[0].object
     assert list(col[1].value.columns) == [
         "name",
         "barrel",

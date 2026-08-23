@@ -30,6 +30,7 @@ from legenddashboard.geds.phy.phy_plots import (
     phy_plot_binned_vsTime,
     phy_plot_dist_histogram,
 )
+from legenddashboard.spms import sipm_plots
 from legenddashboard.util import LRUDict, logo_path
 
 log = logging.getLogger(__name__)
@@ -37,7 +38,17 @@ log = logging.getLogger(__name__)
 GROUPINGS = ("Barrel x position", "Fiber")
 STYLES = ("Time", "Histogram")
 UNITS = ("Absolute", "Relative")
-SUMMARIES = ("Explorer", "Noise cross-check", "Channel health", "PE calibration")
+SUMMARIES = (
+    "Explorer",
+    "PE spectrum",
+    "Noise cross-check",
+    "Channel health",
+    "PE calibration",
+)
+PE_LAYOUTS = ("Grid", "Overlay")
+#: event samples of the p.e. spectrum, in menu order (forced triggers first:
+#: dark counts give the cleanest single-photoelectron peaks)
+PE_SAMPLES = {"Forced trigger": "IsBsln", "Physics": "IsPhysics"}
 
 _qcp_cache = LRUDict(maxsize=32)
 
@@ -115,6 +126,12 @@ class SiPMMonitoring(Monitoring):
     )
     sipm_units = param.ObjectSelector(default=UNITS[0], objects=list(UNITS))
     sipm_plot_style = param.ObjectSelector(default=STYLES[0], objects=list(STYLES))
+    sipm_pe_sample = param.ObjectSelector(
+        default=next(iter(PE_SAMPLES)), objects=list(PE_SAMPLES), label="PE sample"
+    )
+    sipm_pe_layout = param.ObjectSelector(
+        default=PE_LAYOUTS[0], objects=list(PE_LAYOUTS), label="PE layout"
+    )
     sipm_resampled = param.Integer(default=10, bounds=(0, 60))
 
     def __init__(self, **kwargs):
@@ -193,6 +210,16 @@ class SiPMMonitoring(Monitoring):
             self.sipm_plots_types = types[0]
         if self.sipm_plots not in values:
             self.sipm_plots = values[0]
+        spms_file = self._spms_file(manifest)
+        present = contract_reader.hist_keys(spms_file) if spms_file else ()
+        samples = [
+            name
+            for name, flag in PE_SAMPLES.items()
+            if f"{flag}_EnergyInPe_dist2d" in present
+        ] or list(PE_SAMPLES)
+        self.param.sipm_pe_sample.objects = samples
+        if self.sipm_pe_sample not in samples:
+            self.sipm_pe_sample = samples[0]
         groups = list(self._groups())
         self.param.sipm_group.objects = groups
         if self._group_menu is not None:
@@ -222,6 +249,8 @@ class SiPMMonitoring(Monitoring):
         "sipm_units",
         "sipm_plot_style",
         "sipm_resampled",
+        "sipm_pe_sample",
+        "sipm_pe_layout",
     )
     def update_sipm_plot(self):
         start = time.time()
@@ -230,6 +259,8 @@ class SiPMMonitoring(Monitoring):
                 return self._empty("No spms contract (backfill pending?)")
             if self.sipm_view == "Explorer":
                 pane = self._explorer()
+            elif self.sipm_view == "PE spectrum":
+                pane = self._pe_spectrum()
             elif self.sipm_view == "Noise cross-check":
                 pane = self._noise_cross_check()
             elif self.sipm_view == "Channel health":
@@ -312,6 +343,48 @@ class SiPMMonitoring(Monitoring):
             limits=limits,
             envelope="HasAnyNoise" not in key_param,  # boolean rate: min/max are 0/1
             line_dashes=dashes,
+        )
+
+    def _thresholds(self):
+        """valid-hit threshold per SiPM (p.e.) from the period calibration."""
+        cal = period_reader.read_optional(
+            period_reader.period_file(self.phy_path, self.period),
+            f"spms_calibration/{self.run}",
+        )
+        if cal is None or "threshold_a" not in cal:
+            return {}
+        return {str(name): float(v) for name, v in cal["threshold_a"].items()}
+
+    def _pe_spectrum(self):
+        """Per-pulse p.e. spectra, 0-5 p.e., for checking the PE calibration."""
+        manifest = self._manifest()
+        data_file = self._spms_file(manifest)
+        flag = PE_SAMPLES[self.sipm_pe_sample]
+        key = f"{flag}_EnergyInPe_dist2d"
+        # the spectra are appended by a producer pass that does not update the
+        # manifest inventory, so ask the file itself
+        if key not in contract_reader.hist_keys(data_file):
+            return self._empty(f"Key {key} missing (needs a newer pipeline run)")
+        names = self._groups().get(self.sipm_group, [])
+        if not names:
+            return self._empty(f"No SiPMs in group {self.sipm_group}")
+        edges, counts_by_det = contract_reader.read_dist2d(
+            data_file, flag, "EnergyInPe"
+        )
+        build = (
+            sipm_plots.pe_spectrum_grid
+            if self.sipm_pe_layout == "Grid"
+            else sipm_plots.pe_spectrum_overlay
+        )
+        return build(
+            edges,
+            counts_by_det,
+            names,
+            self._thresholds(),
+            self.sipm_group,
+            self.period,
+            self.run,
+            f"{self.sipm_pe_sample} pulses",
         )
 
     def _noise_cross_check(self):
@@ -438,6 +511,30 @@ class SiPMMonitoring(Monitoring):
                 start = i
         return p
 
+    def _calibration_banner(self, table):
+        """Where the PE calibration of these SiPMs comes from, oldest first.
+
+        The producer resolves the override per SiPM, so a run typically
+        mixes several source files; the banner names them by period.
+        """
+        if "source" not in table or table.empty:
+            return "PE calibration source unknown"
+        sources = {}
+        for raw in table["source"]:
+            source, stale = calibration_staleness(raw, self.period)
+            if source is not None:
+                sources.setdefault(source, [0, stale])[0] += 1
+        if not sources:
+            return "PE calibration source unknown"
+        parts = [
+            f"{count} SiPM(s) from {source}"
+            + (f" ({stale} period(s) behind {self.period})" if stale else "")
+            for source, (count, stale) in sorted(
+                sources.items(), key=lambda kv: -kv[1][0]
+            )
+        ]
+        return "PE calibration: " + "; ".join(parts)
+
     def _calibration(self):
         """The PE calibration in force, with its source and staleness."""
         cal = period_reader.read_optional(
@@ -467,17 +564,7 @@ class SiPMMonitoring(Monitoring):
             )
             if c in table
         ]
-        source, stale = calibration_staleness(
-            table["source"].iloc[0] if "source" in table and len(table) else "",
-            self.period,
-        )
-        if source is None:
-            banner = "PE calibration source unknown"
-        else:
-            banner = f"PE calibration: newest override {source}"
-            if stale:
-                banner += f", **{stale} period(s) behind {self.period}**"
-            banner += " — SiPMs absent from that file keep older values"
+        banner = self._calibration_banner(table)
         return pn.Column(
             pn.pane.Markdown(f"### {self.period} {self.run} - {banner}"),
             pn.widgets.Tabulator(

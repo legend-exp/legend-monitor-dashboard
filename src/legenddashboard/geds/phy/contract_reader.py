@@ -320,6 +320,27 @@ def read_dist(hdf_path, flag: str, param: str) -> tuple:
     return _series_cache[cache_key]
 
 
+def hist_keys(hdf_path) -> tuple:
+    """Names of the ``hist/`` groups actually in a contract file.
+
+    The manifest is the inventory of what the build wrote, but a producer
+    pass that appends groups afterwards (e.g. the p.e. spectra) does not
+    update it — so a consumer that must know whether a key is really there
+    asks the file. Cached per file version like every other read.
+    """
+    hdf_path = str(hdf_path)
+    cache_key = (hdf_path, *_stat_key(hdf_path), "__hist_keys__")
+    if cache_key not in _series_cache:
+        try:
+            handle = h5py.File(hdf_path, "r")
+        except OSError:
+            return ()  # being rewritten: report nothing, cache nothing
+        with handle as f:
+            names = tuple(sorted(f["hist"])) if "hist" in f else ()
+        _series_cache[cache_key] = names
+    return _series_cache[cache_key]
+
+
 def read_dist2d(hdf_path, flag: str, classifier: str) -> tuple:
     """(edges, {detector: counts}) of a classifier's 2-D distribution.
 

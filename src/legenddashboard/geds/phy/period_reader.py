@@ -20,6 +20,7 @@ is never cached and never raises from the ``*_optional``/listing helpers.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import h5py
@@ -27,6 +28,8 @@ import pandas as pd
 
 from legenddashboard.geds.phy import contract_reader
 from legenddashboard.util import LRUDict
+
+log = logging.getLogger(__name__)
 
 _keys_cache = LRUDict(maxsize=32)
 
@@ -54,7 +57,14 @@ def list_keys(path) -> tuple:
         return ()
     if cache_key not in _keys_cache:
         keys = []
-        with h5py.File(path, "r") as f:
+        try:
+            handle = h5py.File(path, "r")
+        except OSError:
+            # the producer may be rewriting the file: report nothing this
+            # time, and do not cache it -- the next stat sees a new version
+            log.debug("period file %s is not readable right now", path, exc_info=True)
+            return ()
+        with handle as f:
             # pandas stores a frame as a group carrying the pandas_type attr;
             # walking with h5py avoids opening a full HDFStore
             def visit(name, obj):
