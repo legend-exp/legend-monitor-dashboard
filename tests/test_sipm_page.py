@@ -222,8 +222,9 @@ def test_summaries(tree):
     assert list(p.y_range.factors) == ["spms_dark_rate", "spms_noisy_frac"]
     mon.sipm_view = "PE calibration"
     col = mon.update_sipm_plot()
-    assert "p17/r005" in col[0].object
-    assert "3 period(s) stale" in col[0].object
+    assert "newest override p17/r005" in col[0].object
+    assert "3 period(s) behind p20" in col[0].object
+    assert "keep older values" in col[0].object
     assert list(col[1].value.columns) == [
         "name",
         "barrel",

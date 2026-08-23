@@ -82,7 +82,13 @@ def group_labels(detector_map, grouping):
 
 
 def calibration_staleness(source, period):
-    """(source period/run, periods stale) parsed from a calibration source path."""
+    """(source period/run, periods behind) of the newest applicable override.
+
+    The producer stamps every SiPM with the newest override file that
+    applies, but such a file often carries only a few SiPMs; the rest keep
+    values from older files, so this is a lower bound on how stale a given
+    SiPM's calibration is.
+    """
     match = re.search(r"(p\d{2})/(r\d{3})", str(source))
     if not match:
         return None, None
@@ -468,9 +474,10 @@ class SiPMMonitoring(Monitoring):
         if source is None:
             banner = "PE calibration source unknown"
         else:
-            banner = f"PE calibration source: {source}"
+            banner = f"PE calibration: newest override {source}"
             if stale:
-                banner += f" — **{stale} period(s) stale**"
+                banner += f", **{stale} period(s) behind {self.period}**"
+            banner += " — SiPMs absent from that file keep older values"
         return pn.Column(
             pn.pane.Markdown(f"### {self.period} {self.run} - {banner}"),
             pn.widgets.Tabulator(
