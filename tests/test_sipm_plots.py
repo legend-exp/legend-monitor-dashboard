@@ -108,3 +108,63 @@ def test_builders_report_missing_group():
         EDGES, {}, ["S1"], {}, "IB top", "p20", "r001", "Forced"
     )
     assert "No p.e. spectra" in empty.title.text
+
+
+def test_off_band_peak_is_flagged_not_quoted_as_drift():
+    """A dominant feature far below 1 p.e. is reported, not fitted through.
+
+    Some p22 SiPMs peak near 0.45-0.5 p.e. with only a weak shoulder near
+    0.9; calling that a -55 % gain drift would assert an interpretation the
+    spectrum does not support.
+    """
+    counts = spectrum(0.47) + 0.15 * spectrum(0.95)
+    centroid, dominant = sipm_plots.spe_peak(EDGES, counts)
+    assert centroid is None
+    assert 0.45 <= dominant <= 0.55  # the shoulder pulls the weighted mean up
+    assert sipm_plots.centroid_color(centroid, dominant) == "red"
+    label = sipm_plots._label("S070", centroid, dominant)
+    assert "no peak in 0.6-1.5 p.e." in label
+    assert f"{dominant:.2f}" in label
+    assert "%" not in label  # no drift percentage is claimed
+
+
+def test_in_band_peak_still_reports_a_centroid():
+    centroid, dominant = sipm_plots.spe_peak(EDGES, spectrum(1.06))
+    assert centroid == pytest.approx(1.06, abs=0.03)
+    assert centroid == dominant
+    assert sipm_plots.centroid_color(centroid, dominant) == "darkorange"
+    assert "1 p.e. at 1.05 (+5%)" in sipm_plots._label("S060", centroid, dominant)
+
+
+def test_summary_counts_off_band_channels():
+    results = {
+        "A": (1.00, 1.00, None),
+        "B": (0.88, 0.88, None),
+        "C": (None, 0.47, None),
+        "D": (None, None, None),
+        "E": (1.01, 1.01, 0.5),
+    }
+    summary = sipm_plots._summary(results)
+    assert "median 1.000 p.e." in summary
+    assert "1/3 off by >10%" in summary
+    assert "1 with no peak in band" in summary
+    assert "1 with a larger sub-threshold feature" in summary
+
+
+def test_sub_threshold_feature_is_reported_with_the_centroid():
+    """A peak found above threshold is quoted, but a larger one below it is named.
+
+    Searching from the valid-hit threshold otherwise returns a tidy centroid
+    for a channel whose spectrum is dominated by something else entirely.
+    """
+    counts = spectrum(0.50) + 0.2 * spectrum(1.02)
+    centroid, dominant, below = sipm_plots.spe_verdict(EDGES, counts, floor=0.75)
+    assert centroid == pytest.approx(1.02, abs=0.03)
+    assert dominant == centroid
+    assert below == pytest.approx(0.50, abs=0.05)
+    assert sipm_plots.centroid_color(centroid, dominant, below) == "darkorange"
+    label = sipm_plots._label("S096", centroid, dominant, below)
+    assert f"1 p.e. at {centroid:.2f}" in label
+    assert f"larger feature at {below:.2f}" in label
+    # without a floor the dominant feature is the sub-threshold one
+    assert sipm_plots.spe_verdict(EDGES, counts)[0] is None
