@@ -63,9 +63,18 @@ def _message(obj):
 
 
 def test_shifter_every_family_and_metric(monitors):
+    from legenddashboard.geds.phy import period_reader
+
     _, mon = monitors
     period = mon.period
-    runs = list(mon.run_dict)[-2:]
+    # the production tree runs ahead of the monitoring output, so drive the
+    # last runs the period contract actually covers, not the last runs there are
+    covered = period_reader.runs_for(
+        period_reader.period_file(PHY_TREE, period), "detector_summary/pulser_stab"
+    )
+    runs = [run for run in mon.run_dict if run in covered][-2:]
+    if not runs:
+        pytest.skip(f"no run of {period} is in the period contract")
     built, missing = [], []
     for run in runs:
         mon.run = run
