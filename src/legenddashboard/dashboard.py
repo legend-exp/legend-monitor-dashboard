@@ -289,7 +289,12 @@ def build_dashboard(
 
         pn.state.onload(build_editor, threaded=True)
         main_tabs.append(
-            ("Metadata Editor", pn.param.ParamFunction(build_editor, lazy=True))
+            (
+                "Metadata Editor",
+                pn.param.ParamFunction(
+                    build_editor, lazy=True, sizing_mode="stretch_width"
+                ),
+            )
         )
     if "llama" not in disable_page:
         llama_monitor = LlamaMonitoring(

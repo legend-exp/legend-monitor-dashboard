@@ -302,7 +302,9 @@ class MetaMonitoring(Monitoring):
                 "selector restricts every plot to the runs of one "
                 "`runlists.yaml` dataset."
             ),
-            pn.param.ParamMethod(self.view_overview, lazy=True),
+            pn.param.ParamMethod(
+                self.view_overview, lazy=True, sizing_mode="stretch_width"
+            ),
             name="Overview",
             sizing_mode="stretch_width",
         )
@@ -555,7 +557,9 @@ class MetaMonitoring(Monitoring):
             usability_box,
             psd_box,
             reason_in,
-            pn.param.ParamMethod(self.view_status_preview, lazy=True),
+            pn.param.ParamMethod(
+                self.view_status_preview, lazy=True, sizing_mode="stretch_width"
+            ),
             apply_btn,
             width=max(w + 40, 300),
             styles=self._STICKY,
@@ -566,7 +570,9 @@ class MetaMonitoring(Monitoring):
                     "Tap a cell to pick that detector and start run; the "
                     "matrix follows the edit mode (usability / PSD)."
                 ),
-                pn.param.ParamMethod(self.view_status_matrix, lazy=True),
+                pn.param.ParamMethod(
+                    self.view_status_matrix, lazy=True, sizing_mode="stretch_width"
+                ),
                 sizing_mode="stretch_width",
                 styles={"min-width": "0"},
             ),
@@ -899,7 +905,9 @@ class MetaMonitoring(Monitoring):
             styles=self._STICKY,
         )
         content = pn.Column(
-            pn.param.ParamMethod(self.view_groupings_warning, lazy=True),
+            pn.param.ParamMethod(
+                self.view_groupings_warning, lazy=True, sizing_mode="stretch_width"
+            ),
             pn.pane.Markdown(
                 "**Edit the block as a table** (one row per partition and "
                 "period; runs as a comma-separated list, ranges like "
@@ -909,7 +917,9 @@ class MetaMonitoring(Monitoring):
             table,
             pn.Row(add_row_btn, del_row_btn, split_run_in, split_btn, apply_btn),
             pn.layout.Divider(),
-            pn.param.ParamMethod(self.view_partitions_matrix, lazy=True),
+            pn.param.ParamMethod(
+                self.view_partitions_matrix, lazy=True, sizing_mode="stretch_width"
+            ),
             sizing_mode="stretch_width",
             styles={"min-width": "0"},
         )
@@ -1339,7 +1349,9 @@ class MetaMonitoring(Monitoring):
             preview,
             pn.layout.Divider(),
             pn.pane.Markdown("**Currently ignored cycles**"),
-            pn.param.ParamMethod(self.view_cycles_table, lazy=True),
+            pn.param.ParamMethod(
+                self.view_cycles_table, lazy=True, sizing_mode="stretch_width"
+            ),
             name="Bad cycles",
             sizing_mode="stretch_width",
         )
@@ -1467,7 +1479,9 @@ class MetaMonitoring(Monitoring):
                 sizing_mode="stretch_width",
             ),
             refresh_btn,
-            pn.param.ParamMethod(self.view_pending, lazy=True),
+            pn.param.ParamMethod(
+                self.view_pending, lazy=True, sizing_mode="stretch_width"
+            ),
             pn.layout.Divider(),
             message_in,
             pn.Row(username_in, token_in),

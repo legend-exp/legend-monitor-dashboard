@@ -350,9 +350,16 @@ class GedMonitoring(Monitoring):
             pn.Tabs(
                 (
                     "Detector Visu",
-                    pn.param.ParamMethod(self.view_meta_visu, lazy=True),
+                    pn.param.ParamMethod(
+                        self.view_meta_visu, lazy=True, sizing_mode="stretch_width"
+                    ),
                 ),
-                ("Detector Map", pn.param.ParamMethod(self.view_meta, lazy=True)),
+                (
+                    "Detector Map",
+                    pn.param.ParamMethod(
+                        self.view_meta, lazy=True, sizing_mode="stretch_width"
+                    ),
+                ),
                 sizing_mode="scale_both",
                 dynamic=True,
             ),

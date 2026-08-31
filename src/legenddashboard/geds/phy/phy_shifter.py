@@ -541,7 +541,10 @@ class PhyShifterMonitoring(GedMonitoring):
                 pn.Column("Detector (string from sidebar)", detector),
             ),
             pn.param.ParamMethod(
-                self.update_shifter_plot, lazy=True, loading_indicator=True
+                self.update_shifter_plot,
+                lazy=True,
+                loading_indicator=True,
+                sizing_mode="stretch_width",
             ),
             name="Phy. Shifter",
             sizing_mode="stretch_width",

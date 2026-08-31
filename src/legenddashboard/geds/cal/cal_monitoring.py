@@ -402,7 +402,12 @@ class CalMonitoring(GedMonitoring):
             pn.Row("## Current Plot:", details_param_currentValue),
             pn.Row("Channel:", details_ch_param, "Plot type:", details_type_param),
             pn.param.ParamMethod(self.get_run_and_channel, lazy=True),
-            pn.param.ParamMethod(self.view_details, lazy=True, loading_indicator=True),
+            pn.param.ParamMethod(
+                self.view_details,
+                lazy=True,
+                loading_indicator=True,
+                sizing_mode="stretch_width",
+            ),
             name="Cal. Details",
             sizing_mode="scale_both",
         )
@@ -448,7 +453,12 @@ class CalMonitoring(GedMonitoring):
                 summary_param_download,
                 pn.param.ParamMethod(self.download_summary_files, lazy=True),
             ),
-            pn.param.ParamMethod(self.view_summary, lazy=True, loading_indicator=True),
+            pn.param.ParamMethod(
+                self.view_summary,
+                lazy=True,
+                loading_indicator=True,
+                sizing_mode="stretch_width",
+            ),
             name="Cal. Summary",
             sizing_mode="scale_both",
         )
@@ -493,7 +503,12 @@ class CalMonitoring(GedMonitoring):
             ),
             pn.Row("## Current Plot:", tracking_param_currentValue),
             # pn.Row("Selected time range:", tracking_range_param),
-            pn.param.ParamMethod(self.view_tracking, lazy=True, loading_indicator=True),
+            pn.param.ParamMethod(
+                self.view_tracking,
+                lazy=True,
+                loading_indicator=True,
+                sizing_mode="stretch_width",
+            ),
             name="Cal. Tracking",
             sizing_mode="scale_both",
         )

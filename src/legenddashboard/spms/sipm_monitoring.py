@@ -692,7 +692,10 @@ class SiPMMonitoring(Monitoring):
             pn.Row("View:", radio("sipm_view")),
             pn.Row(grid),
             pn.param.ParamMethod(
-                self.update_sipm_plot, lazy=True, loading_indicator=True
+                self.update_sipm_plot,
+                lazy=True,
+                loading_indicator=True,
+                sizing_mode="stretch_width",
             ),
             name="SiPM",
             sizing_mode="stretch_width",
