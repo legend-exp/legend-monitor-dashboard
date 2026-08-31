@@ -350,7 +350,7 @@ class GedMonitoring(Monitoring):
             pn.Tabs(
                 (
                     "Detector Visu",
-                    pn.pane.Bokeh(self.view_meta_visu, sizing_mode="scale_width"),
+                    pn.param.ParamMethod(self.view_meta_visu, lazy=True),
                 ),
                 ("Detector Map", pn.param.ParamMethod(self.view_meta, lazy=True)),
                 sizing_mode="scale_both",

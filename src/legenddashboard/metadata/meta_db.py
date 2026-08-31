@@ -73,6 +73,9 @@ class MetaDB:
         self.meta = LegendMetadata(str(self.meta_path), lazy=True)
         self.status_db = TextDB(self.datasets_path, lazy=True)
         self._groupings_cache: dict[str, dict] = {}
+        # statuses are merged per run timestamp and read once per matrix
+        # column; cleared here so every edit (reload) is picked up
+        self._statuses_cache: dict[tuple[str, str], dict] = {}
         self._runinfo = None
         self._runlists = None
 
@@ -120,8 +123,18 @@ class MetaDB:
     # -- extras for the editor ---------------------------------------------
 
     def statuses_on(self, tstamp: str, category: str = "all") -> dict:
-        """Resolved detector statuses valid at ``tstamp`` for ``category``."""
-        return self.status_db.statuses.on(tstamp, system=category)
+        """Resolved detector statuses valid at ``tstamp`` for ``category``.
+
+        Cached per (timestamp, category): the matrices ask for one merge per
+        run column, the same merges twice over, and each costs ~100 ms.
+        ``reload`` drops the cache so staged edits are seen.
+        """
+        key = (tstamp, category)
+        cached = self._statuses_cache.get(key)
+        if cached is None:
+            cached = self.status_db.statuses.on(tstamp, category=category)
+            self._statuses_cache[key] = cached
+        return cached
 
     def runlists(self) -> dict:
         """Parsed ``runlists.yaml``: ``{dataset: {datatype: {period: runs}}}``."""

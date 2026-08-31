@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import importlib.resources
 import logging
 import os
@@ -53,16 +54,21 @@ sort_dict = {
 }
 
 
+@functools.lru_cache(maxsize=8)
+def _read_config_file(path: str) -> AttrsDict:
+    return AttrsDict(Props.read_from(path)).paths
+
+
 def read_config(config: str | dict) -> AttrsDict:
     """
     Parse the config file or dictionary and return an AttrsDict.
+
+    Parsing a file is cached: the config is read on every session build and
+    never changes while the server runs.
     """
     if isinstance(config, str | Path):
-        config = AttrsDict(Props.read_from(config))
-    else:
-        config = AttrsDict(config)
-
-    return config.paths
+        return _read_config_file(str(config))
+    return AttrsDict(config).paths
 
 
 class sort_dets:

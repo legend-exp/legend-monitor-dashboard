@@ -261,18 +261,35 @@ def build_dashboard(
     if "metaedit" not in disable_page and "metadata_edit" in config:
         from legenddashboard.metadata.meta_monitoring import MetaMonitoring
 
-        meta_monitor = MetaMonitoring(
-            base_path=cal_path,
-            meta_path=config.metadata_edit,
-            run_dict=base_monitor.param.run_dict,
-            periods=base_monitor.param.periods,
-            period=base_monitor.param.period,
-            run=base_monitor.param.run,
-            date_range=base_monitor.param.date_range,
-            name="L200 Metadata Editor",
-        )
+        # The editor is the most expensive page to build, so it is not built
+        # while the user is waiting for the first paint: the tab holds a lazy
+        # ParamFunction, and the same builder is scheduled on a worker thread
+        # once the page is up, so the pane is usually ready when clicked.
+        built: dict[str, object] = {}
+        build_lock = threading.Lock()
+
+        def build_editor():
+            # the onload thread and a quick tab click can race for it
+            with build_lock:
+                if "pane" not in built:
+                    built["pane"] = _build_editor_pane()
+            return built["pane"]
+
+        def _build_editor_pane():
+            return MetaMonitoring(
+                base_path=cal_path,
+                meta_path=config.metadata_edit,
+                run_dict=base_monitor.param.run_dict,
+                periods=base_monitor.param.periods,
+                period=base_monitor.param.period,
+                run=base_monitor.param.run,
+                date_range=base_monitor.param.date_range,
+                name="L200 Metadata Editor",
+            ).build_metadata_pane(widget_widths)
+
+        pn.state.onload(build_editor, threaded=True)
         main_tabs.append(
-            ("Metadata Editor", meta_monitor.build_metadata_pane(widget_widths))
+            ("Metadata Editor", pn.param.ParamFunction(build_editor, lazy=True))
         )
     if "llama" not in disable_page:
         llama_monitor = LlamaMonitoring(
@@ -457,6 +474,10 @@ def run_dashboard() -> None:
     # single-threaded and without a loading indicator.
     pn.config.nthreads = args.num_threads
     pn.config.global_loading_spinner = True
+    # serve the document first and evaluate the lazy panes afterwards, on a
+    # worker thread: the page appears immediately and fills in behind the
+    # spinner instead of the user waiting for every figure to be built
+    pn.config.defer_load = True
 
     serve_kwargs = {
         "port": args.port,
