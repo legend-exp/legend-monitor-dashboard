@@ -54,7 +54,11 @@ def test_timeline_ends_come_from_runinfo():
     by_label = {
         (label, dtype): (left, right)
         for label, dtype, left, right in zip(
-            cells["label"], cells["datatype"], cells["left"], cells["right"]
+            cells["label"],
+            cells["datatype"],
+            cells["left"],
+            cells["right"],
+            strict=False,
         )
     }
     left, right = by_label[("p01 r000", "phy")]
