@@ -47,7 +47,9 @@ def test_reload_drops_the_status_cache(monkeypatch):
     stub = _StubStatusDB()
     # reload() rebuilds the DB objects; emulate it the way _load does
     monkeypatch.setattr(
-        MetaDB, "_load", lambda self: (
+        MetaDB,
+        "_load",
+        lambda self: (
             setattr(self, "status_db", stub),
             setattr(self, "_statuses_cache", {}),
         ),
