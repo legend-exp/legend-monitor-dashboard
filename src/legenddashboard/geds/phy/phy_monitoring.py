@@ -178,9 +178,11 @@ class PhyMonitoring(GedMonitoring):
             period_reader.period_file(self.phy_path, self.period),
             f"cal_points/{self.run}",
         )
-        if rows is None or "res" not in rows or "detector" not in rows:
+        if rows is None or not {"res", "detector"} <= set(rows.columns):
             return {}
-        last = rows.sort_values("run_start").groupby("detector").tail(1)
+        if "run_start" in rows.columns:
+            rows = rows.sort_values("run_start")
+        last = rows.groupby("detector").tail(1)
         out = {}
         for det, raw in zip(last["detector"], last["res"], strict=False):
             try:
@@ -235,7 +237,7 @@ class PhyMonitoring(GedMonitoring):
             flag,
             key_param,
             contract_reader.snap_cadence(
-                self.phy_resampled, manifest.get("cadences", ["1min"])
+                self.phy_resampled, contract_reader.cadences(manifest)
             ),
         )
 
@@ -273,7 +275,7 @@ class PhyMonitoring(GedMonitoring):
             )
 
         cadence = contract_reader.snap_cadence(
-            self.phy_resampled, manifest.get("cadences", ["1min"])
+            self.phy_resampled, contract_reader.cadences(manifest)
         )
         data_file_sc = (
             run_dir / f"{experiment}-{self.period}-{self.run}-phy-slow_control.hdf"

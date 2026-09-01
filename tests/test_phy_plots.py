@@ -73,6 +73,9 @@ def test_fwhm_spans_per_detector_and_missing_note():
     p2 = phy_plots.phy_plot_binned_vsTime(mean, std, lo, hi, _meta(), fwhm={})
     notes = [a.text for a in p2.center if isinstance(a, Label)]
     assert any("FWHM" in t for t in notes)
+    # fwhm=None = not a calibrated-gain plot: no note
+    p3 = phy_plots.phy_plot_binned_vsTime(mean, std, lo, hi, _meta())
+    assert not [a for a in p3.center if isinstance(a, Label)]
 
 
 def test_time_axis_is_utc():
@@ -94,6 +97,7 @@ def test_histogram_reports_flow_and_limits():
     notes = [a.text for a in p.center if isinstance(a, Label)]
     assert any("underflow 3" in t and "overflow 4" in t for t in notes)
     assert [s.location for s in _spans(p, "height")] == [8]
+    assert _spans(p, "width") == []  # limits are x-values: no horizontal lines
 
 
 @pytest.mark.parametrize("n", [1, 2])
