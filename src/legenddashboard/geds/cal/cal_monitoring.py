@@ -13,7 +13,12 @@ from matplotlib.figure import Figure
 
 import legenddashboard.geds.string_visulization as visu
 from legenddashboard.geds import cal
-from legenddashboard.geds.cal.shelf_cache import render_png, shelf_entry, shelf_keys
+from legenddashboard.geds.cal.shelf_cache import (
+    _stat_key,
+    render_png,
+    shelf_entry,
+    shelf_keys,
+)
 from legenddashboard.geds.ged_monitoring import GedMonitoring
 from legenddashboard.util import get_par_cache, logo_path, read_config, sorter
 
@@ -286,10 +291,11 @@ class CalMonitoring(GedMonitoring):
 
     def _png_pane(self, get_figure):
         """Rasterise a cached (shared) figure once; serve PNG bytes after."""
+        # fingerprint the shelf (path+mtime+size) so a regenerated shelf drops
+        # the stale PNG, and key on the channel id the shelve lookup uses
         key = (
-            str(self.plot_dict),
-            self.run_dict[self.run]["timestamp"],
-            self.channel,
+            *_stat_key(self.plot_dict),
+            self.channel[:9],
             self.parameter,
             self.plot_type_details,
         )
