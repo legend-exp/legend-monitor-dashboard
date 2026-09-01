@@ -63,10 +63,13 @@ def render_png(cache_key: tuple, make_figure) -> bytes:
     in the shared entry cache, which is why rasterisation is serialised.
     """
     if cache_key not in _png_cache:
-        fig = make_figure()
-        buf = io.BytesIO()
+        # double-checked: figures may live in the shared entry cache, so both
+        # building and rasterising must happen at most once per key
         with _render_lock:
-            FigureCanvasAgg(fig)  # unpickled figures carry no canvas
-            fig.canvas.print_figure(buf, format="png", dpi=RENDER_DPI)
-        _png_cache[cache_key] = buf.getvalue()
+            if cache_key not in _png_cache:
+                fig = make_figure()
+                buf = io.BytesIO()
+                FigureCanvasAgg(fig)  # unpickled figures carry no canvas
+                fig.canvas.print_figure(buf, format="png", dpi=RENDER_DPI)
+                _png_cache[cache_key] = buf.getvalue()
     return _png_cache[cache_key]

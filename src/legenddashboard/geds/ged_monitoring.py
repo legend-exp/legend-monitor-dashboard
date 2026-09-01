@@ -116,7 +116,11 @@ class GedMonitoring(Monitoring):
         # The table is a pure function of the channel map at the run's
         # timestamp; ged, cal and phy instances all rebuild it on every run
         # change, so share one build per process (copied: Tabulator may edit).
-        cache_key = (self.base_path, self.run_dict[self.run]["timestamp"], self.sort_by)
+        try:
+            timestamp = self.run_dict[self.run]["timestamp"]
+        except KeyError:  # run/run_dict mid-transition
+            return
+        cache_key = (self.base_path, timestamp, self.sort_by)
         cached = _meta_df_cache.get(cache_key)
         if cached is not None:
             self.meta_df = cached.copy()
