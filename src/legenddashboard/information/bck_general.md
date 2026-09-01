@@ -14,7 +14,7 @@ The dashboard is based on the [Panel](https://panel.holoviz.org/) library and is
 The dashboard is divided into three main sections:
 
 - **Header**: The header contains the title of the dashboard and the current time of the last update. Furthermore, you find the general navigation buttons to select a period and a run as well as to control the sorting and the string selection of the HPGe detectors. The buttons change all plots at once why it takes some time to update all plots since all data has to be reloaded. These buttons are implemented as FloatingWidgets and can be moved around the dashboard to arange according to your needs. In addition, you find a spinning wheel in the right corner which indicates that the dashboard is currently updating the plots.
-- **Main**: The main panel contains all plots sorted by Germanium detector calibration plots (_Cal._), Physics Monitoring plots for HPGe detector (_Phy._), SiPM monitoring plots (_SiPM_), Muon veto monitoring plots (_Muon_), LLama monitoring plots (_Llama_) as well as this General panel (_General_) and a Metadata tab (_Metadata_) which also contains detector visualizations.
+- **Main**: The main panel contains all plots sorted by Germanium detector calibration plots (_Cal._), Physics Monitoring plots for HPGe detector (_Phy._), SiPM monitoring plots (_SiPM_), Muon veto monitoring plots (_Muon_) as well as this General panel (_General_) and a Metadata tab (_Metadata_) which also contains detector visualizations.
 - **Sidebar**: The sidebar contains contains selectors for the different tabs in the main panel sorted according to the main panel's tab names. You can expand and collapse the sidebar selectors by clicking on the small arrow next to the tab name.
 
 ## Interactivity

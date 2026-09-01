@@ -42,7 +42,6 @@ def build_dashboard(
     from legenddashboard.geds.ged_monitoring import GedMonitoring
     from legenddashboard.geds.phy.phy_monitoring import PhyMonitoring
     from legenddashboard.geds.phy.phy_shifter import PhyShifterMonitoring
-    from legenddashboard.llama.llama_monitoring import LlamaMonitoring
     from legenddashboard.muon.muon_monitoring import MuonMonitoring
     from legenddashboard.spms.sipm_monitoring import SiPMMonitoring
     from legenddashboard.util import period_refresh_registry, read_config
@@ -59,8 +58,6 @@ def build_dashboard(
     phy_path = config.phy
     # tmp path for caching
     tmp_cal_path = config.tmp
-    # llama data path
-    llama_path = config.llama
 
     # FastListTemplate with header and LEGEND logo from the LEGEND webpage. The
     # main panes are wrapped in a single pn.Tabs (see below) instead of the old
@@ -290,16 +287,6 @@ def build_dashboard(
                 ),
             )
         )
-    if "llama" not in disable_page:
-        llama_monitor = LlamaMonitoring(
-            llama_path=llama_path,
-            base_path=cal_path,
-            name="L200 Llama Monitoring",
-        )
-        main_tabs.append(
-            ("Llama", llama_monitor.build_llama_pane(widget_widths=widget_widths))
-        )
-
     # Information tab (was previously appended by the per-session factory).
     info_path = (
         importlib.resources.files("legenddashboard") / "information" / "general.md"
