@@ -12,6 +12,7 @@ dashboard's run discovery needs, e.g.::
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -36,18 +37,6 @@ def _has_content(obj):
     if hasattr(obj, "renderers"):
         return bool(obj.renderers)
     return True  # Panel layout (grid / fallback column)
-
-
-def _message(obj):
-    """Title of a contentless figure, i.e. a "nothing to draw" message.
-
-    The tree is live: a producer backfill can be rewriting a run while this
-    runs, and runs written by an older pipeline lack the newest keys. Both
-    surface as message figures, which are a skip here, not a failure.
-    """
-    if _has_content(obj):
-        return None
-    return getattr(getattr(obj, "title", None), "text", "") or "(no title)"
 
 
 def _message(obj):
@@ -183,7 +172,13 @@ def test_muon_page_every_view(monitors):
         run
         for run in mon.run_dict
         if (m := contract_reader.find_manifest(PHY_TREE, mon.period, run)) is not None
-        and contract_reader.file_from_manifest(m, ".", "pmts") is not None
+        and (
+            f := contract_reader.file_from_manifest(
+                m, Path(PHY_TREE) / "generated/plt/hit/phy" / mon.period / run, "pmts"
+            )
+        )
+        is not None
+        and f.exists()  # a listed file can be missing mid-backfill
     ]
     if not with_pmts:
         pytest.skip("no run with a pmts contract")

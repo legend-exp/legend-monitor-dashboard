@@ -275,9 +275,15 @@ class MuonMonitoring(Monitoring):
         """
         manifest = self._manifest()
         data_file = self._pmts_file(manifest)
-        if "All_Pulseheight_dist2d" not in contract_reader.available_keys(
+        # a producer pass may append hist groups without updating the
+        # manifest, so ask the file before declaring the key absent
+        present = "All_Pulseheight_dist2d" in contract_reader.available_keys(
             manifest, "pmts"
-        ):
+        ) or (
+            data_file is not None
+            and "All_Pulseheight_dist2d" in contract_reader.hist_keys(data_file)
+        )
+        if not present:
             return self._empty("All_Pulseheight_dist2d not in the pmts contract")
         edges, by_det = contract_reader.read_dist2d(data_file, "All", "Pulseheight")
         names = [n for n in self._group_names() if n in by_det]

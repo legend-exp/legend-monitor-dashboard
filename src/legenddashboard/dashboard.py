@@ -167,34 +167,23 @@ def build_dashboard(
         for title, pane in cal_panes.items():
             main_tabs.append((title, pane))
     if "phy" not in disable_page:
-        if "cal" not in disable_page:
-            phy_monitor = PhyMonitoring(
-                base_path=cal_path,
-                phy_path=phy_path,
-                run_dict=base_monitor.param.run_dict,
-                periods=base_monitor.param.periods,
-                period=base_monitor.param.period,
-                run=base_monitor.param.run,
-                date_range=base_monitor.param.date_range,
-                channel=ged_monitor.param.channel,
-                sort_by=ged_monitor.param.sort_by,
-                name="L200 Phy Monitoring",
-            )
-            ged_monitor.param.watch(
-                lambda e: setattr(phy_monitor, "string", e.new), "string"
-            )
-        else:
-            phy_monitor = PhyMonitoring(
-                phy_path=phy_path,
-                base_path=cal_path,
-                run_dict=base_monitor.param.run_dict,
-                periods=base_monitor.param.periods,
-                period=base_monitor.param.period,
-                run=base_monitor.param.run,
-                date_range=base_monitor.param.date_range,
-                name="L200 Phy Monitoring",
-            )
-        # the shifter page shares the selectors; string follows the ged sidebar
+        # the ged sidebar exists whether or not the cal pages do, so both phy
+        # pages always follow its channel/sorting/string selections
+        phy_monitor = PhyMonitoring(
+            base_path=cal_path,
+            phy_path=phy_path,
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            channel=ged_monitor.param.channel,
+            sort_by=ged_monitor.param.sort_by,
+            name="L200 Phy Monitoring",
+        )
+        ged_monitor.param.watch(
+            lambda e: setattr(phy_monitor, "string", e.new), "string"
+        )
         shifter_monitor = PhyShifterMonitoring(
             base_path=cal_path,
             phy_path=phy_path,
@@ -203,12 +192,12 @@ def build_dashboard(
             period=base_monitor.param.period,
             run=base_monitor.param.run,
             date_range=base_monitor.param.date_range,
+            sort_by=ged_monitor.param.sort_by,
             name="L200 Phy Shifter",
         )
-        if "cal" not in disable_page:
-            ged_monitor.param.watch(
-                lambda e: setattr(shifter_monitor, "string", e.new), "string"
-            )
+        ged_monitor.param.watch(
+            lambda e: setattr(shifter_monitor, "string", e.new), "string"
+        )
         main_tabs.append(
             ("Phy. Shifter", shifter_monitor.build_shifter_pane(widget_widths))
         )
