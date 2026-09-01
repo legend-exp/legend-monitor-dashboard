@@ -26,6 +26,7 @@ copies so plot code can never corrupt the cache.
 from __future__ import annotations
 
 import contextlib
+import copy
 import dataclasses
 import json
 import re
@@ -78,7 +79,18 @@ def find_manifest(
     manifest = _manifest_cache[key]
     if manifest.get("schema_version") != 2:
         return None
-    return manifest
+    return copy.deepcopy(manifest)
+
+
+def cadences(manifest: dict, subsystem: str = "geds") -> list:
+    """Cadence labels: the top-level manifest field, else the subsystem's file
+    entry (some producer versions record them per file only)."""
+    if manifest.get("cadences"):
+        return list(manifest["cadences"])
+    for name, entry in manifest.get("files", {}).items():
+        if f"-{subsystem}" in name and entry.get("cadences"):
+            return list(entry["cadences"])
+    return ["1min"]
 
 
 def geds_file_from_manifest(manifest: dict, run_dir: Path) -> Path | None:
@@ -250,7 +262,8 @@ def read_binned(hdf_path, flag: str, param: str, cadence: str) -> BinnedSeries:
     cache_key = (hdf_path, *_stat_key(hdf_path), hist_key)
     if cache_key not in _series_cache:
         _series_cache[cache_key] = _load_binned(hdf_path, hist_key)
-    return _series_cache[cache_key]
+    series = _series_cache[cache_key]
+    return dataclasses.replace(series, attrs=copy.deepcopy(series.attrs))
 
 
 def _load_binned(hdf_path: str, hist_key: str) -> BinnedSeries:
@@ -303,7 +316,8 @@ def read_dist(hdf_path, flag: str, param: str) -> tuple:
         edges.setflags(write=False)
         counts.setflags(write=False)
         _series_cache[cache_key] = (edges, counts, attrs)
-    return _series_cache[cache_key]
+    edges, counts, attrs = _series_cache[cache_key]
+    return edges, counts, copy.deepcopy(attrs)
 
 
 def read_dist2d(hdf_path, flag: str, classifier: str) -> tuple:

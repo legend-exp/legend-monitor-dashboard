@@ -235,7 +235,7 @@ def configure_par_disk_cache(tmp_path) -> None:
         return
     path = Path(tmp_path) / "legenddashboard-par-cache"
     try:
-        path.mkdir(parents=True, exist_ok=True)
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
     except OSError:
         log.warning("par disk cache disabled: cannot create %s", path)
         _par_disk_cache = None
@@ -248,7 +248,8 @@ def _read_pars(pars_path: Path):
         return Props.read_from(pars_path)
     st = pars_path.stat()
     pickled = _par_disk_cache / f"{pars_path.stem}-{st.st_mtime_ns}-{st.st_size}.pkl"
-    if pickled.exists():
+    # unpickle only regular non-symlink files: tmp may be shared
+    if pickled.is_file() and not pickled.is_symlink():
         try:
             with pickled.open("rb") as f:
                 return pickle.load(f)
