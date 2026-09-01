@@ -282,6 +282,7 @@ def phy_plot_binned_vsTime(
 
     n_channels = len(mean_df.columns)
     colors = color_palette("hls", max(n_channels, 1)).as_hex()
+    fwhm_requested = fwhm is not None  # None = not a calibrated-gain plot
     fwhm = fwhm or {}
 
     p = plot_style.make_figure(
@@ -356,7 +357,7 @@ def phy_plot_binned_vsTime(
         plot_style.legend_proxy(
             p, plot_style.QBB_LIN_LABEL, color="gray", line_dash="dotdash"
         )
-    elif fwhm is not None:  # requested (calibrated gain) but the period file lacks it
+    elif fwhm_requested:  # calibrated gain, but the period file lacks FWHM
         p.add_layout(
             Label(
                 x=10,
@@ -442,8 +443,6 @@ def phy_plot_dist_histogram(dist, meta: PlotMeta, limits=(None, None)):
     p.yaxis.axis_label = "Counts"
 
     lo, hi = limits
-    plot_style.threshold(p, hi, above=True, shade=False)
-    plot_style.threshold(p, lo, above=False, shade=False)
     for value in (lo, hi):
         if value is not None:
             p.add_layout(

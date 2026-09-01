@@ -164,7 +164,7 @@ def label_and_unit(
 
 # contract key suffixes the producer appends to a parameter (peeled in order)
 _RELATIONS = (
-    ("_pulser01anaRatio", " / pulser01ana", "a. u."),
+    ("_pulser01anaRatio", " / pulser01ana", "a.u."),
     ("_pulser01anaDiff", " - pulser01ana", None),
 )
 

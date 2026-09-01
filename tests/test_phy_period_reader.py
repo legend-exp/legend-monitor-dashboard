@@ -103,7 +103,7 @@ MANIFEST = {
         ("TrapemaxCtcCal", "trapEmax_ctc_cal", "keV"),
         ("TrapemaxCtcCal_var", "trapEmax_ctc_cal", "keV"),
         ("AoeCustom", "Custom A/E", "a.u."),
-        ("Baseline_pulser01anaRatio_var", "FPGA baseline / pulser01ana", "a. u."),
+        ("Baseline_pulser01anaRatio_var", "FPGA baseline / pulser01ana", "a.u."),
         ("BlStd_pulser01anaDiff", "Noise - pulser01ana", "ADC"),
         ("Unknown_mean", "Unknown", ""),
     ],
