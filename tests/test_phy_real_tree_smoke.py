@@ -172,3 +172,42 @@ def test_sipm_page_every_view(monitors):
                             n += 1
     assert n, "nothing rendered"
     print(f"\nsipm rendered {n}")
+
+
+def test_muon_page_every_view(monitors):
+    from legenddashboard.geds.phy import contract_reader
+    from legenddashboard.muon.muon_monitoring import MuonMonitoring
+
+    mon = MuonMonitoring(base_path=PRODENV, phy_path=PHY_TREE, name="muon")
+    with_pmts = [
+        run
+        for run in mon.run_dict
+        if (m := contract_reader.find_manifest(PHY_TREE, mon.period, run)) is not None
+        and contract_reader.file_from_manifest(m, ".", "pmts") is not None
+    ]
+    if not with_pmts:
+        pytest.skip("no run with a pmts contract")
+    mon.run = with_pmts[-1]
+    n = 0
+    for view in mon.param.muon_view.objects:
+        mon.muon_view = view
+        for group in mon.param.muon_group.objects:
+            mon.muon_group = group
+            obj = mon.update_muon_plot()
+            assert _has_content(obj), f"{view}/{group}"
+            n += 1
+    mon.muon_view = "Explorer"
+    for style in mon.param.muon_plot_style.objects:
+        mon.muon_plot_style = style
+        mon._update_menus()
+        for value in list(mon.param.muon_plots.objects):
+            mon.muon_plots = value
+            for units in mon.param.muon_units.objects:
+                mon.muon_units = units
+                p = mon.update_muon_plot()
+                title = getattr(getattr(p, "title", None), "text", "")
+                assert (
+                    p.renderers or "missing" in title or "No distribution" in title
+                ), f"{style}/{value}/{units}"
+                n += 1
+    print(f"\nmuon rendered {n}")

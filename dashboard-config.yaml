@@ -2,7 +2,6 @@ paths:
   base: ..
   cal: ..
   phy: /path/to/phy
-  muon: /path/to/muon
   tmp: /tmp
   llama: /path/to/llama
   # editable legend-metadata clone for the Metadata editor page (cloned /

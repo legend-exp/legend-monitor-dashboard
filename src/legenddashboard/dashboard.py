@@ -57,8 +57,6 @@ def build_dashboard(
     cal_path = config.cal
     # path to physics data
     phy_path = config.phy
-    # path to muon data
-    muon_path = config.muon
     # tmp path for caching
     tmp_cal_path = config.tmp
     # llama data path
@@ -240,8 +238,8 @@ def build_dashboard(
 
     if "muon" not in disable_page:
         muon_monitor = MuonMonitoring(
-            muon_path=muon_path,
             base_path=cal_path,
+            phy_path=phy_path,
             run_dict=base_monitor.param.run_dict,
             periods=base_monitor.param.periods,
             period=base_monitor.param.period,
@@ -249,11 +247,7 @@ def build_dashboard(
             date_range=base_monitor.param.date_range,
             name="L200 Muon Monitoring",
         )
-        muon_panes = muon_monitor.build_muon_panes(
-            widget_widths=widget_widths,
-        )
-        for title, pane in muon_panes.items():
-            main_tabs.append((title, pane))
+        main_tabs.append(("Muon", muon_monitor.build_muon_pane(widget_widths)))
     if "meta" not in disable_page:
         main_tabs.append(
             ("MetaData", ged_monitor.build_meta_pane(widget_widths=widget_widths))

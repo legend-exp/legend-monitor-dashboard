@@ -220,6 +220,7 @@ def test_no_lmon_import(tmp_path):
         "from legenddashboard.geds.phy import plot_style, shifter_plots  # noqa: F401\n"
         "from legenddashboard.geds.phy import phy_shifter  # noqa: F401\n"
         "from legenddashboard.spms import sipm_monitoring  # noqa: F401\n"
+        "from legenddashboard.muon import muon_monitoring  # noqa: F401\n"
         f"assert contract_reader.find_manifest(r'{tmp_path}', 'p', 'r') is None\n"
         f"assert period_reader.list_keys(r'{tmp_path}/none.hdf') == ()\n"
         "assert not any(m.startswith('legend_data_monitor') for m in sys.modules)\n"

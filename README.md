@@ -44,7 +44,6 @@ paths:
   base: .. # production cycle (period/run discovery)
   cal: .. # production cycle used by the cal pages
   phy: /path/to/phy # physics monitoring data
-  muon: /path/to/muon # muon monitoring data
   llama: /path/to/llama # llama DAQ data
   tmp: /tmp # writable dir (CSV downloads, caches)
   # editable legend-metadata clone for the Metadata Editor page; cloned /
@@ -100,7 +99,6 @@ Each page group also has a standalone entry point:
 ```sh
 uv run dashboard-cal      dashboard-config.yaml -p 9009
 uv run dashboard-phy      dashboard-config.yaml -p 9009
-uv run dashboard-muon     dashboard-config.yaml -p 9009
 uv run dashboard-llama    dashboard-config.yaml -p 9009
 uv run dashboard-meta     dashboard-config.yaml -p 9009   # read-only metadata pages
 uv run dashboard-metaedit dashboard-config.yaml -p 9009   # Metadata Editor only
