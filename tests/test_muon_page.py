@@ -7,6 +7,7 @@ import json
 import h5py
 import numpy as np
 import pandas as pd
+import param
 import pytest
 
 from legenddashboard.muon import muon_monitoring as mm
@@ -130,7 +131,8 @@ def tree(tmp_path):
 def _monitor(root):
     runs = {"r001": {"experiment": "l200", "timestamp": "20260101T000000Z"}}
     mon = mm.MuonMonitoring.__new__(mm.MuonMonitoring)
-    mm.MuonMonitoring.__mro__[-2].__init__(
+    # bare param layer only: skip Monitoring.__init__'s tree discovery
+    param.Parameterized.__init__(
         mon, base_path=str(root), phy_path=str(root), periods={"p20": runs},
         run_dict=runs, period="p20", run="r001",
     )  # fmt: skip
