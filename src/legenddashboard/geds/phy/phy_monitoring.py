@@ -144,7 +144,7 @@ class PhyMonitoring(GedMonitoring):
             flag,
             key_param,
             contract_reader.snap_cadence(
-                self.phy_resampled, manifest.get("cadences", ["1min"])
+                self.phy_resampled, contract_reader.cadences(manifest)
             ),
         )
 
@@ -187,7 +187,7 @@ class PhyMonitoring(GedMonitoring):
             )
 
         cadence = contract_reader.snap_cadence(
-            self.phy_resampled, manifest.get("cadences", ["1min"])
+            self.phy_resampled, contract_reader.cadences(manifest)
         )
         data_file_sc = (
             run_dir / f"{experiment}-{self.period}-{self.run}-phy-slow_control.hdf"
