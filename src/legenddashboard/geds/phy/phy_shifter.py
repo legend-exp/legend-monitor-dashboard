@@ -7,6 +7,7 @@ import logging
 import time
 from pathlib import Path
 
+import numpy as np
 import panel as pn
 import param
 
@@ -385,9 +386,11 @@ class PhyShifterMonitoring(GedMonitoring):
         if rates is None:
             return self._missing(f"ft_summary/per_detector/{self.run}")
         total = period_reader.read_optional(f, f"ft_summary/total_forced/{self.run}")
-        avg_mhz = (
-            float(total.iloc[:, 0].mean()) / 3600 * 1000 if total is not None else None
-        )
+        avg_mhz = None
+        if total is not None and total.shape[1]:
+            avg = float(total.iloc[:, 0].mean()) / 3600 * 1000
+            if np.isfinite(avg):
+                avg_mhz = avg
         # one tab20 cycle across all strings, advanced to the selected string
         dmap = period_reader.detector_map(self.phy_path, self.period, self.run)
         colors = itertools.cycle(plot_style.TAB20)

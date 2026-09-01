@@ -198,10 +198,19 @@ def _add_sc_overlay(p, data_sc, sc_param, resample_unit):
         return
     series, unit, lower, upper = _sc_series(data_sc)
     y_range_name = f"{sc_param}_range"
-    bounds = [v for v in (series.min(), series.max(), lower, upper) if v is not None]
+    bounds = [
+        float(v)
+        for v in (series.min(), series.max(), lower, upper)
+        if v is not None and np.isfinite(v)
+    ]
+    if not bounds:  # all-NaN series and no limits: nothing to range on
+        return
     y_min, y_max = min(bounds), max(bounds)
     pad = 0.05 * (y_max - y_min or 1.0)
-    p.extra_y_ranges = {y_range_name: Range1d(start=y_min - pad, end=y_max + pad)}
+    p.extra_y_ranges = {
+        **p.extra_y_ranges,
+        y_range_name: Range1d(start=y_min - pad, end=y_max + pad),
+    }
     p.add_layout(
         LinearAxis(
             y_range_name=y_range_name,
