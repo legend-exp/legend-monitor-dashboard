@@ -391,7 +391,7 @@ def param_stability(
     res0 = float("nan") if res0 is None else float(res0)
     lo_lim, hi_lim = (
         (-res0 / 2, res0 / 2)
-        if "Trapemax" in parameter
+        if parameter == "TrapemaxCtcCal"  # keV band: calibrated gain only
         else info.get("limits", (None, None))
     )
     if t0 is not None:
@@ -472,11 +472,15 @@ def _link_percent_axis(p, avg_total_forced_mhz, label="FT failure fraction (%)")
     Mirrors ``secondary_yaxis`` in the pipeline: the percent range follows
     the primary range through a CustomJS so zooming keeps them consistent.
     """
-    if not avg_total_forced_mhz:
+    if (
+        avg_total_forced_mhz is None
+        or not np.isfinite(avg_total_forced_mhz)
+        or avg_total_forced_mhz <= 0
+    ):
         return
     scale = 100.0 / avg_total_forced_mhz
     pct = Range1d(start=0, end=1)
-    p.extra_y_ranges = {"pct": pct}
+    p.extra_y_ranges = {**p.extra_y_ranges, "pct": pct}
     p.add_layout(LinearAxis(y_range_name="pct", axis_label=label), "right")
     p.y_range.js_on_change(
         "start", CustomJS(args={"pct": pct, "s": scale}, code="pct.start = cb_obj.start * s;")

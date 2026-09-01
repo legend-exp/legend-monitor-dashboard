@@ -129,11 +129,15 @@ class MetaDB:
         run column, the same merges twice over, and each costs ~100 ms.
         ``reload`` drops the cache so staged edits are seen.
         """
+        # bind both refs once: reload() swaps in a fresh status_db AND a fresh
+        # cache dict, so a merge racing a reload writes into the abandoned
+        # dict instead of repopulating the new one with pre-reload statuses
+        cache, db = self._statuses_cache, self.status_db
         key = (tstamp, category)
-        cached = self._statuses_cache.get(key)
+        cached = cache.get(key)
         if cached is None:
-            cached = self.status_db.statuses.on(tstamp, category=category)
-            self._statuses_cache[key] = cached
+            cached = db.statuses.on(tstamp, category=category)
+            cache[key] = cached
         return cached
 
     def runlists(self) -> dict:

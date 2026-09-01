@@ -39,18 +39,6 @@ def _has_content(obj):
 
 
 def _message(obj):
-    """Title of a contentless figure, i.e. a "nothing to draw" message.
-
-    The tree is live: a producer backfill can be rewriting a run while this
-    runs, and runs written by an older pipeline lack the newest keys. Both
-    surface as message figures, which are a skip here, not a failure.
-    """
-    if _has_content(obj):
-        return None
-    return getattr(getattr(obj, "title", None), "text", "") or "(no title)"
-
-
-def _message(obj):
     """The title of a contentless figure, i.e. a 'nothing to draw' message.
 
     The tree is live: a producer backfill can be rewriting a run while this

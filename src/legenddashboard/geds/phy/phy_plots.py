@@ -198,10 +198,19 @@ def _add_sc_overlay(p, data_sc, sc_param, resample_unit):
         return
     series, unit, lower, upper = _sc_series(data_sc)
     y_range_name = f"{sc_param}_range"
-    bounds = [v for v in (series.min(), series.max(), lower, upper) if v is not None]
+    bounds = [
+        float(v)
+        for v in (series.min(), series.max(), lower, upper)
+        if v is not None and np.isfinite(v)
+    ]
+    if not bounds:  # all-NaN series and no limits: nothing to range on
+        return
     y_min, y_max = min(bounds), max(bounds)
     pad = 0.05 * (y_max - y_min or 1.0)
-    p.extra_y_ranges = {y_range_name: Range1d(start=y_min - pad, end=y_max + pad)}
+    p.extra_y_ranges = {
+        **p.extra_y_ranges,
+        y_range_name: Range1d(start=y_min - pad, end=y_max + pad),
+    }
     p.add_layout(
         LinearAxis(
             y_range_name=y_range_name,
@@ -300,6 +309,7 @@ def phy_plot_binned_vsTime(
 
     n_channels = len(mean_df.columns)
     colors = color_palette("hls", max(n_channels, 1)).as_hex()
+    fwhm_requested = fwhm is not None  # None = not a calibrated-gain plot
     fwhm = fwhm or {}
     line_dashes = line_dashes or {}
 
@@ -377,7 +387,7 @@ def phy_plot_binned_vsTime(
         plot_style.legend_proxy(
             p, plot_style.QBB_LIN_LABEL, color="gray", line_dash="dotdash"
         )
-    elif fwhm is not None:  # requested (calibrated gain) but the period file lacks it
+    elif fwhm_requested:  # calibrated gain, but the period file lacks FWHM
         p.add_layout(
             Label(
                 x=10,
@@ -463,8 +473,6 @@ def phy_plot_dist_histogram(dist, meta: PlotMeta, limits=(None, None)):
     p.yaxis.axis_label = "Counts"
 
     lo, hi = limits
-    plot_style.threshold(p, hi, above=True, shade=False)
-    plot_style.threshold(p, lo, above=False, shade=False)
     for value in (lo, hi):
         if value is not None:
             p.add_layout(
