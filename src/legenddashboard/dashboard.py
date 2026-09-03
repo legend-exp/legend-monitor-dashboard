@@ -238,6 +238,22 @@ def build_dashboard(
         main_tabs.append(
             ("MetaData", ged_monitor.build_meta_pane(widget_widths=widget_widths))
         )
+    if "notes" not in disable_page:
+        from legenddashboard.notes import NotesPage
+
+        notes_page = NotesPage(
+            base_path=cal_path,
+            notes_path=str(
+                config.get("notes") or Path(tmp_cal_path) / "detector-notes.json"
+            ),
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            name="L200 Notes",
+        )
+        main_tabs.append(("Notes", notes_page.build_notes_pane(widget_widths)))
     if "metaedit" not in disable_page and "metadata_edit" in config:
         from legenddashboard.metadata.meta_monitoring import MetaMonitoring
 
@@ -281,6 +297,22 @@ def build_dashboard(
         importlib.resources.files("legenddashboard") / "information" / "general.md"
     )
     main_tabs.append(("Information", build_info_pane(info_path)))
+
+    # Everyday tabs first; pages not in the list keep their build order after
+    # them (stable sort). Disabled pages simply drop out of the sequence.
+    tab_order = [
+        "Phy. Shifter",
+        "Cal. Summary",
+        "Cal. Tracking",
+        "Notes",
+        "MetaData",
+        "Metadata Editor",
+    ]
+    main_tabs.sort(
+        key=lambda tab: tab_order.index(tab[0])
+        if tab[0] in tab_order
+        else len(tab_order)
+    )
 
     # Single Tabs holds every pane (the GoldenTemplate/Firefox embed fix:
     # Panel owns the tab divs). dynamic=True renders a tab's content when it
