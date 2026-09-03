@@ -119,7 +119,7 @@ class CalMonitoring(GedMonitoring):
         log.debug("Time to download summary files: %.3fs", time.time() - start_time)
         return ret
 
-    @param.depends("run_dict", "run", "sort_by", "plot_type_summary")
+    @param.depends("run_dict", "run", "sort_by", "string", "plot_type_summary")
     def view_summary(self, event=None):  # noqa: ARG002
         start_time = time.time()
         figure = None
