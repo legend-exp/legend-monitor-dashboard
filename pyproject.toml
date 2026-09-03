@@ -74,6 +74,10 @@ write_to = "src/legenddashboard/_version.py"
 test = [
     "pytest>=6",
     "pytest-cov>=3",
+    # producer-side fixtures for the contract-v2 reader tests only;
+    # the dashboard runtime reads v2 files with plain h5py
+    "boost-histogram",
+    "uhi>=1.1",
 ]
 dev = [
     "legend_dashboard[test]",
@@ -95,9 +99,6 @@ dashboard-cal                = "legenddashboard.geds.cal.cal_monitoring:run_dash
 dashboard-phy               = "legenddashboard.geds.phy.phy_monitoring:run_dashboard_phy"
 dashboard-meta                = "legenddashboard.geds.ged_monitoring:run_dashboard_meta"
 dashboard-metaedit                = "legenddashboard.metadata.meta_monitoring:run_dashboard_metaedit"
-dashboard-llama                = "legenddashboard.llama.llama_monitoring:run_dashboard_llama"
-dashboard-spms                = "legenddashboard.spms.sipm_monitoring:run_dashboard_spms"
-dashboard-muon                = "legenddashboard.muon.muon_monitoring:run_dashboard_muon"
 
 [tool.setuptools]
 include-package-data = true

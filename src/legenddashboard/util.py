@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import importlib.resources
 import logging
+import os
+import pickle
 import threading
+import time
 import weakref
 from collections import OrderedDict
 from datetime import UTC, datetime
@@ -50,16 +54,21 @@ sort_dict = {
 }
 
 
+@functools.lru_cache(maxsize=8)
+def _read_config_file(path: str) -> AttrsDict:
+    return AttrsDict(Props.read_from(path)).paths
+
+
 def read_config(config: str | dict) -> AttrsDict:
     """
     Parse the config file or dictionary and return an AttrsDict.
+
+    Parsing a file is cached: the config is read on every session build and
+    never changes while the server runs.
     """
     if isinstance(config, str | Path):
-        config = AttrsDict(Props.read_from(config))
-    else:
-        config = AttrsDict(config)
-
-    return config.paths
+        return _read_config_file(str(config))
+    return AttrsDict(config).paths
 
 
 class sort_dets:
@@ -76,7 +85,8 @@ class sort_dets:
             for entry in chmap_catalog.entries[system]:
                 try:
                     db = meta.channelmap(
-                        datetime.fromtimestamp(entry.valid_from, tz=UTC), system=system
+                        datetime.fromtimestamp(entry.valid_from, tz=UTC),
+                        category=system,
                     )
                     new_entry = Catalog.Entry(entry.valid_from, db)
                     chmap_entries[system].append(new_entry)
@@ -93,7 +103,7 @@ class sort_dets:
             status_entries[system] = []
             for entry in status_catalog.entries[system]:
                 db = textdb.on(
-                    datetime.fromtimestamp(entry.valid_from, tz=UTC), system=system
+                    datetime.fromtimestamp(entry.valid_from, tz=UTC), category=system
                 )
                 new_entry = Catalog.Entry(entry.valid_from, db)
                 status_entries[system].append(new_entry)
@@ -217,6 +227,65 @@ def get_par_cache():
     return _par_cache
 
 
+# Parsing a par_hit yaml takes seconds even with libyaml (millions of scalar
+# nodes); unpickling the parsed dict takes milliseconds. The on-disk pickle
+# cache lives under the configured tmp path and is keyed on the yaml's stat,
+# so it survives restarts and is shared between server processes.
+_par_disk_cache: Path | None = None
+
+
+def configure_par_disk_cache(tmp_path) -> None:
+    """Enable the on-disk par cache under ``tmp_path`` (None disables)."""
+    global _par_disk_cache  # noqa: PLW0603
+    if tmp_path is None:
+        _par_disk_cache = None
+        return
+    path = Path(tmp_path) / "legenddashboard-par-cache"
+    try:
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    except OSError:
+        log.warning("par disk cache disabled: cannot create %s", path)
+        _par_disk_cache = None
+    else:
+        _par_disk_cache = path
+
+
+def _read_pars(pars_path: Path):
+    if _par_disk_cache is None:
+        return Props.read_from(pars_path)
+    st = pars_path.stat()
+    pickled = _par_disk_cache / f"{pars_path.stem}-{st.st_mtime_ns}-{st.st_size}.pkl"
+    # unpickle only regular non-symlink files: tmp may be shared
+    if pickled.is_file() and not pickled.is_symlink():
+        try:
+            with pickled.open("rb") as f:
+                return pickle.load(f)
+        except Exception:  # corrupt/partial file: fall through and rebuild
+            log.warning("discarding unreadable par cache %s", pickled, exc_info=True)
+    pars = Props.read_from(pars_path)
+    tmp = pickled.with_suffix(f".{os.getpid()}.tmp")
+    try:
+        with tmp.open("wb") as f:
+            pickle.dump(pars, f, protocol=pickle.HIGHEST_PROTOCOL)
+        tmp.replace(pickled)  # atomic: readers never see a partial file
+    except OSError:
+        log.warning("could not write par cache %s", pickled, exc_info=True)
+        tmp.unlink(missing_ok=True)
+    return pars
+
+
+def run_pars_path(prod_config, tier, period, run, run_info) -> Path:
+    """Path of the par_<tier> yaml for one calibration run."""
+    return (
+        Path(prod_config["paths"][f"par_{tier}"])
+        / f"cal/{period}/{run}"
+        / (
+            f"{run_info['experiment']}-{period}-{run}-cal-"
+            f"{run_info['timestamp']}-par_{tier}.yaml"
+        )
+    )
+
+
 def load_run_pars(prod_config, tier, period, run, run_info, cache_data=None):
     """Load the par_<tier> file for one calibration run via the shared cache.
 
@@ -228,18 +297,37 @@ def load_run_pars(prod_config, tier, period, run, run_info, cache_data=None):
         cached = cache_data[tier].get(cache_key)
         if cached is not None:
             return cached
-    pars_path = (
-        Path(prod_config["paths"][f"par_{tier}"])
-        / f"cal/{period}/{run}"
-        / (
-            f"{run_info['experiment']}-{period}-{run}-cal-"
-            f"{run_info['timestamp']}-par_{tier}.yaml"
-        )
-    )
-    pars = Props.read_from(pars_path)
+    pars = _read_pars(run_pars_path(prod_config, tier, period, run, run_info))
     if cache_data is not None:
         cache_data[tier][cache_key] = pars
     return pars
+
+
+def prewarm_run_pars(base_path, periods=None, n_periods=None) -> None:
+    """Parse (or unpickle) the par files of the latest ``n_periods`` periods.
+
+    Meant to run once at server start so the first clicks of a session do
+    not pay the multi-second yaml parse; newest runs first. ``None`` warms
+    every period.
+    """
+    prod_config = get_dataflow_config(base_path)
+    periods = periods if periods is not None else get_run_dict(base_path)
+    start = time.time()
+    selected = sorted(periods) if n_periods is None else sorted(periods)[-n_periods:]
+    for period in selected[::-1]:
+        for run in sorted(periods[period])[::-1]:
+            for tier in ("hit", "dsp"):
+                try:
+                    load_run_pars(
+                        prod_config, tier, period, run, periods[period][run], _par_cache
+                    )
+                except Exception:
+                    log.warning("prewarm: could not load %s %s/%s", tier, period, run)
+    log.info(
+        "prewarmed par files for %d period(s) in %.0fs",
+        len(selected),
+        time.time() - start,
+    )
 
 
 class PeriodRefreshRegistry:
@@ -358,22 +446,20 @@ def gen_run_dict(path):
 _sorter_cache = LRUDict(maxsize=256)
 
 
-def sorter(
-    path, timestamp, key="String", datatype="cal", spms=False, sort_dets_obj=None
-):
-    cache_key = (str(path), timestamp, key, datatype, spms)
+def sorter(path, timestamp, key="String", datatype="cal", sort_dets_obj=None):
+    cache_key = (str(path), timestamp, key, datatype)
     cached = _sorter_cache.get(cache_key)
     if cached is not None:
         return cached
-    result = _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj)
+    result = _sorter_uncached(path, timestamp, key, datatype, sort_dets_obj)
     _sorter_cache[cache_key] = result
     return result
 
 
-def _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj):
+def _sorter_uncached(path, timestamp, key, datatype, sort_dets_obj):
     if sort_dets_obj is not None:
-        chmap = sort_dets_obj.chmaps.valid_for(timestamp, system=datatype)
-        det_status = sort_dets_obj.statuses.valid_for(timestamp, system=datatype)
+        chmap = sort_dets_obj.chmaps.valid_for(timestamp, category=datatype)
+        det_status = sort_dets_obj.statuses.valid_for(timestamp, category=datatype)
     else:
         prod_config = get_dataflow_config(path)
 
@@ -383,24 +469,11 @@ def _sorter_uncached(path, timestamp, key, datatype, spms, sort_dets_obj):
 
         det_status_path = prod_config["paths"]["detector_status"]
         det_status = LegendMetadata(path=det_status_path, lazy=True).statuses.on(
-            timestamp, system=datatype
+            timestamp, category=datatype
         )
-
     out_dict = {}
-    # SiPMs sorting
-    if spms:
-        chmap = chmap.map("system", unique=False)["spms"]
-        if key == "Barrel":
-            mapping = chmap.map("name")
-            for pos in ["top", "bottom"]:
-                for barrel in ["IB", "OB"]:
-                    out_dict[f"{barrel}-{pos}"] = [
-                        k
-                        for k, entry in sorted(mapping.items())
-                        if barrel in entry["location"]["fiber"]
-                        and pos in entry["location"]["position"]
-                    ]
-        return out_dict, chmap
+    # SiPM grouping (barrel/fiber/position) comes from the spms contract's
+    # detector_map; this sorter is germanium-only.
 
     # Daq needs special item as sort on tertiary key
     if key == "DAQ":

@@ -657,15 +657,26 @@ _MIN_BLOCK_WIDTH = timedelta(minutes=5)
 DATATYPE_COLORS = {"phy": LEGEND_BLUE, "cal": "#FFA500"}
 
 
+def _entry_time(info, which):
+    """UTC datetime from a runinfo ``<which>_timestamp`` or ``<which>_key``."""
+    ts = info.get(f"{which}_timestamp")
+    if ts is None:
+        key = info.get(f"{which}_key")
+        if key is None:
+            return None
+        ts = tstamp_to_unix(key)
+    return datetime.fromtimestamp(ts, UTC)
+
+
 def timeline_cells(viewer, periods=None, run_filter=None):
     """One block per run *and datatype* on a real time axis.
 
     Unlike the matrices this view is not filtered by datatype: every runinfo
     entry of every run (phy, cal, ...) becomes a block, so the cal/phy
-    alternation is visible in one plot. Data taking is sequential — datatypes
-    never overlap in time — so a block without a livetime (cal, fft, ...)
-    runs from its start to the next block's start (the last one gets a
-    nominal width).
+    alternation is visible in one plot. Block bounds are the runinfo start/end
+    timestamps (wall clock, not the dead-time-corrected livetime); a block
+    whose entry predates the end fields falls back to livetime, then to the
+    next block's start (the last one gets a nominal width).
     """
     runinfo = viewer.runinfo
     runs = viewer.available_runs()
@@ -693,9 +704,7 @@ def timeline_cells(viewer, periods=None, run_filter=None):
     color_of = {d: DATATYPE_COLORS.get(d) or next(fallback) for d in dt_order}
 
     starts = {
-        (period, run, dtype): datetime.fromtimestamp(
-            tstamp_to_unix(info["start_key"]), UTC
-        )
+        (period, run, dtype): _entry_time(info, "start")
         for period, run, dtype, info in entries
     }
     entries.sort(key=lambda e: starts[e[:3]])  # chronological, across datatypes
@@ -711,18 +720,21 @@ def timeline_cells(viewer, periods=None, run_filter=None):
             "datatype",
             "label",
             "start",
+            "end",
             "livetime",
         )
     }
     for k, (period, run, dtype, info) in enumerate(entries):
         livetime = info.get("livetime_in_s")
         start = starts[(period, run, dtype)]
-        if livetime:
-            end = start + timedelta(seconds=livetime)
-        elif k + 1 < len(entries):
-            end = starts[entries[k + 1][:3]]  # runs until the next block starts
-        else:
-            end = start + _NO_LIVETIME_WIDTH
+        end = _entry_time(info, "end")
+        if end is None:
+            if livetime:
+                end = start + timedelta(seconds=livetime)
+            elif k + 1 < len(entries):
+                end = starts[entries[k + 1][:3]]  # runs until the next block
+            else:
+                end = start + _NO_LIVETIME_WIDTH
         end = max(end, start + _MIN_BLOCK_WIDTH)
         cells["x"].append((period, run))  # click-to-jump hook (not drawn)
         cells["y"].append(period)
@@ -732,6 +744,7 @@ def timeline_cells(viewer, periods=None, run_filter=None):
         cells["datatype"].append(dtype)
         cells["label"].append(f"{period} {run}")
         cells["start"].append(start.strftime("%Y-%m-%d %H:%M UTC"))
+        cells["end"].append(end.strftime("%Y-%m-%d %H:%M UTC"))
         cells["livetime"].append(_fmt_livetime(livetime))
     periods_seen = sorted({p for p, _, _, _ in entries})
     return cells, periods_seen, [(d, color_of[d]) for d in dt_order]
@@ -771,6 +784,7 @@ def timeline_figure(viewer, datatype="phy", periods=None, run_filter=None):
                 ("run", "@label"),
                 ("datatype", "@datatype"),
                 ("start", "@start"),
+                ("end", "@end"),
                 ("livetime", "@livetime"),
             ],
         )

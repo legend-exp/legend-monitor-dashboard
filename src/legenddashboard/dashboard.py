@@ -7,6 +7,7 @@ import importlib.resources
 import os
 import secrets
 import sys
+import threading
 from pathlib import Path
 
 import panel as pn
@@ -40,7 +41,7 @@ def build_dashboard(
     from legenddashboard.geds.cal.cal_monitoring import CalMonitoring
     from legenddashboard.geds.ged_monitoring import GedMonitoring
     from legenddashboard.geds.phy.phy_monitoring import PhyMonitoring
-    from legenddashboard.llama.llama_monitoring import LlamaMonitoring
+    from legenddashboard.geds.phy.phy_shifter import PhyShifterMonitoring
     from legenddashboard.muon.muon_monitoring import MuonMonitoring
     from legenddashboard.spms.sipm_monitoring import SiPMMonitoring
     from legenddashboard.util import period_refresh_registry, read_config
@@ -55,14 +56,8 @@ def build_dashboard(
     cal_path = config.cal
     # path to physics data
     phy_path = config.phy
-    # path to sipm data
-    sipm_path = config.sipm
-    # path to muon data
-    muon_path = config.muon
     # tmp path for caching
     tmp_cal_path = config.tmp
-    # llama data path
-    llama_path = config.llama
 
     # FastListTemplate with header and LEGEND logo from the LEGEND webpage. The
     # main panes are wrapped in a single pn.Tabs (see below) instead of the old
@@ -159,7 +154,6 @@ def build_dashboard(
             period=base_monitor.param.period,
             run=base_monitor.param.run,
             date_range=base_monitor.param.date_range,
-            channel=ged_monitor.param.channel,
             sort_by=ged_monitor.param.sort_by,
             name="L200 Cal Monitoring",
         )
@@ -173,36 +167,43 @@ def build_dashboard(
         for title, pane in cal_panes.items():
             main_tabs.append((title, pane))
     if "phy" not in disable_page:
-        if "cal" not in disable_page:
-            phy_monitor = PhyMonitoring(
-                base_path=cal_path,
-                phy_path=phy_path,
-                run_dict=base_monitor.param.run_dict,
-                periods=base_monitor.param.periods,
-                period=base_monitor.param.period,
-                run=base_monitor.param.run,
-                date_range=base_monitor.param.date_range,
-                channel=ged_monitor.param.channel,
-                sort_by=ged_monitor.param.sort_by,
-                name="L200 Phy Monitoring",
-            )
-            ged_monitor.param.watch(
-                lambda e: setattr(phy_monitor, "string", e.new), "string"
-            )
-        else:
-            phy_monitor = PhyMonitoring(
-                phy_path=phy_path,
-                base_path=cal_path,
-                run_dict=base_monitor.param.run_dict,
-                periods=base_monitor.param.periods,
-                period=base_monitor.param.period,
-                run=base_monitor.param.run,
-                date_range=base_monitor.param.date_range,
-                name="L200 Phy Monitoring",
-            )
+        # the ged sidebar exists whether or not the cal pages do, so both phy
+        # pages always follow its channel/sorting/string selections
+        phy_monitor = PhyMonitoring(
+            base_path=cal_path,
+            phy_path=phy_path,
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            channel=ged_monitor.param.channel,
+            sort_by=ged_monitor.param.sort_by,
+            name="L200 Phy Monitoring",
+        )
+        ged_monitor.param.watch(
+            lambda e: setattr(phy_monitor, "string", e.new), "string"
+        )
+        shifter_monitor = PhyShifterMonitoring(
+            base_path=cal_path,
+            phy_path=phy_path,
+            run_dict=base_monitor.param.run_dict,
+            periods=base_monitor.param.periods,
+            period=base_monitor.param.period,
+            run=base_monitor.param.run,
+            date_range=base_monitor.param.date_range,
+            sort_by=ged_monitor.param.sort_by,
+            name="L200 Phy Shifter",
+        )
+        ged_monitor.param.watch(
+            lambda e: setattr(shifter_monitor, "string", e.new), "string"
+        )
+        main_tabs.append(
+            ("Phy. Shifter", shifter_monitor.build_shifter_pane(widget_widths))
+        )
         main_tabs.append(
             (
-                "Physics",
+                "Phy. Expert",
                 phy_monitor.build_phy_pane(
                     widget_widths=widget_widths,
                 ),
@@ -210,8 +211,8 @@ def build_dashboard(
         )
     if "spm" not in disable_page:
         sipm_monitor = SiPMMonitoring(
-            sipm_path=sipm_path,
             base_path=cal_path,
+            phy_path=phy_path,
             run_dict=base_monitor.param.run_dict,
             periods=base_monitor.param.periods,
             period=base_monitor.param.period,
@@ -219,19 +220,12 @@ def build_dashboard(
             date_range=base_monitor.param.date_range,
             name="L200 SiPM Monitoring",
         )
-        main_tabs.append(
-            (
-                "SiPM",
-                sipm_monitor.build_spm_pane(
-                    widget_widths=widget_widths,
-                ),
-            )
-        )
+        main_tabs.append(("SiPM", sipm_monitor.build_sipm_pane(widget_widths)))
 
     if "muon" not in disable_page:
         muon_monitor = MuonMonitoring(
-            muon_path=muon_path,
             base_path=cal_path,
+            phy_path=phy_path,
             run_dict=base_monitor.param.run_dict,
             periods=base_monitor.param.periods,
             period=base_monitor.param.period,
@@ -239,11 +233,7 @@ def build_dashboard(
             date_range=base_monitor.param.date_range,
             name="L200 Muon Monitoring",
         )
-        muon_panes = muon_monitor.build_muon_panes(
-            widget_widths=widget_widths,
-        )
-        for title, pane in muon_panes.items():
-            main_tabs.append((title, pane))
+        main_tabs.append(("Muon", muon_monitor.build_muon_pane(widget_widths)))
     if "meta" not in disable_page:
         main_tabs.append(
             ("MetaData", ged_monitor.build_meta_pane(widget_widths=widget_widths))
@@ -251,39 +241,53 @@ def build_dashboard(
     if "metaedit" not in disable_page and "metadata_edit" in config:
         from legenddashboard.metadata.meta_monitoring import MetaMonitoring
 
-        meta_monitor = MetaMonitoring(
-            base_path=cal_path,
-            meta_path=config.metadata_edit,
-            run_dict=base_monitor.param.run_dict,
-            periods=base_monitor.param.periods,
-            period=base_monitor.param.period,
-            run=base_monitor.param.run,
-            date_range=base_monitor.param.date_range,
-            name="L200 Metadata Editor",
-        )
-        main_tabs.append(
-            ("Metadata Editor", meta_monitor.build_metadata_pane(widget_widths))
-        )
-    if "llama" not in disable_page:
-        llama_monitor = LlamaMonitoring(
-            llama_path=llama_path,
-            base_path=cal_path,
-            name="L200 Llama Monitoring",
-        )
-        main_tabs.append(
-            ("Llama", llama_monitor.build_llama_pane(widget_widths=widget_widths))
-        )
+        # The editor is the most expensive page to build, so it is not built
+        # while the user is waiting for the first paint: the tab holds a lazy
+        # ParamFunction, and the same builder is scheduled on a worker thread
+        # once the page is up, so the pane is usually ready when clicked.
+        built: dict[str, object] = {}
+        build_lock = threading.Lock()
 
+        def build_editor():
+            # the onload thread and a quick tab click can race for it
+            with build_lock:
+                if "pane" not in built:
+                    built["pane"] = _build_editor_pane()
+            return built["pane"]
+
+        def _build_editor_pane():
+            return MetaMonitoring(
+                base_path=cal_path,
+                meta_path=config.metadata_edit,
+                run_dict=base_monitor.param.run_dict,
+                periods=base_monitor.param.periods,
+                period=base_monitor.param.period,
+                run=base_monitor.param.run,
+                date_range=base_monitor.param.date_range,
+                name="L200 Metadata Editor",
+            ).build_metadata_pane(widget_widths)
+
+        pn.state.onload(build_editor, threaded=True)
+        main_tabs.append(
+            (
+                "Metadata Editor",
+                pn.param.ParamFunction(
+                    build_editor, lazy=True, sizing_mode="stretch_width"
+                ),
+            )
+        )
     # Information tab (was previously appended by the per-session factory).
     info_path = (
         importlib.resources.files("legenddashboard") / "information" / "general.md"
     )
     main_tabs.append(("Information", build_info_pane(info_path)))
 
-    # Single Tabs holds every pane; dynamic=False keeps all tab divs in the DOM
-    # so Bokeh can embed every root reliably (the GoldenTemplate/Firefox fix).
+    # Single Tabs holds every pane (the GoldenTemplate/Firefox embed fix:
+    # Panel owns the tab divs). dynamic=True renders a tab's content when it
+    # is first opened, so a run switch only re-renders the visible tab
+    # instead of every page.
     l200_monitoring.main.append(
-        pn.Tabs(*main_tabs, sizing_mode="stretch_both", dynamic=False)
+        pn.Tabs(*main_tabs, sizing_mode="stretch_both", dynamic=True)
     )
 
     return l200_monitoring
@@ -411,6 +415,23 @@ def run_dashboard() -> None:
                 os.environ.get("METADATA_EDIT_URL", meta_git.DEFAULT_URL),
             )
 
+    # Parsed par files are cached on disk under paths.tmp (restart-proof) and
+    # parsed up front, so a session's first clicks do not pay the
+    # multi-second yaml parse.
+    if "cal" not in args.disable_page:
+        from legenddashboard.util import (
+            configure_par_disk_cache,
+            prewarm_run_pars,
+            read_config,
+        )
+
+        _paths = read_config(args.config_file)
+        configure_par_disk_cache(_paths.get("tmp"))
+        prewarm_run_pars(_paths.cal, n_periods=1)  # latest period: before serving
+        threading.Thread(  # the rest: in the background
+            target=prewarm_run_pars, args=(_paths.cal,), daemon=True
+        ).start()
+
     def _build_dash():
         # Build a fresh dashboard per session so each user gets independent
         # widget state. The heavy, read-only data (metadata catalogs and parsed
@@ -428,6 +449,10 @@ def run_dashboard() -> None:
     # single-threaded and without a loading indicator.
     pn.config.nthreads = args.num_threads
     pn.config.global_loading_spinner = True
+    # serve the document first and evaluate the lazy panes afterwards, on a
+    # worker thread: the page appears immediately and fills in behind the
+    # spinner instead of the user waiting for every figure to be built
+    pn.config.defer_load = True
 
     serve_kwargs = {
         "port": args.port,

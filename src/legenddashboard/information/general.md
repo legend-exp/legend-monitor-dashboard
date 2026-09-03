@@ -22,14 +22,16 @@ The dashboard is divided into the three following main sections:
 
 - **Header**: On the upper left corner, you can find the LEGEND logo. You can reload the entire dashboard by simply clicking on it. The header also contains the title of the dashboard and the current time of the last update. Next to this, you will find four widgets that, when clicked, will take you to various LEGEND-related websites, i. e. the GitHub page of the LEGEND experiment, the LEGEND Indico, the Confluence website and the ELOG weblog. In addition, you find a spinning wheel in the right corner which indicates that the dashboard is currently updating the plots.
 <br>
+
 <p align="center">
     <img src="img/header_com.png" alt="xy" style="width: 600px;"/>
 </p>
 <br>
 <br>
 
-- **Main**: The main panel contains all plots sorted by Germanium detector calibration plots (_Cal._), Physics Monitoring plots for HPGe detector (_Phy._), SiPM monitoring plots (_SiPM_), Muon veto monitoring plots (_Muon_), LLama monitoring plots (_Llama_) as well as this General panel (_General_) and a Metadata tab (_Metadata_) which also contains detector visualizations. You can move the different tabs by dragging them, just like the tabs in your internet browser, and create your own custom layout for working with the plots to display different plots at the same time. You can also close the tabs, see green arrow, or maximize the window, see red arrow:
+- **Main**: The main panel contains all plots sorted by Germanium detector calibration plots (_Cal._), Physics Monitoring plots for HPGe detector (_Phy._), SiPM monitoring plots (_SiPM_), Muon veto monitoring plots (_Muon_) as well as this General panel (_General_) and a Metadata tab (_Metadata_) which also contains detector visualizations. You can move the different tabs by dragging them, just like the tabs in your internet browser, and create your own custom layout for working with the plots to display different plots at the same time. You can also close the tabs, see green arrow, or maximize the window, see red arrow:
 <br>
+
 <p align="center">
     <img src="img/header.png" alt="xy" style="width: 900px;"/>
 </p>
@@ -38,6 +40,7 @@ The dashboard is divided into the three following main sections:
 
 - **Sidebar**: The sidebar contains general navigation buttons to select a period and a run as well as to control the sorting (i. e. sorting by string, CC4, HV, detector type or DAQ) and the string selection of the HPGe detectors. You can expand and collapse the sidebar selectors by clicking on the small arrow next to the tab name, see green arrow. In addition, you can also maximize the sidebar by clicking on the maximize buttons in right corners, see red arrow. The buttons change all plots at once why it takes some time to update all plots since all data has to be reloaded. As mentionend above, the status can be seen by the spinning wheel in the upper right corner.
 <br>
+
 <p align="center">
     <img src="img/sidebar_n.png" alt="xy" style="width: 170px;"/>
 </p>
@@ -49,7 +52,7 @@ The dashboard is divided into the three following main sections:
 
 ### Main Panel
 
-As already mentioned, the different tabs in the main panel each contain the plots from the same area, i. e. Germanium detector calibration plots (_Cal._), Physics Monitoring plots for HPGe detector (_Phy._), SiPM monitoring plots (_SiPM_), Muon veto monitoring plots (_Muon_), LLama monitoring plots (_Llama_). In each tab you have the possibility to choose between further different data visualisations, e.g. for the tab _Cal. Tracking_:
+As already mentioned, the different tabs in the main panel each contain the plots from the same area, i. e. Germanium detector calibration plots (_Cal._), Physics Monitoring plots for HPGe detector (_Phy._), SiPM monitoring plots (_SiPM_), Muon veto monitoring plots (_Muon_). In each tab you have the possibility to choose between further different data visualisations, e.g. for the tab _Cal. Tracking_:
 <br>
 
 <p align="center">
@@ -82,6 +85,7 @@ The tools available are the following ones - but note that not all tools are ava
 
 - With the box zoom tool you can draw a rectangle in the plot to zoom in.
 <br>
+
 <p align="center">
     <img src="img/box_zoom.png" alt="xy" style="width: 1000px;"/>
 </p>

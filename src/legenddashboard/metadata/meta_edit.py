@@ -9,6 +9,7 @@ comments). Nothing in here touches git or Panel; every function takes the
 from __future__ import annotations
 
 import io
+import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -616,35 +617,60 @@ def remove_ignored_cycle(datasets_path: str | Path, cycle_id: str) -> bool:
     return False
 
 
-def raw_run_catalogue(
+def raw_datatypes_and_periods(
     raw_dirs: list[str | Path],
-) -> dict[str, dict[str, list[str]]]:
-    """``{period: {run: [cycle ids]}}`` from raw-tier file names.
+) -> tuple[list[str], list[str]]:
+    """``([datatype, ...], [period, ...])`` from raw-tier directory names.
 
-    Scans ``<dir>/<datatype>/<period>/<run>/*.lh5`` under each existing
-    directory in ``raw_dirs`` (filename-only); cycle ids are sorted by
-    timestamp. Feeds the period/run/cycle selectors of the bad-cycles page.
+    Scans two directory levels of ``<dir>/<datatype>/<period>`` only. The
+    selectors of the bad-cycles page need nothing more up front, and the
+    runs and cycle ids below are read for the chosen period/run alone --
+    globbing every ``.lh5`` in the tier to fill a dropdown costs seconds.
     """
-    cat: dict[str, dict[str, set[str]]] = {}
-    for raw_dir_str in raw_dirs:
-        raw_dir = Path(raw_dir_str)
-        if not raw_dir.is_dir():
-            continue
-        for f in raw_dir.glob("*/*/*/*.lh5"):
-            parts = f.name.split("-")
-            if len(parts) < 5:
+    datatypes: set[str] = set()
+    periods: set[str] = set()
+    for raw_dir in raw_dirs:
+        for dtype in _subdirs(Path(raw_dir)):
+            datatypes.add(dtype.name)
+            periods.update(p.name for p in _subdirs(dtype))
+    return sorted(datatypes), sorted(periods)
+
+
+def raw_runs(raw_dirs: list[str | Path], period: str) -> list[str]:
+    """Run names present for ``period``, from directory names only."""
+    runs: set[str] = set()
+    for raw_dir in raw_dirs:
+        for dtype in _subdirs(Path(raw_dir)):
+            runs.update(r.name for r in _subdirs(dtype / period))
+    return sorted(runs)
+
+
+def raw_cycles(raw_dirs: list[str | Path], period: str, run: str) -> list[str]:
+    """Cycle ids of one run, sorted by timestamp (file names of that run only)."""
+    cycles: set[str] = set()
+    for raw_dir in raw_dirs:
+        for dtype in _subdirs(Path(raw_dir)):
+            run_dir = dtype / period / run
+            if not run_dir.is_dir():
                 continue
-            cycle_id = "-".join(parts[:5])
-            if not CYCLE_RE.match(cycle_id):
-                continue
-            cat.setdefault(parts[1], {}).setdefault(parts[2], set()).add(cycle_id)
-    return {
-        period: {
-            run: sorted(cat[period][run], key=lambda c: c.split("-")[4])
-            for run in sorted(cat[period])
-        }
-        for period in sorted(cat)
-    }
+            for entry in os.scandir(run_dir):
+                if not entry.name.endswith(".lh5"):
+                    continue
+                parts = entry.name.split("-")
+                if len(parts) < 5:
+                    continue
+                cycle_id = "-".join(parts[:5])
+                if CYCLE_RE.match(cycle_id):
+                    cycles.add(cycle_id)
+    return sorted(cycles, key=lambda c: c.split("-")[4])
+
+
+def _subdirs(path: Path) -> list[Path]:
+    """Sub-directories of ``path`` (empty when it does not exist)."""
+    try:
+        return [Path(e.path) for e in os.scandir(path) if e.is_dir()]
+    except OSError:
+        return []
 
 
 def find_cycles_in_range(

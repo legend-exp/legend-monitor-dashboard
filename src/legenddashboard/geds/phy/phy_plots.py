@@ -1,22 +1,25 @@
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
 from bokeh.models import (
+    BoxAnnotation,
     ColumnDataSource,
-    DatetimeTickFormatter,
+    Label,
     LinearAxis,
     Range1d,
-    ZoomInTool,
-    ZoomOutTool,
+    Span,
 )
-from bokeh.palettes import Category20, Turbo256
-from bokeh.plotting import figure
 from seaborn import color_palette
+
+from legenddashboard.geds.phy import plot_style
 
 # physics plots
 phy_plots_types_dict = {
     "Pulser Events": "IsPulser",
+    "Physics Events": "IsPhysics",
     "Baseline Events": "IsBsln",
 }
 phy_plots_vals_dict = {
@@ -25,12 +28,20 @@ phy_plots_vals_dict = {
     "Noise": "BlStd",
     "Gain": "Trapemax",
     "Cal. Gain": "TrapemaxCtcCal",
-    "Gain to Pulser Ratio": "Trapemax_pulser01anaRatio",
-    "Gain to Pulser Diff.": "Trapemax_pulser01anaDiff",
-    "Rate": "EventRate",
+    "Trigger Time (tp0)": "Tp0Est",
+    "Trap. Time (trapTmax)": "Traptmax",
     "PSD Classifier": "AoeCustom",
 }
+# pulser-corrected variants of a parameter: key suffix the producer appends
+phy_pulser_corr_dict = {
+    "None": "",
+    "Ratio": "_pulser01anaRatio",
+    "Diff": "_pulser01anaDiff",
+}
 phy_unit_vals = ["Relative", "Absolute"]
+# NOTE: these dicts are the full widget vocabulary + the v1 fallback labels;
+# on the contract-v2 path the menus are filtered to the keys the run's
+# manifest lists, and labels/units come from the manifest and per-key attrs.
 phy_plots_sc_vals_dict = {
     "None": False,
     "DAQ Temp. Left 1": "DaqLeft_Temp1",
@@ -59,9 +70,10 @@ def phy_plot_vsTime(
     data_sc,
     sc_param,
 ):
-    # add two hours to UTC index
-    if data_string.index[0].utcoffset() != pd.Timedelta(hours=2):
-        data_string.index += pd.Timedelta(hours=2)
+    # time axis is UTC, like the contract and the pipeline figures; shallow
+    # copy first — a caller-owned (possibly cached) frame is never mutated
+    data_string = data_string.copy(deep=False)
+    data_string.index = plot_style.utc_naive(data_string.index)
 
     data_high_res = data_string.copy()
     data_high_res["datetime"] = data_high_res.index
@@ -82,17 +94,14 @@ def phy_plot_vsTime(
     n_channels = len(data_string_mean.columns)
     colors = color_palette("hls", n_channels).as_hex()
 
-    p = figure(
-        width=1000,
+    p = plot_style.make_figure(
+        f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_name} | {string}",
+        x_datetime=True,
         height=600,
-        x_axis_type="datetime",
         tools="pan,box_zoom,ywheel_zoom,hover,reset,save",
         output_backend="webgl",
         active_scroll="ywheel_zoom",
     )
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_name} | {string}"
-    p.title.align = "center"
-    p.title.text_font_size = "25px"
     p.hover.mode = "vline"
 
     # plot data
@@ -129,7 +138,7 @@ def phy_plot_vsTime(
 
     p.hover.renderers = hover_renderers
     p.hover.tooltips = [
-        ("Time", "$x{%F %H:%M:%S CET}"),
+        ("Time", "$x{%F %H:%M:%S} UTC"),
         (
             f"Avg. {plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]})",
             f"@{time_series_col}{{0.2f}}",
@@ -138,10 +147,7 @@ def phy_plot_vsTime(
     ]
     p.hover.formatters = {"$x": "datetime", "$source": "printf"}
 
-    # legend
-    if p.legend:
-        p.legend.location = "bottom_left"
-        p.legend.click_policy = "hide"
+    plot_style.finish_legend(p, "bottom_left")
 
     # axis
     if source_resampled is not None:
@@ -152,203 +158,345 @@ def phy_plot_vsTime(
     start_time_str = pd.to_datetime(data_for_start_time["datetime"].iloc[0]).strftime(
         "%d/%m/%Y %H:%M:%S"
     )
-    p.xaxis.axis_label = f"Time (CET), starting: {start_time_str}"
-    p.xaxis.axis_label_text_font_size = "20px"
+    p.xaxis.axis_label = f"Time (UTC), starting: {start_time_str}"
     p.yaxis.axis_label = (
         f"{plot_info.loc['label'].iloc[0]} [{plot_info.loc['unit'].iloc[0]}]"
     )
-    p.yaxis.axis_label_text_font_size = "20px"
-    p.xaxis.formatter = DatetimeTickFormatter(days="%Y/%m/%d")
 
-    # y-range for % unit plots
-    label = plot_info.loc["label"].iloc[0]
-    unit = plot_info.loc["unit"].iloc[0]
-    if unit == "%":
-        if label == "Noise":
-            p.y_range = Range1d(-150, 150)
-        elif label in ["FPGA baseline", "Mean Baseline"]:
-            p.y_range = Range1d(-10, 10)
-        elif label == "Gain to Pulser Difference":
-            p.y_range = Range1d(-4, 4)
-        elif label == "Event Rate":
-            p.y_range = Range1d(-150, 50)
-        elif label == "Custom A/E (A_max / cuspEmax)":
-            p.y_range = Range1d(-10, 10)
-        else:
-            p.y_range = Range1d(-1, 1)
-    elif label == "Noise":
-        p.y_range = Range1d(-150, 150)
-
-    # slow-control data
-    if not data_sc.empty:
-        y_range_name = f"{sc_param}_range"
-        y_min = data_sc["value"].min() * 0.99
-        y_max = data_sc["value"].max() * 1.01
-        p.extra_y_ranges = {y_range_name: Range1d(start=y_min, end=y_max)}
-        unit = data_sc["unit"][0]
-        p.add_layout(
-            LinearAxis(
-                y_range_name=y_range_name,
-                axis_label=f"{sc_param} [{unit}]",
-                axis_label_text_font_size="20px",
-            ),
-            "right",
-        )
-
-        # resampling
-        sc_data = data_sc.copy()
-        sc_data["tstamp"] = pd.to_datetime(sc_data["tstamp"], origin="unix", utc=True)
-        sc_data = sc_data.set_index("tstamp")["value"]
-        if resample_unit != "0min":
-            sc_data_resampled = sc_data.resample(resample_unit).mean()
-            p.line(
-                sc_data.index,
-                sc_data.values,
-                color="black",
-                alpha=0.2,
-                legend_label=sc_param,
-                y_range_name=y_range_name,
-                line_width=2,
-            )
-            p.line(
-                sc_data_resampled.index,
-                sc_data_resampled.values,
-                color="black",
-                legend_label=sc_param,
-                y_range_name=y_range_name,
-                line_width=2,
-            )
-        else:
-            p.line(
-                sc_data.index,
-                sc_data.values,
-                color="black",
-                legend_label=sc_param,
-                y_range_name=y_range_name,
-                line_width=2,
-            )
+    _add_sc_overlay(p, data_sc, sc_param, resample_unit)
 
     return p
 
 
-def phy_plot_histogram(
-    data_string,
-    plot_info,
-    plot_type,
-    resample_unit,
-    string,
-    run,
-    period,
-    run_dict,
-    channels,
-    channel_map,
+def _sc_series(data_sc):
+    """(series, unit, lower, upper) from either slow-control frame layout.
+
+    Contract layout (period file ``slow_control/<param>/<run>``): UTC
+    DatetimeIndex, columns value/unit/lower_lim/upper_lim. Legacy run file:
+    positional index with a unix ``tstamp`` column.
+    """
+    if "tstamp" in data_sc.columns:
+        index = pd.to_datetime(data_sc["tstamp"], origin="unix", unit="s", utc=True)
+        series = pd.Series(data_sc["value"].to_numpy(dtype=float), index=index)
+    else:
+        series = data_sc["value"].astype(float)
+    series.index = plot_style.utc_naive(pd.DatetimeIndex(series.index))
+    unit = str(data_sc["unit"].iloc[0]) if "unit" in data_sc else ""
+    limits = []
+    for col in ("lower_lim", "upper_lim"):
+        value = float(data_sc[col].iloc[0]) if col in data_sc else float("nan")
+        limits.append(value if np.isfinite(value) else None)
+    return series, unit, limits[0], limits[1]
+
+
+def _add_sc_overlay(p, data_sc, sc_param, resample_unit):
+    """Overlay a slow-control series on a secondary y-axis (shared v1/v2).
+
+    Limit lines are drawn when the contract carries lower/upper limits.
+    """
+    if data_sc is None or data_sc.empty:
+        return
+    series, unit, lower, upper = _sc_series(data_sc)
+    y_range_name = f"{sc_param}_range"
+    bounds = [
+        float(v)
+        for v in (series.min(), series.max(), lower, upper)
+        if v is not None and np.isfinite(v)
+    ]
+    if not bounds:  # all-NaN series and no limits: nothing to range on
+        return
+    y_min, y_max = min(bounds), max(bounds)
+    pad = 0.05 * (y_max - y_min or 1.0)
+    p.extra_y_ranges = {
+        **p.extra_y_ranges,
+        y_range_name: Range1d(start=y_min - pad, end=y_max + pad),
+    }
+    p.add_layout(
+        LinearAxis(
+            y_range_name=y_range_name,
+            axis_label=f"{sc_param} [{unit}]",
+            axis_label_text_font_size="12px",
+        ),
+        "right",
+    )
+    if resample_unit != "0min":
+        p.line(
+            series.index, series.to_numpy(), color="black", alpha=0.2,
+            legend_label=sc_param, y_range_name=y_range_name, line_width=2,
+        )  # fmt: skip
+        series = series.resample(resample_unit).mean()
+    p.line(
+        series.index, series.to_numpy(), color="black", legend_label=sc_param,
+        y_range_name=y_range_name, line_width=2,
+    )  # fmt: skip
+    for value in (lower, upper):
+        if value is not None:
+            p.add_layout(
+                Span(
+                    location=value,
+                    dimension="width",
+                    line_color="black",
+                    line_dash="dotted",
+                    y_range_name=y_range_name,
+                )  # fmt: skip
+            )
+
+
+@dataclasses.dataclass
+class PlotMeta:
+    """Display metadata handed from the monitoring view to plot functions."""
+
+    label: str
+    unit: str
+    abs_unit: str
+    flag_display: str  # e.g. "Pulser Events"
+    param_display: str  # e.g. "Cal. Gain"
+    string: str
+    run: str
+    period: str
+    experiment: str
+
+
+def _auto_y_range(mean_df, std_df, pad=0.10):
+    """Y range from the mean's 1st-99th percentiles, widened by the median sigma.
+
+    Neither the min/max envelope nor the per-bin sigma may drive the scale: a
+    single noise burst inflates both and would flatten every trace (the old
+    fixed ranges existed to fight that and pinned e.g. Noise to ±150 ADC
+    while the data sat at 10-50 ADC). The typical band width is added so
+    the ±1sigma band stays visible where the data is quiet.
+    """
+    means = mean_df.to_numpy(dtype=float).ravel()
+    means = means[np.isfinite(means)]
+    if means.size == 0:
+        return None
+    stds = std_df.to_numpy(dtype=float).ravel()
+    stds = stds[np.isfinite(stds)]
+    typical_sigma = float(np.median(stds)) if stds.size else 0.0
+    lo = float(np.percentile(means, 1)) - typical_sigma
+    hi = float(np.percentile(means, 99)) + typical_sigma
+    span = hi - lo
+    if span <= 0:
+        span = abs(hi) * 0.1 or 1.0
+    return Range1d(lo - pad * span, hi + pad * span)
+
+
+def phy_plot_binned_vsTime(
+    mean_df,
+    std_df,
+    min_df,
+    max_df,
+    meta: PlotMeta,
+    flagged_ranges=(),
+    data_sc=None,
+    sc_param=False,
+    cadence_label="1min",
+    limits=(None, None),
+    fwhm=None,
+    envelope=True,
+    line_dashes=None,
 ):
-    p = figure(
-        width=1000,
+    """Time view of contract-v2 binned stats, drawn like the pipeline figures.
+
+    Per detector: mean line, ±1 sigma band, faint min/max envelope
+    (``envelope=False`` for boolean rates, whose min/max are always 0/1).
+    Overlays: dashed thresholds from ``limits`` (shaded beyond), per-detector
+    ±FWHM/2 lines when ``fwhm`` maps detector -> Qββ FWHM (calibrated gain
+    in absolute units), flagged ranges shaded. ``line_dashes`` maps a column
+    to a bokeh line dash (e.g. a fiber's bottom SiPM dashed). Time is UTC.
+    """
+    index = plot_style.utc_naive(mean_df.index)
+
+    n_channels = len(mean_df.columns)
+    colors = color_palette("hls", max(n_channels, 1)).as_hex()
+    fwhm_requested = fwhm is not None  # None = not a calibrated-gain plot
+    fwhm = fwhm or {}
+    line_dashes = line_dashes or {}
+
+    p = plot_style.make_figure(
+        f"{meta.experiment}-{meta.period}-{meta.run} | "
+        f"Phy. {meta.flag_display} | {meta.param_display} | {meta.string}",
+        x_datetime=True,
         height=600,
-        x_axis_type="datetime",
         tools="pan,box_zoom,ywheel_zoom,hover,reset,save",
         output_backend="webgl",
         active_scroll="ywheel_zoom",
     )
-    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Phy. {plot_type} | {plot_info.loc['label'].iloc[0]} | {string}"
-    p.title.align = "center"
-    p.title.text_font_size = "25px"
-    p.hover.formatters = {"$x": "printf", "$snap_y": "printf"}
-    p.hover.tooltips = [
-        (
-            f"{plot_info.loc['label'].iloc[0]} ({plot_info.loc['unit'].iloc[0]}",
-            "$x{%0.2f}",
-        ),
-        ("Counts", "$snap_y"),
-        ("Detector", "$name"),
-    ]
-
     p.hover.mode = "vline"
 
-    level = 1
-    zoom_in = ZoomInTool(
-        level=level, dimensions="height", factor=0.5
-    )  # set specific zoom factor
-    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
-    p.add_tools(zoom_in, zoom_out)
-    # p.toolbar.active_drag = None      use this line to activate only hover and ywheel_zoom as active tool
-
-    len_colours = len(data_string.columns)
-    colours = Turbo256[len_colours] if len_colours > 19 else Category20[len_colours]
-
-    for position, data_channel in data_string.groupby("position"):
-        # generate histogram
-        # needed for cuspEmax because with geant outliers not possible to view normal histo
-        hrange = {"keV": [0, 2500]}
-        # take full range if not specified
-        x_min = (
-            hrange[plot_info["unit"]][0]
-            if plot_info["unit"] in hrange
-            else data_channel[plot_info["parameter"]].min()
-        )
-        x_max = (
-            hrange[plot_info["unit"]][1]
-            if plot_info["unit"] in hrange
-            else data_channel[plot_info["parameter"]].max()
-        )
-
-        # --- bin width
-        # bwidth = {"keV": 2.5}  # what to do with binning???
-        # bin_width = bwidth[plot_info["unit"]] if plot_info["unit"] in bwidth else None
-        # no_bins = int((x_max - x_min) / bin_width) if bin_width else 50
-        # counts_ch, bins_ch = np.histogram(data_channel[plot_info["parameter"]], bins=no_bins, range=(x_min, x_max))
-        # bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
-
-        # --- bin width
-        bwidth = {"keV": 2.5}
-        bin_width = bwidth.get(plot_info["unit"], 1)
-
-        # Compute number of bins
-        if bin_width:
-            bin_no = (
-                bin_width / 5 if "AoE" not in plot_info["parameter"] else bin_width / 50
-            )
-            bin_no = bin_no / 2 if "Corrected" in plot_info["parameter"] else bin_no
-            bin_no = bin_width if "AoE" not in plot_info["parameter"] else bin_no
-
-            bin_edges = (
-                np.arange(x_min, x_max + bin_width, bin_no)
-                if plot_info["unit_label"] == "%"
-                else np.arange(x_min, x_max + bin_width, bin_no)
-            )
-        else:
-            bin_edges = 50
-        counts_ch, bins_ch = np.histogram(
-            data_channel[plot_info["parameter"]], bins=bin_edges, range=(x_min, x_max)
-        )
-        bins_ch = (bins_ch[:-1] + bins_ch[1:]) / 2
-        # create plot histo
-        histo_df = pd.DataFrame(
+    hover_renderers = []
+    for i, det in enumerate(mean_df.columns):
+        mean = mean_df[det].to_numpy()
+        std = std_df[det].to_numpy()
+        res = fwhm.get(det)
+        source = ColumnDataSource(
             {
-                "counts": counts_ch,
-                "bins": bins_ch,
-                "position": position,
-                "cc4_id": data_channel["cc4_id"].unique()[0],
+                "datetime": index,
+                "mean": mean,
+                "std": std,
+                "band_lo": mean - std,
+                "band_hi": mean + std,
+                "min": min_df[det].to_numpy(),
+                "max": max_df[det].to_numpy(),
+                "fwhm": np.full(len(mean), np.nan if res is None else res),
             }
         )
-        # plot
-        p.line(
-            "bins",
-            "counts",
-            source=histo_df,
-            color=colours[position - 1],
-            legend_label=f"{data_channel['name'].unique()[0]}",
-            name=f"ch {data_channel['channel'].unique()[0]}",
-            line_width=2,
+        # min/max envelope, ±1 sigma band, mean line — one legend entry per
+        # detector so click-to-hide toggles the trio together
+        if envelope:
+            p.varea(
+                x="datetime", y1="min", y2="max", source=source,
+                fill_color=colors[i], fill_alpha=0.06, legend_label=det,
+            )  # fmt: skip
+        p.varea(
+            x="datetime", y1="band_lo", y2="band_hi", source=source,
+            fill_color=colors[i], fill_alpha=0.2, legend_label=det,
+        )  # fmt: skip
+        line = p.line(
+            x="datetime", y="mean", source=source, color=colors[i],
+            line_width=1.5, legend_label=det, name=det,
+            line_dash=line_dashes.get(det, "solid"),
+        )  # fmt: skip
+        hover_renderers.append(line)
+        if res is not None and np.isfinite(res):
+            for y in (res / 2, -res / 2):
+                p.add_layout(
+                    Span(
+                        location=y,
+                        dimension="width",
+                        line_color=colors[i],
+                        line_dash="dotdash",
+                        line_width=1,
+                    )  # fmt: skip
+                )
+
+    p.hover.renderers = hover_renderers
+    tooltips = [
+        ("Time", "$x{%F %H:%M:%S} UTC"),
+        (f"Mean {meta.label} ({meta.unit})", "@mean{0.2f}"),
+        ("std dev", "@std{0.2f}"),
+        ("min-max", "@min{0.2f} - @max{0.2f}"),
+        ("Detector", "$name"),
+    ]
+    if fwhm:
+        tooltips.append(("FWHM(Qββ)", "@fwhm{0.2f} keV"))
+    p.hover.tooltips = tooltips
+    p.hover.formatters = {"$x": "datetime", "$source": "printf"}
+
+    if fwhm:
+        plot_style.legend_proxy(
+            p, plot_style.QBB_LIN_LABEL, color="gray", line_dash="dotdash"
+        )
+    elif fwhm_requested:  # calibrated gain, but the period file lacks FWHM
+        p.add_layout(
+            Label(
+                x=10,
+                y=-10,
+                x_units="screen",
+                y_units="screen",
+                text="FWHM(Qββ) not in period file",
+                text_font_size="9px",
+                text_color="dimgray",
+            )  # fmt: skip
+        )
+    lo, hi = limits
+    plot_style.threshold(p, hi, above=True, label="Threshold (limits)")
+    plot_style.threshold(
+        p, lo, above=False, label=None if hi is not None else "Threshold (limits)"
+    )
+
+    if len(index):
+        start_time_str = pd.to_datetime(index[0]).strftime("%d/%m/%Y %H:%M:%S")
+        p.xaxis.axis_label = (
+            f"Time (UTC), {cadence_label} bins, starting: {start_time_str}"
+        )
+    p.yaxis.axis_label = f"{meta.label} [{meta.unit}]"
+
+    # ignore-keys ranges: kept in the data, displayed shaded
+    window_lo, window_hi = (index[0], index[-1]) if len(index) else (None, None)
+    shown_flag = False
+    for raw_lo, raw_hi, _reason in flagged_ranges:
+        lo_ts = plot_style.utc_naive(pd.DatetimeIndex([raw_lo]))[0]
+        hi_ts = plot_style.utc_naive(pd.DatetimeIndex([raw_hi]))[0]
+        if window_lo is not None and (hi_ts < window_lo or lo_ts > window_hi):
+            continue
+        p.add_layout(
+            BoxAnnotation(
+                left=lo_ts,
+                right=hi_ts,
+                fill_color="orange",
+                fill_alpha=0.12,
+                level="underlay",
+            )  # fmt: skip
+        )
+        shown_flag = True
+    if shown_flag:
+        plot_style.legend_proxy(
+            p, "flagged (ignore-keys)", color="orange", line_width=6
         )
 
-    if p.legend:
-        p.legend.location = "bottom_left"
-        p.legend.click_policy = "hide"
-    p.xaxis.axis_label = f"{plot_info['label']} [{plot_info['unit_label']}]"
-    p.xaxis.axis_label_text_font_size = "20px"
-    p.yaxis.axis_label = "Counts"
-    p.yaxis.axis_label_text_font_size = "20px"
+    y_range = _auto_y_range(mean_df, std_df)
+    if y_range is not None:
+        p.y_range = y_range
+    plot_style.finish_legend(p, "bottom_left")
+    _add_sc_overlay(p, data_sc, sc_param, "0min")
 
+    return p
+
+
+def phy_plot_dist_histogram(dist, meta: PlotMeta, limits=(None, None)):
+    """Distribution view from the contract-v2 1-D histogram (all detectors).
+
+    ``dist`` is the (edges, counts, attrs) tuple from
+    ``contract_reader.read_dist``. The producer ranges the histogram on the
+    0.5-99.5 percentiles; the tails are reported from the flow bins.
+    """
+    edges, counts, attrs = dist
+
+    p = plot_style.make_figure(
+        f"{meta.experiment}-{meta.period}-{meta.run} | "
+        f"Phy. {meta.flag_display} | {meta.param_display} | all detectors",
+        height=600,
+        tools="pan,box_zoom,ywheel_zoom,hover,reset,save",
+        output_backend="webgl",
+        active_scroll="ywheel_zoom",
+    )
+    p.quad(
+        top=counts, bottom=0, left=edges[:-1], right=edges[1:],
+        fill_color="steelblue", line_color="white", fill_alpha=0.8,
+    )  # fmt: skip
+    p.hover.tooltips = [
+        (f"{meta.label} ({meta.unit})", "$x{0.2f}"),
+        ("Counts", "$y{0}"),
+    ]
+    p.xaxis.axis_label = f"{meta.label} [{meta.unit}]"
+    p.yaxis.axis_label = "Counts"
+
+    lo, hi = limits
+    for value in (lo, hi):
+        if value is not None:
+            p.add_layout(
+                Span(
+                    location=value,
+                    dimension="height",
+                    line_color="black",
+                    line_dash="dashed",
+                )  # fmt: skip
+            )
+    under, over = attrs.get("flow", (0, 0))
+    p.add_layout(
+        Label(
+            x=10,
+            y=-10,
+            x_units="screen",
+            y_units="screen",
+            x_offset=0,
+            text=(
+                f"range: 0.5-99.5 percentile | underflow {under:.0f}, "
+                f"overflow {over:.0f} entries"
+            ),
+            text_font_size="9px",
+            text_color="dimgray",
+        )  # fmt: skip
+    )
     return p

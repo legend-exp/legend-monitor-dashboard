@@ -65,10 +65,8 @@ class Monitoring(param.Parameterized):
     def __init__(self, base_path, notebook=False, **params):
         if notebook is True:
             output_notebook(INLINE)
-        self.base_path = base_path
+        super().__init__(base_path=base_path, **params)
         self.sort_obj = get_sort_dets(base_path)
-
-        super().__init__(**params)
 
         if "date_range" not in params:
             now = datetime.now()
@@ -98,48 +96,50 @@ class Monitoring(param.Parameterized):
                 raise RuntimeError(msg)
             self.period_objects = list(self.periods)
             self.period = list(self.periods)[-1]
-            self._get_period_data(None)
+            self._get_period_data()
+            # Only the discovering instance owns the period -> run cascade.
+            # Instances fed by refs (periods=..., run=...) must never assign
+            # those parameters: assigning a ref-bound param deletes the ref.
+            self.param.watch(self._get_period_data, ["period"], precedence=0)
 
-        self.param.watch(self._get_period_data, ["period"], precedence=0)
-
-    def _get_period_data(self, event=None):  # noqa: ARG002
-        self.run_dict = self.periods[self.period]
-
-        self.run_objects = list(self.run_dict)
-        # Always land on the latest run of the (new) period. If the run id is
-        # unchanged (run ids repeat across periods), trigger explicitly so
-        # dependent views still refresh for the new period.
-        last_run = list(self.run_dict)[-1]
-        if self.run == last_run:
-            self.param.trigger("run")
-        else:
-            self.run = last_run
-
+    def _full_date_range(self):
+        """(first run start - 100 min, last run start + 110 min) over all periods."""
         start_period = sorted(self.periods)[0]
         start_run = sorted(self.periods[start_period])[0]
         end_period = sorted(self.periods)[-1]
         end_run = sorted(self.periods[end_period])[-1]
+        return (
+            datetime.strptime(
+                self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
+            )
+            - dtt.timedelta(minutes=100),
+            datetime.strptime(
+                self.periods[end_period][end_run]["timestamp"], "%Y%m%dT%H%M%SZ"
+            )
+            + dtt.timedelta(minutes=110),
+        )
 
-        self.param["date_range"].bounds = (
-            datetime.strptime(
-                self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-            )
-            - dtt.timedelta(minutes=100),
-            datetime.strptime(
-                self.periods[end_period][end_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-            )
-            + dtt.timedelta(minutes=110),
+    def _set_run_state(self, run):
+        """Apply the current period's run list, ``run`` and the date range.
+
+        One batch: ref-following instances receive run_dict, run and
+        date_range together, so their views render once with consistent
+        state. Views key on run_dict (not period) so a new period whose
+        latest run id repeats the current one still refreshes.
+        """
+        run_dict = self.periods[self.period]
+        date_range = self._full_date_range()
+        self.param["date_range"].bounds = date_range
+        self.param.update(
+            run_dict=run_dict,
+            run_objects=list(run_dict),
+            run=run,
+            date_range=date_range,
         )
-        self.date_range = (
-            datetime.strptime(
-                self.periods[start_period][start_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-            )
-            - dtt.timedelta(minutes=100),
-            datetime.strptime(
-                self.periods[end_period][end_run]["timestamp"], "%Y%m%dT%H%M%SZ"
-            )
-            + dtt.timedelta(minutes=110),
-        )
+
+    def _get_period_data(self, *events):  # noqa: ARG002
+        # Land on the latest run of the (new) period.
+        self._set_run_state(list(self.periods[self.period])[-1])
 
     def _refresh_periods(self):
         """Scan for new periods/runs in this session and apply any changes."""
@@ -151,10 +151,17 @@ class Monitoring(param.Parameterized):
         Kept separate from the scan so a single shared scan can push the same
         result into many sessions (see util.PeriodRefreshRegistry).
         """
-        if new_periods != self.periods:
-            self.periods = new_periods
-            self.period_objects = list(new_periods)
-            self._get_period_data()
+        if new_periods == self.periods:
+            return
+        self.periods = new_periods
+        self.period_objects = list(new_periods)
+        if self.period not in new_periods:
+            self.period = list(new_periods)[-1]  # cascades via the watcher
+        elif new_periods[self.period] != self.run_dict:
+            # New runs in the viewed period: refresh the run list but keep
+            # the user's selection.
+            runs = new_periods[self.period]
+            self._set_run_state(self.run if self.run in runs else list(runs)[-1])
 
     def _get_run_dict(self, event=None):  # noqa: ARG002
         start_time = time.time()

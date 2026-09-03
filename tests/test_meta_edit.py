@@ -471,7 +471,7 @@ def test_normalize_partition_rejects_garbage():
         meta_edit.normalize_partition("group12", "cal")
 
 
-def test_raw_run_catalogue(tmp_path):
+def _raw_tree(tmp_path):
     raw = tmp_path / "raw"
     for period, run, dtype, ts in [
         ("p14", "r001", "phy", "20250502T110000Z"),
@@ -482,14 +482,37 @@ def test_raw_run_catalogue(tmp_path):
         d = raw / dtype / period / run
         d.mkdir(parents=True)
         (d / f"l200-{period}-{run}-{dtype}-{ts}-tier_raw.lh5").touch()
+    return raw
 
-    cat = meta_edit.raw_run_catalogue([raw, tmp_path / "missing"])
-    assert list(cat) == ["p03", "p14"]
-    assert list(cat["p14"]) == ["r001", "r002"]
+
+def test_raw_datatypes_and_periods_scans_directories_only(tmp_path):
+    raw = _raw_tree(tmp_path)
+    (raw / "phy/p14/r001/not-a-cycle.txt").touch()
+    dtypes, periods = meta_edit.raw_datatypes_and_periods([raw, tmp_path / "missing"])
+    assert dtypes == ["cal", "phy"]
+    assert periods == ["p03", "p14"]
+
+
+def test_raw_runs_and_cycles_are_read_per_selection(tmp_path):
+    raw = _raw_tree(tmp_path)
+    dirs = [raw, tmp_path / "missing"]
+    assert meta_edit.raw_runs(dirs, "p14") == ["r001", "r002"]
+    assert meta_edit.raw_runs(dirs, "p03") == ["r000"]
+    assert meta_edit.raw_runs(dirs, "p99") == []
     # cycles sorted by timestamp: cal at 10:00 before phy at 11:00
-    assert cat["p14"]["r001"] == [
+    assert meta_edit.raw_cycles(dirs, "p14", "r001") == [
         "l200-p14-r001-cal-20250502T100000Z",
         "l200-p14-r001-phy-20250502T110000Z",
+    ]
+    assert meta_edit.raw_cycles(dirs, "p14", "r999") == []
+
+
+def test_raw_cycles_ignores_files_that_are_not_cycles(tmp_path):
+    raw = _raw_tree(tmp_path)
+    (raw / "phy/p14/r002/l200-p14-r002-phy-notatimestamp-tier_raw.lh5").touch()
+    (raw / "phy/p14/r002/short-name.lh5").touch()
+    assert meta_edit.raw_cycles([raw], "p14", "r002") == [
+        "l200-p14-r002-phy-20250507T140000Z"
     ]
 
 

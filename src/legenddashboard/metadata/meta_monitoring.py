@@ -302,7 +302,9 @@ class MetaMonitoring(Monitoring):
                 "selector restricts every plot to the runs of one "
                 "`runlists.yaml` dataset."
             ),
-            self.view_overview,
+            pn.param.ParamMethod(
+                self.view_overview, lazy=True, sizing_mode="stretch_width"
+            ),
             name="Overview",
             sizing_mode="stretch_width",
         )
@@ -555,7 +557,9 @@ class MetaMonitoring(Monitoring):
             usability_box,
             psd_box,
             reason_in,
-            self.view_status_preview,
+            pn.param.ParamMethod(
+                self.view_status_preview, lazy=True, sizing_mode="stretch_width"
+            ),
             apply_btn,
             width=max(w + 40, 300),
             styles=self._STICKY,
@@ -566,7 +570,9 @@ class MetaMonitoring(Monitoring):
                     "Tap a cell to pick that detector and start run; the "
                     "matrix follows the edit mode (usability / PSD)."
                 ),
-                self.view_status_matrix,
+                pn.param.ParamMethod(
+                    self.view_status_matrix, lazy=True, sizing_mode="stretch_width"
+                ),
                 sizing_mode="stretch_width",
                 styles={"min-width": "0"},
             ),
@@ -899,7 +905,9 @@ class MetaMonitoring(Monitoring):
             styles=self._STICKY,
         )
         content = pn.Column(
-            self.view_groupings_warning,
+            pn.param.ParamMethod(
+                self.view_groupings_warning, lazy=True, sizing_mode="stretch_width"
+            ),
             pn.pane.Markdown(
                 "**Edit the block as a table** (one row per partition and "
                 "period; runs as a comma-separated list, ranges like "
@@ -909,7 +917,9 @@ class MetaMonitoring(Monitoring):
             table,
             pn.Row(add_row_btn, del_row_btn, split_run_in, split_btn, apply_btn),
             pn.layout.Divider(),
-            self.view_partitions_matrix,
+            pn.param.ParamMethod(
+                self.view_partitions_matrix, lazy=True, sizing_mode="stretch_width"
+            ),
             sizing_mode="stretch_width",
             styles={"min-width": "0"},
         )
@@ -1221,10 +1231,10 @@ class MetaMonitoring(Monitoring):
         )
 
         raw_dirs = self._raw_dirs()
-        catalogue = meta_edit.raw_run_catalogue(raw_dirs)
-        period_sel = pn.widgets.Select(
-            name="Period", options=list(catalogue) or ["—"], width=w
-        )
+        # directory names only: runs and cycle ids are read for the chosen
+        # period/run below, so opening this tab never walks the whole tier
+        datatypes, periods = meta_edit.raw_datatypes_and_periods(raw_dirs)
+        period_sel = pn.widgets.Select(name="Period", options=periods or ["—"], width=w)
         run_sel = pn.widgets.Select(name="Run", options=[], width=w)
 
         now = datetime.now(UTC).replace(tzinfo=None)
@@ -1247,9 +1257,7 @@ class MetaMonitoring(Monitoring):
             name="Add selected", button_type="primary", width=w, disabled=True
         )
 
-        dtype_choice.options = sorted(
-            {d.name for rd in raw_dirs for d in rd.iterdir() if d.is_dir()}
-        )
+        dtype_choice.options = datatypes
 
         def _show_cycles(cycles: list[str]) -> None:
             preview.value = pd.DataFrame({"cycle": cycles})
@@ -1257,7 +1265,7 @@ class MetaMonitoring(Monitoring):
             add_sel_btn.disabled = not cycles
 
         def _on_period(*_events):
-            runs = list(catalogue.get(period_sel.value, {}))
+            runs = meta_edit.raw_runs(raw_dirs, period_sel.value)
             run_sel.options = runs
             if runs:
                 run_sel.value = runs[0]
@@ -1265,11 +1273,16 @@ class MetaMonitoring(Monitoring):
                 _show_cycles([])
 
         def _on_run(*_events):
-            _show_cycles(catalogue.get(period_sel.value, {}).get(run_sel.value, []))
+            if not run_sel.value:
+                _show_cycles([])
+                return
+            _show_cycles(
+                meta_edit.raw_cycles(raw_dirs, period_sel.value, run_sel.value)
+            )
 
         period_sel.param.watch(_on_period, "value")
         run_sel.param.watch(_on_run, "value")
-        if catalogue:
+        if periods:
             _on_period()
 
         def _find(_event):
@@ -1336,7 +1349,9 @@ class MetaMonitoring(Monitoring):
             preview,
             pn.layout.Divider(),
             pn.pane.Markdown("**Currently ignored cycles**"),
-            self.view_cycles_table,
+            pn.param.ParamMethod(
+                self.view_cycles_table, lazy=True, sizing_mode="stretch_width"
+            ),
             name="Bad cycles",
             sizing_mode="stretch_width",
         )
@@ -1464,7 +1479,9 @@ class MetaMonitoring(Monitoring):
                 sizing_mode="stretch_width",
             ),
             refresh_btn,
-            self.view_pending,
+            pn.param.ParamMethod(
+                self.view_pending, lazy=True, sizing_mode="stretch_width"
+            ),
             pn.layout.Divider(),
             message_in,
             pn.Row(username_in, token_in),

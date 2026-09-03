@@ -13,6 +13,7 @@ from bokeh.models.widgets.tables import BooleanFormatter
 import legenddashboard.geds.string_visulization as visu
 from legenddashboard.base import Monitoring
 from legenddashboard.util import (
+    LRUDict,
     get_characterization,
     get_production,
     logo_path,
@@ -22,6 +23,8 @@ from legenddashboard.util import (
 )
 
 log = logging.getLogger(__name__)
+
+_meta_df_cache = LRUDict(maxsize=64)
 
 meta_visu_plots_dict = {
     "Usability": visu.plot_visu_usability,
@@ -63,19 +66,18 @@ class GedMonitoring(Monitoring):
         self.meta_visu_source = ColumnDataSource({})
         # get_run_and_channel is rendered via its @param.depends decorator; a
         # param.watch registration on top of that would compute it twice per
-        # change. Only genuine state updaters are watchers.
-        self.param.watch(
-            self.update_strings, ["period", "run", "sort_by"], precedence=1, queued=True
-        )
-        self.param.watch(
-            self._get_metadata, ["period", "run"], precedence=1, queued=True
-        )
+        # change. Only genuine state updaters are watchers. They are registered
+        # here, before any view pane exists, at the same precedence as Panel's
+        # view watchers: same precedence runs in registration order, so state
+        # is updated before the views that display it re-render.
+        self.param.watch(self.update_strings, ["run_dict", "run", "sort_by"])
+        self.param.watch(self._get_metadata, ["run_dict", "run"])
 
         if self.run_dict:
             self.update_strings()
             self._get_metadata()
 
-    @param.depends("period", "run", "channel")
+    @param.depends("run_dict", "run", "channel")
     def get_run_and_channel(self, event=None):  # noqa: ARG002
         try:
             start_time = time.time()
@@ -88,7 +90,7 @@ class GedMonitoring(Monitoring):
             ret = pn.pane.Markdown("###")
         return ret
 
-    def update_strings(self, event=None):  # noqa: ARG002
+    def update_strings(self, *events):  # noqa: ARG002
         start_time = time.time()
         strings_dict, self.chan_dict, self.channel_map = sorter(
             self.base_path,
@@ -98,7 +100,8 @@ class GedMonitoring(Monitoring):
         )
 
         self.string_objects = list(strings_dict)
-        self.string = f"{next(iter(strings_dict))}"
+        if self.string not in strings_dict:  # keep the user's string when valid
+            self.string = f"{next(iter(strings_dict))}"
         self.strings_dict = strings_dict
         self.name_to_rawid = {
             k: int(v["daq"]["rawid"]) for k, v in self.channel_map.items()
@@ -108,8 +111,20 @@ class GedMonitoring(Monitoring):
         }
         log.debug("Time to update strings: %.3fs", time.time() - start_time)
 
-    def _get_metadata(self, event=None):  # noqa: ARG002
+    def _get_metadata(self, *events):  # noqa: ARG002
         start_time = time.time()
+        # The table is a pure function of the channel map at the run's
+        # timestamp; ged, cal and phy instances all rebuild it on every run
+        # change, so share one build per process (copied: Tabulator may edit).
+        try:
+            timestamp = self.run_dict[self.run]["timestamp"]
+        except KeyError:  # run/run_dict mid-transition
+            return
+        cache_key = (self.base_path, timestamp, self.sort_by)
+        cached = _meta_df_cache.get(cache_key)
+        if cached is not None:
+            self.meta_df = cached.copy()
+            return
         try:
             chan_dict, channel_map = self.chan_dict, self.channel_map
 
@@ -210,7 +225,8 @@ class GedMonitoring(Monitoring):
             )
             df_out = df_out.drop(["characterization", "production"], axis=1)
             df_out = df_out.astype({"Proc.": "bool", "Usabl.": "bool"})
-            self.meta_df = df_out
+            _meta_df_cache[cache_key] = df_out
+            self.meta_df = df_out.copy()
 
         except KeyError:
             # Keep the previous table but make schema drift visible instead of
@@ -223,7 +239,7 @@ class GedMonitoring(Monitoring):
             )
         log.debug("Time to get metadata: %.3fs", time.time() - start_time)
 
-    @param.depends("run")
+    @param.depends("run_dict", "run")
     def view_meta(self):
         start_time = time.time()
         ret = pn.widgets.Tabulator(
@@ -234,7 +250,7 @@ class GedMonitoring(Monitoring):
         log.debug("Time to get meta: %.3fs", time.time() - start_time)
         return ret
 
-    @param.depends("run", "meta_visu_plots")
+    @param.depends("run_dict", "run", "meta_visu_plots")
     def view_meta_visu(self):
         start_time = time.time()
         strings_dict, meta_visu_chan_dict, meta_visu_channel_map = sorter(
@@ -338,10 +354,18 @@ class GedMonitoring(Monitoring):
             pn.Tabs(
                 (
                     "Detector Visu",
-                    pn.pane.Bokeh(self.view_meta_visu, sizing_mode="scale_width"),
+                    pn.param.ParamMethod(
+                        self.view_meta_visu, lazy=True, sizing_mode="stretch_width"
+                    ),
                 ),
-                ("Detector Map", self.view_meta),
+                (
+                    "Detector Map",
+                    pn.param.ParamMethod(
+                        self.view_meta, lazy=True, sizing_mode="stretch_width"
+                    ),
+                ),
                 sizing_mode="scale_both",
+                dynamic=True,
             ),
             name="MetaData",
             sizing_mode="scale_both",

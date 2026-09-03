@@ -44,9 +44,6 @@ paths:
   base: .. # production cycle (period/run discovery)
   cal: .. # production cycle used by the cal pages
   phy: /path/to/phy # physics monitoring data
-  sipm: /path/to/sipm # SiPM monitoring data
-  muon: /path/to/muon # muon monitoring data
-  llama: /path/to/llama # llama DAQ data
   tmp: /tmp # writable dir (CSV downloads, caches)
   # editable legend-metadata clone for the Metadata Editor page; cloned /
   # updated automatically on startup (see METADATA_EDIT_URL below)
@@ -70,13 +67,13 @@ Useful options:
 | option                        | effect                                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-p/--port`                   | port to serve on (default 9000)                                                                                                             |
-| `-d/--disable-page ...`       | skip pages: `cal` `phy` `spm` `muon` `llama` `meta` `metaedit`                                                                              |
+| `-d/--disable-page ...`       | skip pages: `cal` `phy` `spm` `muon` `meta` `metaedit`                                                                                      |
 | `--num-threads N`             | server thread pool (default 4)                                                                                                              |
 | `--websocket-origin HOST ...` | allowed websocket origin(s); **required behind a reverse proxy** (use the public hostname, or `'*'` to disable the check for local testing) |
 | `-w/--widget-widths N`        | widget width tuning                                                                                                                         |
 
 The production Spin deployment runs
-`dashboard ./dashboard-config.yaml -p 5000 --num-threads 4 -d spm muon llama phy`,
+`dashboard ./dashboard-config.yaml -p 5000 --num-threads 4 -d spm muon phy`,
 serving the calibration pages, the read-only MetaData page, the Metadata
 Editor and the Information page.
 
@@ -101,9 +98,6 @@ Each page group also has a standalone entry point:
 ```sh
 uv run dashboard-cal      dashboard-config.yaml -p 9009
 uv run dashboard-phy      dashboard-config.yaml -p 9009
-uv run dashboard-spms     dashboard-config.yaml -p 9009
-uv run dashboard-muon     dashboard-config.yaml -p 9009
-uv run dashboard-llama    dashboard-config.yaml -p 9009
 uv run dashboard-meta     dashboard-config.yaml -p 9009   # read-only metadata pages
 uv run dashboard-metaedit dashboard-config.yaml -p 9009   # Metadata Editor only
 ```
