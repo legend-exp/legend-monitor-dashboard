@@ -7,10 +7,12 @@ written against, optional detector names and a "seen in" hint naming the plot.
 A note's run doubles as its link: Jump points the whole dashboard at it by
 assigning the ref-shared period/run, like the metadata click-to-jump.
 
-The store is process-wide (one instance per path) and also survives multiple
-server processes pointing at the same file: every read/mutation reloads when
-the file's (mtime, size) fingerprint changed, and writes are atomic renames.
-An unwritable path degrades to a memory-only store with a warning, never a
+The store is process-wide (one instance per path). Every read/mutation
+reloads when the file's (mtime, size) fingerprint changed, so hand edits and
+writes by another process are picked up; writes are atomic renames but there
+is no cross-process lock, so concurrent writers in separate processes are
+last-write-wins (the deployment serves all sessions from one process). An
+unwritable path degrades to a memory-only store with a warning, never a
 crashed dashboard.
 """
 
@@ -23,6 +25,7 @@ import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import ClassVar
 
 import pandas as pd
 import panel as pn
@@ -76,6 +79,9 @@ class NotesStore:
         try:
             with self.path.open() as f:
                 raw = json.load(f)
+            if not isinstance(raw, list):
+                msg = f"notes file holds {type(raw).__name__}, not a list"
+                raise TypeError(msg)
             self._notes = [n for n in raw if isinstance(n, dict) and n.get("id")]
         except (OSError, json.JSONDecodeError, TypeError):
             log.exception("unreadable notes file %s; keeping current notes", self.path)
@@ -167,7 +173,7 @@ class NotesPage(Monitoring):
 
     notes_path = param.String("")
 
-    _COLUMN_TITLES = {
+    _COLUMN_TITLES: ClassVar[dict] = {
         "created": "Created",
         "author": "Author",
         "where": "Run",
@@ -203,11 +209,17 @@ class NotesPage(Monitoring):
         frame = frame.assign(
             where=frame["period"].fillna("?") + " " + frame["run"].fillna("?"),
             detectors=frame["detectors"].apply(
-                lambda v: ", ".join(v) if isinstance(v, list) else (v or "")
+                lambda v: ", ".join(v) if isinstance(v, list) else ""
             ),
         )
         columns = list(self._COLUMN_TITLES)
         return frame[["id", *columns]].rename(columns=self._COLUMN_TITLES)
+
+    def _note(self, note_id: str) -> dict | None:
+        """The note's fields, or None when another session removed it."""
+        frame = self.store.all()
+        rows = frame[frame["id"] == note_id]
+        return None if rows.empty else rows.iloc[0].to_dict()
 
     def _jump_to(self, period: str, run: str) -> None:
         """Point the whole dashboard at (period, run) if it has data."""
@@ -299,7 +311,11 @@ class NotesPage(Monitoring):
             note_id = selected_id()
             if note_id is None:
                 return
-            row = self.store.all().set_index("id").loc[note_id]
+            row = self._note(note_id)
+            if row is None:  # deleted by another session since selection
+                refresh_table()
+                feedback("that note no longer exists", "warning")
+                return
             self._jump_to(row["period"], row["run"])
             if self.period == row["period"] and self.run == row["run"]:
                 feedback(f"dashboard now at {row['period']} {row['run']}")
@@ -310,7 +326,11 @@ class NotesPage(Monitoring):
             note_id = selected_id()
             if note_id is None:
                 return
-            row = self.store.all().set_index("id").loc[note_id]
+            row = self._note(note_id)
+            if row is None:  # deleted by another session since selection
+                refresh_table()
+                feedback("that note no longer exists", "warning")
+                return
             status = "open" if row["status"] == "resolved" else "resolved"
             self.store.set_status(note_id, status)
             refresh_table()
@@ -330,7 +350,7 @@ class NotesPage(Monitoring):
         show_resolved.param.watch(refresh_table, "value")
         # new run selection: refresh the table and offer that run's detectors
         self.param.watch(
-            lambda *e: (
+            lambda *_e: (
                 refresh_table(),
                 setattr(detectors, "options", self._detector_names()),
             ),

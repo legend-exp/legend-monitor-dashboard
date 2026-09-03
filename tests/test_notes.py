@@ -119,3 +119,28 @@ def test_page_jump_guard(tmp_path):
 
 def test_page_detector_names_tolerates_missing_tree(tmp_path):
     assert _page(tmp_path)._detector_names() == []
+
+
+def test_reload_keeps_notes_on_malformed_file(tmp_path):
+    path = tmp_path / "notes.json"
+    store = NotesStore(path)
+    store.add(author="a", period="p22", run="r000", detectors=[], seen_in="", text="x")
+    path.write_text('{"oops": "a dict, not a list"}')
+    assert list(store.all()["text"]) == ["x"]  # kept, not silently dropped
+
+
+def test_table_blank_for_missing_detectors_field(tmp_path):
+    page = _page(tmp_path)
+    page.store.add(author="a", period="p22", run="r010", seen_in="", text="no dets")
+    frame = page._table_frame(show_resolved=True)
+    assert frame.iloc[0]["Detectors"] == ""  # not "nan"
+
+
+def test_note_lookup_tolerates_deleted_id(tmp_path):
+    page = _page(tmp_path)
+    note = page.store.add(
+        author="a", period="p22", run="r010", detectors=[], seen_in="", text="t"
+    )
+    assert page._note(note["id"])["text"] == "t"
+    page.store.delete(note["id"])
+    assert page._note(note["id"]) is None
