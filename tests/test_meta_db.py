@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from legenddashboard.metadata.meta_db import MetaDB
 
 
@@ -58,3 +60,12 @@ def test_reload_drops_the_status_cache(monkeypatch):
     assert db.version == 1
     db.statuses_on("20260101T000000Z")
     assert stub.statuses.calls == 1  # recomputed, not served from the old cache
+
+
+def test_get_meta_db_refuses_a_missing_clone(tmp_path):
+    from legenddashboard.metadata.meta_db import get_meta_db
+
+    # an empty dir must raise cleanly (-> editor alert), never reach
+    # LegendMetadata, whose fallback is to clone the repo itself over SSH
+    with pytest.raises(RuntimeError, match="no metadata clone"):
+        get_meta_db(tmp_path)
