@@ -215,6 +215,12 @@ def get_meta_db(path: str | Path, datasets_path: str | Path | None = None) -> Me
     per-user workspace worktree).
     """
     resolved = Path(path).resolve()
+    if not (resolved / ".git").exists():
+        # refuse before LegendMetadata sees the empty dir: its fallback is to
+        # clone the repo itself (SSH, --recurse-submodules, stable tag) -
+        # wrong for the editor even when it works, a confusing crash when not
+        msg = f"no metadata clone at {resolved} (startup clone failed?)"
+        raise RuntimeError(msg)
     ds = Path(datasets_path).resolve() if datasets_path else resolved / "datasets"
     key = (str(resolved), str(ds))
     with _meta_db_lock:
