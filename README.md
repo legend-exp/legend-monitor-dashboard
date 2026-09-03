@@ -45,6 +45,8 @@ paths:
   cal: .. # production cycle used by the cal pages
   phy: /path/to/phy # physics monitoring data
   tmp: /tmp # writable dir (CSV downloads, caches)
+  # notes: /path/to/detector-notes.json # optional: shared Notes tab storage
+  #   (defaults to <tmp>/detector-notes.json; ephemeral there on Spin)
   # editable legend-metadata clone for the Metadata Editor page; cloned /
   # updated automatically on startup (see METADATA_EDIT_URL below)
   metadata_edit: ../metadata-edit
@@ -67,7 +69,7 @@ Useful options:
 | option                        | effect                                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-p/--port`                   | port to serve on (default 9000)                                                                                                             |
-| `-d/--disable-page ...`       | skip pages: `cal` `phy` `spm` `muon` `meta` `metaedit`                                                                                      |
+| `-d/--disable-page ...`       | skip pages: `cal` `phy` `spm` `muon` `meta` `notes` `metaedit`                                                                              |
 | `--num-threads N`             | server thread pool (default 4)                                                                                                              |
 | `--websocket-origin HOST ...` | allowed websocket origin(s); **required behind a reverse proxy** (use the public hostname, or `'*'` to disable the check for local testing) |
 | `-w/--widget-widths N`        | widget width tuning                                                                                                                         |
