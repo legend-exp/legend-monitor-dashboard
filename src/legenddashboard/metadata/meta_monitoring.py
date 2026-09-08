@@ -163,6 +163,15 @@ class MetaMonitoring(Monitoring):
     #: sticking the panel to the scrollport can. `align-self: flex-start`
     #: keeps the natural height (a stretched flex child cannot stick); the
     #: background/shadow keep it readable when it floats over wide content.
+    #: Page chrome above the editor's plot/panel row: template header,
+    #: workspace bar, tab strip and the tab's intro text. Measured at 316px in
+    #: the full dashboard and 296px in the standalone editor page; the panel is
+    #: sized against the larger one so it fits on screen *before* the user
+    #: scrolls (once stuck to the top it has even more room).
+    _CHROME_PX: ClassVar[int] = 320
+    #: Height of an edit panel: the screen space left below that chrome.
+    _PANEL_HEIGHT: ClassVar[str] = f"calc(100vh - {_CHROME_PX}px)"
+
     _STICKY: ClassVar[dict[str, str]] = {
         "position": "sticky",
         "top": "0px",
@@ -177,8 +186,27 @@ class MetaMonitoring(Monitoring):
         "padding": "0 40px 10px 10px",
         "border-radius": "4px 0 0 4px",
         "margin": "0",
-        # cover the full visible column so no plot peeks out below the form
-        "min-height": "85vh",
+        # Bound the panel to the screen space it has and scroll the fields
+        # inside it. Without this a form taller than the window ran off the
+        # bottom: a sticky panel pinned at top:0 cannot be scrolled to its own
+        # end, so the buttons underneath the fields were unreachable without
+        # scrolling the whole page -- which dragged the fields out of view.
+        "min-height": _PANEL_HEIGHT,
+        "max-height": _PANEL_HEIGHT,
+        "overflow-y": "auto",
+    }
+
+    #: Applied to the action row at the end of an edit panel: keeps Apply (and
+    #: friends) parked on the panel's bottom edge while the fields scroll
+    #: behind them, so the button is reachable whatever the form's length.
+    _PANEL_ACTIONS: ClassVar[dict[str, str]] = {
+        "position": "sticky",
+        "bottom": "0",
+        "background": "#ffffff",
+        "padding": "8px 0 4px 0",
+        "margin": "0",
+        "border-top": "1px solid #e5e5e5",
+        "z-index": "1",
     }
 
     @staticmethod
@@ -560,7 +588,7 @@ class MetaMonitoring(Monitoring):
             pn.param.ParamMethod(
                 self.view_status_preview, lazy=True, sizing_mode="stretch_width"
             ),
-            apply_btn,
+            pn.Column(apply_btn, styles=self._PANEL_ACTIONS),
             width=max(w + 40, 300),
             styles=self._STICKY,
         )
@@ -900,7 +928,7 @@ class MetaMonitoring(Monitoring):
             ),
             self._selection_info,
             target_in,
-            assign_btn,
+            pn.Column(assign_btn, styles=self._PANEL_ACTIONS),
             width=max(w + 60, 320),
             styles=self._STICKY,
         )
@@ -1131,7 +1159,7 @@ class MetaMonitoring(Monitoring):
             pn.layout.Divider(),
             add_row_btn,
             del_row_btn,
-            apply_btn,
+            pn.Column(apply_btn, styles=self._PANEL_ACTIONS),
             width=max(w + 60, 320),
             styles=self._STICKY,
         )
