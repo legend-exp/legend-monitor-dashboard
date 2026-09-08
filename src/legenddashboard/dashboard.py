@@ -3,16 +3,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import datetime as dt
+import html
 import importlib.resources
 import os
-import secrets
-import sys
 import threading
 from pathlib import Path
 
 import panel as pn
-from panel.auth import BasicAuthProvider, BasicLoginHandler
-from panel.io.resources import CDN_DIST
+
+from legenddashboard import auth
 
 
 def get_paths():
@@ -127,15 +126,16 @@ def build_dashboard(
             refresh_button.loading = False
 
     refresh_button.on_click(_on_refresh)
-    l200_monitoring.header.append(
-        pn.Row(
-            pn.Spacer(width=120),
-            build_header_logos(),
-            pn.HSpacer(),
-            refresh_button,
-            sizing_mode="stretch_width",
-        )
-    )
+    header_items = [
+        pn.Spacer(width=120),
+        build_header_logos(),
+        pn.HSpacer(),
+    ]
+    user_chip = build_user_chip()
+    if user_chip is not None:
+        header_items.append(user_chip)
+    header_items.append(refresh_button)
+    l200_monitoring.header.append(pn.Row(*header_items, sizing_mode="stretch_width"))
 
     sidebar = base_monitor.build_sidebar()
     l200_monitoring.sidebar.append(ged_monitor.build_sidebar(sidebar_instance=sidebar))
@@ -357,47 +357,29 @@ def build_header_logos():
     )
 
 
+def build_user_chip():
+    """Signed-in user + logout link, or None when nobody is authenticated.
+
+    Panel sets ``state.user`` to "guest" when no auth provider is configured,
+    so the chip disappears in an open deployment.
+    """
+    user = pn.state.user
+    if not user or user == "guest":
+        return None
+    return pn.pane.HTML(
+        f'<span style="color:#1A2A5B;font-size:0.9em;white-space:nowrap">'
+        f"{html.escape(str(user))}"
+        f'<a href="./logout" style="color:#1A2A5B;margin-left:0.8em;'
+        f'text-decoration:underline">Log out</a></span>',
+        align="center",
+        margin=(0, 10, 0, 0),
+    )
+
+
 def build_info_pane(info_path):
     with Path(info_path).open() as f:
         general_information = f.read()
     return pn.pane.Markdown(general_information)
-
-
-class _XSRFBasicLoginHandler(BasicLoginHandler):
-    """Panel's basic login handler, extended to carry the Tornado XSRF token.
-
-    The stock handler renders a form without the ``_xsrf`` field, so serving
-    with ``xsrf_cookies=True`` would reject every login attempt with a 403.
-    """
-
-    def get(self):
-        try:
-            errormessage = self.get_argument("error")
-        except Exception:
-            errormessage = ""
-        next_url = self.get_argument("next", pn.state.base_url)
-        if next_url:
-            if pn.state.base_url and not next_url.startswith(pn.state.base_url):
-                next_url = next_url.replace("/", pn.state.base_url, 1)
-            self.set_cookie("next_url", next_url)
-        html = self._login_template.render(
-            login_endpoint=self._login_endpoint,
-            errormessage=errormessage,
-            PANEL_CDN=CDN_DIST,
-            # Rendering the hidden form field also sets the _xsrf cookie.
-            xsrf_input=self.xsrf_form_html(),
-        )
-        self.write(html)
-
-
-class _XSRFBasicAuthProvider(BasicAuthProvider):
-    """BasicAuthProvider whose login form includes the XSRF token."""
-
-    @property
-    def login_handler(self):
-        _XSRFBasicLoginHandler._login_endpoint = self._login_endpoint
-        _XSRFBasicLoginHandler._login_template = self._login_template
-        return _XSRFBasicLoginHandler
 
 
 def run_dashboard() -> None:
@@ -503,55 +485,6 @@ def run_dashboard() -> None:
     if args.websocket_origin:
         serve_kwargs["websocket_origin"] = args.websocket_origin
 
-    # Optional authentication. On NERSC spin the username, password and cookie
-    # secret are injected as environment variables from spin secrets, so they
-    # never appear in the image, the command line or the repo. When
-    # DASHBOARD_PASSWORD is set, Panel shows a login page. If DASHBOARD_USERNAME
-    # is also set, only that username/password pair is accepted; otherwise any
-    # username with the matching password works.
-    password = os.environ.get("DASHBOARD_PASSWORD")
-    username = os.environ.get("DASHBOARD_USERNAME")
-    basic_auth = {username: password} if (password and username) else password
-    if basic_auth:
-        cookie_secret = os.environ.get("DASHBOARD_COOKIE_SECRET")
-        if not cookie_secret:
-            # A cookie secret is required to sign the login cookie. Generate an
-            # ephemeral one if none is provided, but warn: it changes on every
-            # restart (invalidating logins) and differs across replicas, so set
-            # it as a spin secret for stable sessions.
-            cookie_secret = secrets.token_urlsafe(32)
-            print(  # noqa: T201
-                "DASHBOARD_COOKIE_SECRET not set; generated an ephemeral one. "
-                "Logins will be invalidated on restart -- set it as a spin "
-                "secret for stable sessions."
-            )
-        # Passing ``basic_auth`` to pn.serve would install Panel's stock login
-        # form, which lacks the XSRF field. Install our provider instead and
-        # expose the credentials via pn.config.basic_auth, which the login
-        # handler's validation falls back to.
-        login_template = (
-            importlib.resources.files("legenddashboard")
-            / "templates"
-            / "basic_login.html"
-        )
-        pn.config.basic_auth = basic_auth
-        serve_kwargs["auth_provider"] = _XSRFBasicAuthProvider(
-            login_template=str(login_template)
-        )
-        serve_kwargs["cookie_secret"] = cookie_secret
-        print("Shared-password authentication enabled.")  # noqa: T201
-    else:
-        if username:
-            print(  # noqa: T201
-                "=" * 70 + "\nWARNING: DASHBOARD_USERNAME is set but DASHBOARD_PASSWORD"
-                " is missing\nor empty -- the configured credentials are NOT"
-                " in effect.\n" + "=" * 70,
-                file=sys.stderr,
-            )
-        print(  # noqa: T201
-            "=" * 70 + "\nWARNING: no DASHBOARD_PASSWORD set; the dashboard is served"
-            " WITHOUT\nauthentication and is publicly accessible.\n" + "=" * 70,
-            file=sys.stderr,
-        )
+    print(auth.configure_auth(serve_kwargs))  # noqa: T201
 
     pn.serve(_build_dash, **serve_kwargs)

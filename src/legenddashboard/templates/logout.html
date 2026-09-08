@@ -1,0 +1,75 @@
+<!-- Logout page, styled to match basic_login.html. Panel renders this with
+     LOGIN_ENDPOINT (upper case here, lower case in the login template -- that
+     is Panel's own naming, not a typo). -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>L200 Monitoring Dashboard | Signed out</title>
+    <link rel="icon" type="image/x-icon" href="{{ PANEL_CDN }}images/favicon.ico">
+    <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html {
+      height: 100%;
+    }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 1em;
+      height: 100%;
+      line-height: 1.6;
+    }
+    .wrap {
+      align-items: center;
+      background: #fafafa;
+      display: flex;
+      height: 100%;
+      justify-content: center;
+      width: 100%;
+    }
+    .logout-card {
+      background: #ffffff;
+      border: 1px solid #ddd;
+      margin: 0 auto;
+      padding: 2em;
+      text-align: center;
+      width: 350px;
+    }
+    .logout-card h1 {
+      font-size: 1.3em;
+      padding-bottom: 0.5em;
+    }
+    .logout-card p {
+      color: #555;
+      padding-bottom: 1.5em;
+    }
+    .btn {
+      background: #1a2a5b;
+      border: none;
+      color: #ffffff;
+      cursor: pointer;
+      font-size: 1em;
+      padding: 0.6em 1.4em;
+      width: 100%;
+    }
+    .btn:hover {
+      background: #24397a;
+    }
+    </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logout-card">
+      <h1>Signed out</h1>
+      <p>You have signed out of the L200 Monitoring Dashboard.</p>
+      <form action=".{{ LOGIN_ENDPOINT }}" method="get">
+        <button class="btn" type="submit">Sign back in</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

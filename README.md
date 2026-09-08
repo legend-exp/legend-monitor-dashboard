@@ -93,6 +93,30 @@ login (on Spin these come from secrets):
 
 Without `DASHBOARD_PASSWORD` the dashboard is served unauthenticated.
 
+#### LDAP login
+
+Setting `DASHBOARD_LDAP_SERVER` switches the login page over to the LEGEND
+directory, so people sign in with their own credentials (and
+`DASHBOARD_PASSWORD` is then ignored). `DASHBOARD_COOKIE_SECRET` matters more
+here — without a stable one every restart signs everybody out.
+
+Pick one of the two bind strategies:
+
+- **direct bind** — `DASHBOARD_LDAP_USER_DN_TEMPLATE`, e.g.
+  `uid={username},ou=people,dc=legend-exp,dc=org`. The literal `{username}`
+  is required; no service account is needed.
+- **search-then-bind** — all of `DASHBOARD_LDAP_BIND_DN`,
+  `DASHBOARD_LDAP_BIND_PASSWORD` and `DASHBOARD_LDAP_SEARCH_BASE`. The
+  service account looks the user up (`DASHBOARD_LDAP_USER_FILTER`, default
+  `(uid={username})`) and the found DN is re-bound with their password.
+
+Optional: `DASHBOARD_LDAP_GROUP_DN` restricts access to members of one group
+(matching `member`, `uniqueMember` or `memberUid`);
+`DASHBOARD_LDAP_STARTTLS=1` upgrades an `ldap://` URL (invalid with
+`ldaps://`, which is already TLS); `DASHBOARD_LDAP_CA_FILE` overrides the CA
+bundle. The server certificate is always verified. A half-configured server
+fails at startup rather than at the first login.
+
 ### Individual components
 
 Each page group also has a standalone entry point:

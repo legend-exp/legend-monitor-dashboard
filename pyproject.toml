@@ -35,10 +35,14 @@ dynamic = ["version"]
 
 dependencies = [
     "bokeh>=3.1.1",
+    # CA bundle for verifying the LDAP server certificate
+    "certifi",
     "colorcet>=3.0.1",
     "dbetto>=1.2.3",
     "h5py",
     "holoviews>=1.16.0",
+    # pure-python LDAP client for the optional login gate (no system libldap)
+    "ldap3>=2.9.1",
     # matplotlib is imported at module scope throughout; declare it directly
     # (the Docker image additionally pins it to match the pickled shelve files).
     "matplotlib>=3.8",
@@ -125,6 +129,9 @@ addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 xfail_strict = true
 filterwarnings = [
   "error",
+  # ldap3 2.9.1 still touches pyasn1's renamed tagMap/typeMap aliases
+  "ignore:tagMap is deprecated:DeprecationWarning",
+  "ignore:typeMap is deprecated:DeprecationWarning",
 ]
 log_cli_level = "INFO"
 testpaths = [
