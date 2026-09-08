@@ -1,5 +1,7 @@
-<!-- Copy of panel's basic_login.html with one addition: the {{ xsrf_input }}
-     placeholder inside the form. The dashboard serves with Tornado's
+<!-- Copy of panel's basic_login.html with two additions: the
+     {{ xsrf_input }} placeholder inside the form, and the optional
+     {{ login_hint }} line, which only the LDAP handler sets so the
+     shared-password login shows no LDAP-specific text. The dashboard serves with Tornado's
      xsrf_cookies protection enabled, so the login POST must carry the XSRF
      token (see legenddashboard.dashboard run_dashboard). -->
 <!DOCTYPE html>
@@ -66,6 +68,12 @@
     .form-header {
       text-align: center;
     }
+    .form-header p.login-hint {
+      color: #5a6480;
+      font-size: 0.85em;
+      line-height: 1.4;
+      padding-bottom: 0.25em;
+    }
     .form-footer {
       text-align: center;
     }
@@ -82,6 +90,9 @@
         <h3>L200 Monitoring Dashboard</h3>
         <br>
         <p>Login to access the dashboard</p>
+        {% if login_hint %}
+        <p class="login-hint">{{ login_hint|escape }}</p>
+        {% endif %}
       </div>
       <div id="error-message" class="form-group">
         <p style="color:rgb(255, 0, 0);font-weight:bold" class="errormessage">{{errormessage|escape}}</p>

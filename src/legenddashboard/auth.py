@@ -20,7 +20,10 @@ with ``xsrf_cookies=True``, so a form without it is rejected with a 403.
 This plugs into Panel's basic-auth machinery by subclassing the
 (semi-internal) ``BasicLoginHandler``/``BasicAuthProvider`` pair -- the same
 extension pattern Panel itself uses for PAM auth. ``tests/test_auth.py`` has
-a guard test over the surfaces we override; re-check them on a Panel upgrade.
+a guard test over the surfaces we override; re-check them on a Panel upgrade:
+``_XSRFBasicLoginHandler.get`` (the XSRF field and the login hint),
+``LDAPLoginHandler._validate``/``post`` (the credential check and the
+distinct service-unavailable error) and the ``login_handler`` properties.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ import os
 import secrets
 import ssl
 import sys
+from typing import ClassVar
 from urllib.parse import urlparse
 
 import certifi
@@ -45,6 +49,11 @@ from panel.io.state import state
 
 _TIMEOUT = 5  # seconds; _validate blocks the IOLoop, so keep LDAP calls short
 
+#: Shown on the login page in LDAP mode only. Assumes the default
+#: ``(uid={username})`` user filter; reword if a deployment ever matches
+#: users on their mail attribute instead.
+LOGIN_HINT = "Use your LEGEND LDAP credentials (username, not email)."
+
 
 # ---------------------------------------------------------------------------
 # XSRF-carrying basic auth (used on its own, and as the LDAP base class)
@@ -57,6 +66,10 @@ class _XSRFBasicLoginHandler(BasicLoginHandler):
     The stock handler renders a form without the ``_xsrf`` field, so serving
     with ``xsrf_cookies=True`` would reject every login attempt with a 403.
     """
+
+    #: Optional credentials hint for the login page; the LDAP subclass sets
+    #: it, so shared-password mode shows no LDAP-specific text.
+    _login_hint: ClassVar[str] = ""
 
     def get(self):
         try:
@@ -71,6 +84,7 @@ class _XSRFBasicLoginHandler(BasicLoginHandler):
         html = self._login_template.render(
             login_endpoint=self._login_endpoint,
             errormessage=errormessage,
+            login_hint=self._login_hint,
             PANEL_CDN=CDN_DIST,
             # Rendering the hidden form field also sets the _xsrf cookie.
             xsrf_input=self.xsrf_form_html(),
@@ -125,8 +139,7 @@ class LDAPConfig:
             bind_dn=env.get("DASHBOARD_LDAP_BIND_DN") or None,
             bind_password=env.get("DASHBOARD_LDAP_BIND_PASSWORD") or None,
             search_base=env.get("DASHBOARD_LDAP_SEARCH_BASE") or None,
-            user_filter=env.get("DASHBOARD_LDAP_USER_FILTER")
-            or "(uid={username})",
+            user_filter=env.get("DASHBOARD_LDAP_USER_FILTER") or "(uid={username})",
             group_dn=env.get("DASHBOARD_LDAP_GROUP_DN") or None,
             starttls=env.get("DASHBOARD_LDAP_STARTTLS", "").lower()
             in ("1", "true", "yes"),
@@ -191,6 +204,7 @@ class LDAPLoginHandler(_XSRFBasicLoginHandler):
     """Validates the login form against an LDAP directory."""
 
     _ldap_config: LDAPConfig  # set by LDAPAuthProvider.login_handler
+    _login_hint: ClassVar[str] = LOGIN_HINT
 
     _AUTH_UNAVAILABLE = "Authentication service unavailable; try again later."
 
@@ -224,7 +238,9 @@ class LDAPLoginHandler(_XSRFBasicLoginHandler):
             self.set_current_user(username)
             self.redirect(_safe_next_url(self.get_cookie("next_url", state.base_url)))
         else:
-            error = getattr(self, "_auth_error", None) or "Invalid username or password!"
+            error = (
+                getattr(self, "_auth_error", None) or "Invalid username or password!"
+            )
             self.redirect(
                 self.request.uri + "?error=" + tornado.escape.url_escape(error)
             )
@@ -334,7 +350,7 @@ class LDAPAuthProvider(_XSRFBasicAuthProvider):
 
 
 def _template(name: str) -> str:
-    import importlib.resources  # noqa: PLC0415
+    import importlib.resources
 
     return str(importlib.resources.files("legenddashboard") / "templates" / name)
 

@@ -15,6 +15,7 @@ from ldap3.core.exceptions import LDAPException
 from panel.auth import BasicAuthProvider, BasicLoginHandler
 
 from legenddashboard.auth import (
+    LOGIN_HINT,
     LDAPAuthProvider,
     LDAPConfig,
     LDAPLoginHandler,
@@ -132,8 +133,8 @@ def fake_ldap(monkeypatch):
     FakeConnection.search_results = {}
     FakeConnection.instances = []
     monkeypatch.setattr(ldap3, "Connection", FakeConnection)
-    monkeypatch.setattr(ldap3, "Server", lambda url, **kwargs: url)
-    monkeypatch.setattr(ldap3, "Tls", lambda **kwargs: None)
+    monkeypatch.setattr(ldap3, "Server", lambda url, **_kw: url)
+    monkeypatch.setattr(ldap3, "Tls", lambda **_kw: None)
     return FakeConnection
 
 
@@ -294,7 +295,11 @@ def test_configure_auth_ldap_wins(monkeypatch):
     # provider and silently discard ours (losing XSRF and the LDAP check).
     monkeypatch.setattr(pn.config, "basic_auth", None, raising=False)
     kwargs: dict = {}
-    env = {**DIRECT_ENV, "DASHBOARD_PASSWORD": "ignored", "DASHBOARD_COOKIE_SECRET": "s"}
+    env = {
+        **DIRECT_ENV,
+        "DASHBOARD_PASSWORD": "ignored",
+        "DASHBOARD_COOKIE_SECRET": "s",
+    }
     banner = configure_auth(kwargs, env)
 
     assert isinstance(kwargs["auth_provider"], LDAPAuthProvider)
@@ -365,15 +370,68 @@ def test_user_chip_hidden_when_unauthenticated(monkeypatch, user):
     from legenddashboard import dashboard
 
     monkeypatch.setattr(pn.state, "_current_user", user, raising=False)
-    monkeypatch.setattr(type(pn.state), "user", property(lambda self: user))
+    monkeypatch.setattr(type(pn.state), "user", property(lambda _self: user))
     assert dashboard.build_user_chip() is None
 
 
 def test_user_chip_shows_name_and_logout(monkeypatch):
     from legenddashboard import dashboard
 
-    monkeypatch.setattr(type(pn.state), "user", property(lambda self: "a<b>lice"))
+    monkeypatch.setattr(type(pn.state), "user", property(lambda _self: "a<b>lice"))
     chip = dashboard.build_user_chip()
     assert chip is not None
     assert "a&lt;b&gt;lice" in chip.object  # escaped, never raw HTML
     assert './logout"' in chip.object
+
+
+# ---------------------------------------------------------------- login hint
+
+
+def _login_template():
+    """The login template as the running provider would hold it.
+
+    Built through a real provider so the test breaks if the shipped template
+    stops being the one the LDAP gate serves.
+    """
+    provider = LDAPAuthProvider(
+        LDAPConfig.from_env(DIRECT_ENV),
+        login_template=_template_path("basic_login.html"),
+        logout_template=_template_path("logout.html"),
+    )
+    return provider._login_template
+
+
+def _template_path(name):
+    import importlib.resources
+
+    return str(importlib.resources.files("legenddashboard") / "templates" / name)
+
+
+def test_login_hint_rendered_only_in_ldap_mode():
+    template = _login_template()
+
+    # LDAP mode: the handler passes the hint, so the page carries it
+    html = template.render(
+        login_endpoint="/login",
+        errormessage="",
+        login_hint=LOGIN_HINT,
+        xsrf_input="",
+        PANEL_CDN="",
+    )
+    assert LOGIN_HINT in html
+    assert '<p class="login-hint">' in html
+
+    # shared-password mode renders the same template without the variable
+    # (the .login-hint CSS rule is always present; the element is not)
+    plain = template.render(
+        login_endpoint="/login", errormessage="", xsrf_input="", PANEL_CDN=""
+    )
+    assert '<p class="login-hint">' not in plain
+    assert LOGIN_HINT not in plain
+
+
+def test_only_the_ldap_handler_carries_the_hint():
+    # the hint reaches the page through the shared XSRF get(), so the two
+    # handlers must differ only in this class attribute
+    assert LDAPLoginHandler._login_hint == LOGIN_HINT
+    assert _XSRFBasicLoginHandler._login_hint == ""
