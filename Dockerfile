@@ -58,6 +58,16 @@ RUN git config --system --add safe.directory /srv/tmp-auto/inputs \
 # rewritten from SSH to HTTPS automatically).
 ENV METADATA_EDIT_URL="https://github.com/legend-exp/legend-metadata"
 
+# Authentication is configured entirely through the environment (spin
+# secrets); nothing is baked into the image. Shared password:
+# DASHBOARD_PASSWORD, optionally DASHBOARD_USERNAME. LDAP login instead:
+# DASHBOARD_LDAP_SERVER plus either DASHBOARD_LDAP_USER_DN_TEMPLATE (direct
+# bind) or DASHBOARD_LDAP_BIND_DN/_BIND_PASSWORD/_SEARCH_BASE
+# (search-then-bind); optional DASHBOARD_LDAP_GROUP_DN, _USER_FILTER,
+# _STARTTLS, _CA_FILE. Either way set DASHBOARD_COOKIE_SECRET, or logins are
+# invalidated on every restart. See the README for details. ldap3 is pure
+# Python, so no system LDAP packages are needed here.
+
 # NERSC spin requires containers to run as a non-root user.
 RUN useradd --uid 1000 --create-home dashboard \
     && chown -R dashboard /app
