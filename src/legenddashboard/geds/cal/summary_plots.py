@@ -1726,6 +1726,73 @@ def plot_energy_spectra(
     return p
 
 
+def plot_fft_spectra(
+    prod_config,
+    plot_dict,
+    chan_dict,
+    channels,
+    string,
+    run,
+    period,
+    run_dict,
+    key="String",
+    sort_dets_obj=None,
+    cache_data=None,
+):
+    """
+    Overlay the noise-optimisation waveform PSDs of one string.
+
+    ``plot_dict`` maps detector name to ``{"frequency", "psd"}`` (from the
+    dsp plot shelf's ``noise_optimisation/nopt/fft``).
+    """
+    p = figure(
+        width=700,
+        height=600,
+        x_axis_type="log",
+        y_axis_type="log",
+        tools="pan, box_zoom, ywheel_zoom, hover,reset,save",
+        active_scroll="ywheel_zoom",
+    )
+    p.title.text = f"{run_dict['experiment']}-{period}-{run} | Cal. | FFT | {string}"
+    p.title.align = "center"
+    p.title.text_font_size = "15px"
+
+    level = 1
+    zoom_in = ZoomInTool(level=level, dimensions="height", factor=0.5)
+    zoom_out = ZoomOutTool(level=level, dimensions="height", factor=0.5)
+    p.add_tools(zoom_in, zoom_out)
+
+    colours = cc.palette["glasbey_category10"][: len(channels)]
+
+    for i, channel in enumerate(channels):
+        try:
+            fft = plot_dict[channel]
+            p.line(
+                fft["frequency"][1:],  # drop f=0 for the log axis
+                fft["psd"][1:],
+                legend_label=f'{chan_dict[channel]["name"]}',
+                name=f'{chan_dict[channel]["name"]}',
+                line_width=2,
+                line_color=colours[i],
+            )
+        except KeyError:
+            pass
+
+    p.hover.tooltips = [
+        ("Detector", "$name"),
+        ("Freq (MHz)", "$x{0.000}"),
+        ("PSD", "$y{0.00e}"),
+    ]
+    p.hover.mode = "vline"
+    p.xaxis.axis_label = "Frequency (MHz)"
+    p.xaxis.axis_label_text_font_size = "20px"
+    p.yaxis.axis_label = "Power spectral density"
+    p.yaxis.axis_label_text_font_size = "16px"
+    p.legend.location = "bottom_left"
+    p.legend.click_policy = "hide"
+    return p
+
+
 def plot_baseline_stability(
     prod_config,
     plot_dict,
