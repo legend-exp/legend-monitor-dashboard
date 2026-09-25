@@ -16,6 +16,7 @@ from legenddashboard.geds import cal
 from legenddashboard.geds.cal.shelf_cache import (
     _stat_key,
     render_png,
+    shelf_data_many,
     shelf_entry,
     shelf_keys,
 )
@@ -182,6 +183,24 @@ class CalMonitoring(GedMonitoring):
                 figure = cal.summary_plots[self.plot_type_summary](
                     self.prod_config,
                     self.common_dict,
+                    self.channel_map,
+                    self.strings_dict[self.string],
+                    self.string,
+                    self.run,
+                    self.period,
+                    self.run_dict[self.run],
+                    key=self.sort_by,
+                    sort_dets_obj=self.sort_obj,
+                    cache_data=self.cached_data,
+                )
+            elif self.plot_type_summary == "FFT Spectrum":
+                figure = cal.summary_plots[self.plot_type_summary](
+                    self.prod_config,
+                    shelf_data_many(
+                        self.dsp_plot_dict,
+                        self.strings_dict[self.string],
+                        ("noise_optimisation", "nopt", "fft"),
+                    ),
                     self.channel_map,
                     self.strings_dict[self.string],
                     self.string,
