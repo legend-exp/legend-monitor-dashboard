@@ -3,10 +3,7 @@ from __future__ import annotations
 from legenddashboard.geds.cal.detailed_plots import (
     all_detailed_plots,
     detailed_plots,
-    plot_cut_spectra,
     plot_spectrum,
-    plot_survival_frac,
-    track_peaks,
 )
 from legenddashboard.geds.cal.summary_plots import (
     get_aoe_results,
@@ -43,12 +40,9 @@ from legenddashboard.geds.cal.tracking_plots import (
 __all__ = [
     "all_detailed_plots",
     "detailed_plots",
-    "plot_cut_spectra",
     "plot_energy_residuals_period",
     "plot_spectrum",
-    "plot_survival_frac",
     "plot_tracking",
-    "track_peaks",
 ]
 
 tracking_plots = {

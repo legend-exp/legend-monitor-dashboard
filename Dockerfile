@@ -18,6 +18,8 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 # Line-buffered stdout/stderr so startup and auth warnings appear in spin logs.
 ENV PYTHONUNBUFFERED=1
+# pygama's fit functions are numba-compiled; keep the cache in a writable dir.
+ENV NUMBA_CACHE_DIR=/tmp/numba-cache
 
 # Install the dashboard. 0.0.8 includes the per-user session independence fix,
 # the shared metadata/par caches, the hourly shared refresh + Refresh button,
