@@ -13,6 +13,14 @@ from matplotlib.figure import Figure
 
 import legenddashboard.geds.string_visulization as visu
 from legenddashboard.geds import cal
+from legenddashboard.geds.cal import native_plots
+from legenddashboard.geds.cal import native_psd_plots as psd
+from legenddashboard.geds.cal.plot_data import (
+    CommonData,
+    data_keys,
+    plt_data_path,
+    read_group,
+)
 from legenddashboard.geds.cal.shelf_cache import (
     _stat_key,
     render_png,
@@ -21,7 +29,13 @@ from legenddashboard.geds.cal.shelf_cache import (
     shelf_keys,
 )
 from legenddashboard.geds.ged_monitoring import GedMonitoring
-from legenddashboard.util import get_par_cache, logo_path, read_config, sorter
+from legenddashboard.util import (
+    get_par_cache,
+    load_run_pars,
+    logo_path,
+    read_config,
+    sorter,
+)
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +62,8 @@ class CalMonitoring(GedMonitoring):
     )
     plot_type_details_objects = param.List(default=cal.detailed_plots)
     channel_objects = param.List(default=[])
+    psd_set = param.Parameter(default=None)  # A/E or LQ parameter set, e.g. "dplms"
+    psd_set_objects = param.List(default=[])
 
     plot_type_summary = param.ObjectSelector(
         default=list(cal.summary_plots)[3],
@@ -273,7 +289,11 @@ class CalMonitoring(GedMonitoring):
             plt_base / f"dsp/cal/{self.period}/{self.run}" / f"{file_stem}-plt_dsp"
         )
 
-        channels = shelf_keys(self.plot_dict)
+        self.plt_data = plt_data_path(self.plot_dict)
+        if self.plt_data.exists():
+            channels = data_keys(self.plt_data)
+        else:
+            channels = shelf_keys(self.plot_dict)
         if "common" in channels:
             channels.remove("common")
         if not channels:
@@ -298,6 +318,8 @@ class CalMonitoring(GedMonitoring):
     # for unpickling (once per file version, shared by all sessions).
     @property
     def common_dict(self):
+        if self.plt_data.exists():
+            return CommonData(self.plt_data)
         return shelf_entry(self.plot_dict, "common")
 
     @property
@@ -308,6 +330,160 @@ class CalMonitoring(GedMonitoring):
     def dsp_dict(self):
         return shelf_entry(self.dsp_plot_dict, self.channel[:9])
 
+    def _det_data(self, *keys):
+        """Plot data of the current channel from the LH5, or None without it."""
+        return read_group(self.plt_data, self.channel[:9], *keys)
+
+    def _ecal_data(self, parameter):
+        """``ecal[parameter]`` plot data, from the LH5 when present."""
+        data = self._det_data("ecal", parameter)
+        return data if data is not None else self.plot_dict_ch["ecal"][parameter]
+
+    def _det_pars(self):
+        pars = load_run_pars(
+            self.prod_config,
+            "hit",
+            self.period,
+            self.run,
+            self.run_dict[self.run],
+            self.cached_data,
+        )
+        return pars[self.channel[:9]]
+
+    def _section_figure(self, section):
+        """Pickled figure of an aoe/lq plot, flat or nested ``<name>`` layout."""
+        sec = self.plot_dict_ch[section]
+        if self.plot_type_details in sec:
+            return sec[self.plot_type_details]
+        chosen = sec.get(self.psd_set)
+        if isinstance(chosen, dict) and self.plot_type_details in chosen:
+            return chosen[self.plot_type_details]
+        for sub in sec.values():
+            if isinstance(sub, dict) and self.plot_type_details in sub:
+                return sub[self.plot_type_details]
+        raise KeyError(self.plot_type_details)
+
+    def _psd_results(self, section):
+        """``(set name, results)`` of the selected A/E / LQ set; name None if flat."""
+        res = self._det_pars()["results"].get(section, {})
+        if "cal_energy_param" in res:  # pre-``params:`` layout, a single set
+            return None, res
+        name = self.psd_set if self.psd_set in res else next(iter(sorted(res)), None)
+        return name, res.get(name, {})
+
+    @param.depends("run", "channel", "parameter", watch=True)
+    def update_psd_sets(self):
+        if self.parameter not in {"A/E", "LQ"}:
+            return
+        try:
+            res = self._det_pars()["results"].get(
+                "aoe" if self.parameter == "A/E" else "lq", {}
+            )
+        except Exception:
+            res = {}
+        sets = [] if "cal_energy_param" in res else sorted(res)
+        self.psd_set_objects = sets
+        if self.psd_set not in sets:
+            self.psd_set = sets[0] if sets else None
+
+    def _view_psd(self):
+        """Native A/E or LQ plot, or None to use the shelf PNG."""
+        section = "aoe" if self.parameter == "A/E" else "lq"
+        name, res = self._psd_results(section)
+        plot = self.plot_type_details
+        title = f"{self.channel[:9]} | {self.parameter} {name or ''} | {plot}"
+        if plot == "mean_time":
+            return psd.plot_time_series(
+                res.get("1000-1300keV"), title, "mean", "A/E mean"
+            )
+        if plot == "stability":
+            return psd.plot_time_series(
+                res.get("DEP_means"), title, "mean", "LQ DEP mean"
+            )
+        keys = (section,) if name is None else (section, name)
+        data = self._det_data(*keys, f"{plot}_data")
+        if data is None:
+            return None
+        if section == "aoe":
+            builders = {
+                "spectrum": lambda: psd.plot_spectra(data, title, psd.AOE_SPECTRA),
+                "sf_v_energy": lambda: psd.plot_sf_vs_energy(data, title),
+                "classifier": lambda: psd.plot_classifier(
+                    data, title, "A/E classifier"
+                ),
+                "plot_dt_dep": lambda: psd.plot_dt_dep(data, title),
+                "compt_bands_uncorrected": lambda: psd.plot_compt_bands(
+                    data, title, "A/E"
+                ),
+                "compt_bands_corrected": lambda: psd.plot_compt_bands(
+                    data, title, "A/E"
+                ),
+                "mean_fit": lambda: psd.plot_energy_corr(
+                    data, res.get("correction_fit_results"), title, "mean"
+                ),
+                "sigma_fit": lambda: psd.plot_energy_corr(
+                    data, res.get("correction_fit_results"), title, "sigma"
+                ),
+                "cut_fit": lambda: psd.plot_cut_fit(data, title),
+                "survival_fractions": lambda: psd.plot_survival_curves(data, title),
+            }
+        else:
+            builders = {
+                "spectrum": lambda: psd.plot_spectra(data, title, psd.LQ_SPECTRA),
+                "sf_v_energy": lambda: psd.plot_sf_vs_energy(data, title),
+                "classifier": lambda: psd.plot_classifier(data, title, "LQ classifier"),
+                "survival_fractions": lambda: psd.plot_survival_curves(
+                    data, title, cut_key="cut_val"
+                ),
+                "cut_fit": lambda: psd.plot_lq_cut_fit(
+                    data, res.get("cut_fit_pars"), title
+                ),
+                "drift_time": lambda: psd.plot_lq_drift_time(
+                    data, res.get("rt_correction"), title
+                ),
+            }
+        build = builders.get(plot)
+        return build() if build is not None else None
+
+    def _view_energy(self):
+        """Native plot for an energy parameter, or None to use the shelf PNG."""
+        param_name, plot = self.parameter, self.plot_type_details
+        title = f"{self.channel[:9]} | {param_name} | {plot}"
+        if plot in {"cal_fit", "fwhm_fit", "peak_fits"}:
+            det = self._det_pars()
+            fits = det["results"]["ecal"][param_name]
+            cal_op = det["pars"]["operations"][param_name]
+            if plot == "cal_fit":
+                return native_plots.plot_cal_fit(fits["pk_fits"], cal_op, title)
+            if plot == "fwhm_fit":
+                return native_plots.plot_fwhm_fit(
+                    fits["pk_fits"],
+                    fits.get("eres_linear"),
+                    fits.get("eres_quadratic"),
+                    title,
+                )
+            hists = self._det_data("ecal", param_name, "peak_hists")
+            if hists is None:
+                return None
+            return native_plots.plot_peak_fits(hists, fits["pk_fits"], cal_op, title)
+        if plot in {"2614_timemap", "pulser_timemap"}:
+            hist = self._det_data("ecal", param_name, f"{plot}_data")
+            if hist is None:
+                return None
+            return native_plots.plot_timemap(hist, title, "Energy (keV)")
+        ecal = self._ecal_data(param_name)
+        if plot in {"spectrum", "logged_spectrum"}:
+            return cal.plot_spectrum(
+                ecal["spectrum"], self.channel, log=plot != "spectrum"
+            )
+        if plot == "survival_frac":
+            return native_plots.plot_survival_frac(ecal["survival_frac"], title)
+        if plot == "cut_spectrum":
+            return native_plots.plot_cut_spectra(ecal["spectrum"], title)
+        if plot == "peak_track":
+            return native_plots.plot_peak_track(ecal, title)
+        return None
+
     def _png_pane(self, get_figure):
         """Rasterise a cached (shared) figure once; serve PNG bytes after."""
         # fingerprint the shelf (path+mtime+size) so a regenerated shelf drops
@@ -317,6 +493,7 @@ class CalMonitoring(GedMonitoring):
             self.channel[:9],
             self.parameter,
             self.plot_type_details,
+            self.psd_set,
         )
         return pn.pane.PNG(
             io.BytesIO(render_png(key, get_figure)), sizing_mode="scale_width"
@@ -326,22 +503,32 @@ class CalMonitoring(GedMonitoring):
     def update_plot_type_details(self):
         start_time = time.time()
         plots = cal.all_detailed_plots[self.parameter]
+        self.param.plot_type_details.objects = plots  # else the selector rejects them
         self.plot_type_details_objects = plots
         self.plot_type_details = plots[0]
         log.debug("Time to update plot type details: %.3fs", time.time() - start_time)
 
-    @param.depends("run_dict", "run", "channel", "parameter", "plot_type_details")
+    @param.depends(
+        "run_dict", "run", "channel", "parameter", "plot_type_details", "psd_set"
+    )
     def view_details(self, event=None):  # noqa: ARG002
         fig_pane = pn.pane.Matplotlib(Figure(), sizing_mode="scale_width")
         try:
-            if self.parameter == "A/E":
-                fig_pane = self._png_pane(
-                    lambda: self.plot_dict_ch["aoe"][self.plot_type_details]
-                )
+            if self.parameter in {"A/E", "LQ"}:
+                section = "aoe" if self.parameter == "A/E" else "lq"
+                fig_pane = self._view_psd()
+                if fig_pane is None:
+                    fig_pane = self._png_pane(lambda: self._section_figure(section))
             elif self.parameter == "Baseline":
-                fig_pane = self._png_pane(
-                    lambda: self.plot_dict_ch["ecal"][self.plot_type_details]
-                )
+                hist = self._det_data("ecal", f"{self.plot_type_details}_data")
+                if hist is not None:
+                    fig_pane = native_plots.plot_timemap(
+                        hist, f"{self.channel[:9]} | baseline", "Baseline (ADC)"
+                    )
+                else:
+                    fig_pane = self._png_pane(
+                        lambda: self.plot_dict_ch["ecal"][self.plot_type_details]
+                    )
             elif self.parameter == "PZ":
                 fig_pane = self._png_pane(
                     lambda: self.dsp_dict["pz"][self.plot_type_details]
@@ -352,32 +539,14 @@ class CalMonitoring(GedMonitoring):
                         f"{self.plot_type_details.split('_')[0]}_optimisation"
                     ][f"{self.plot_type_details.split('_')[1]}_space"]
                 )
-            elif self.plot_type_details in {"spectrum", "logged_spectrum"}:
-                fig = cal.plot_spectrum(
-                    self.plot_dict_ch["ecal"][self.parameter]["spectrum"],
-                    self.channel,
-                    log=self.plot_type_details != "spectrum",
-                )
-                fig_pane = fig
-            elif self.plot_type_details == "survival_frac":
-                fig = cal.plot_survival_frac(
-                    self.plot_dict_ch["ecal"][self.parameter]["survival_frac"]
-                )
-                fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
-            elif self.plot_type_details == "cut_spectrum":
-                fig = cal.plot_cut_spectra(
-                    self.plot_dict_ch["ecal"][self.parameter]["spectrum"]
-                )
-                fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
-            elif self.plot_type_details == "peak_track":
-                fig = cal.track_peaks(self.plot_dict_ch["ecal"][self.parameter])
-                fig_pane = pn.pane.Matplotlib(fig, sizing_mode="scale_width")
             else:
-                fig_pane = self._png_pane(
-                    lambda: self.plot_dict_ch["ecal"][self.parameter][
-                        self.plot_type_details
-                    ]
-                )
+                fig_pane = self._view_energy()
+                if fig_pane is None:
+                    fig_pane = self._png_pane(
+                        lambda: self.plot_dict_ch["ecal"][self.parameter][
+                            self.plot_type_details
+                        ]
+                    )
         except Exception:
             log.exception(
                 "Failed to build detailed plot '%s'/'%s' for channel %s",
@@ -425,7 +594,18 @@ class CalMonitoring(GedMonitoring):
                 details_param,
             ),
             pn.Row("## Current Plot:", details_param_currentValue),
-            pn.Row("Channel:", details_ch_param, "Plot type:", details_type_param),
+            pn.Row(
+                "Channel:",
+                details_ch_param,
+                "Plot type:",
+                details_type_param,
+                "Set:",
+                pn.widgets.Select(
+                    value=self.param.psd_set,
+                    options=self.param.psd_set_objects,
+                    width=widget_widths,
+                ),
+            ),
             pn.param.ParamMethod(self.get_run_and_channel, lazy=True),
             pn.param.ParamMethod(
                 self.view_details,

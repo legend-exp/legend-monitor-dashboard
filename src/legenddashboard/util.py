@@ -310,6 +310,11 @@ def prewarm_run_pars(base_path, periods=None, n_periods=None) -> None:
     not pay the multi-second yaml parse; newest runs first. ``None`` warms
     every period.
     """
+    from legenddashboard.geds.cal.fit_funcs import prewarm  # geds.cal imports util
+
+    start = time.time()
+    prewarm()  # numba-compile the peak shapes before the first cal plot
+    log.info("compiled fit functions in %.0fs", time.time() - start)
     prod_config = get_dataflow_config(base_path)
     periods = periods if periods is not None else get_run_dict(base_path)
     start = time.time()

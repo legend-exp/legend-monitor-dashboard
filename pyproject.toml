@@ -54,6 +54,8 @@ dependencies = [
     # allow_refs/nested_refs (used on every parameter) are param 2.0 features.
     "param>=2.0",
     "pylegendmeta>=1.2.5",
+    # re-evaluates the calibration fits stored in the par files
+    "pygama>=2.4",
     "plotly",
     "pyyaml",
     # comment-preserving round-trip edits of the metadata yaml files
