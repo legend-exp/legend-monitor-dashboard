@@ -13,6 +13,7 @@ from bokeh.models import (
     BoxAnnotation,
     ColorBar,
     ColumnDataSource,
+    LinearColorMapper,
     LogColorMapper,
     Span,
     Whisker,
@@ -42,20 +43,24 @@ def _log_counts(counts):
     return np.where(counts > 0, counts, np.nan)  # log axes drop empty bins
 
 
-def _image(p, hist, *, title_bar="Counts"):
-    """Draw a ``{"counts", "x_edges", "y_edges"}`` 2D histogram with log colours."""
+def _image(p, hist, *, title_bar="Counts", log=True):
+    """Draw a ``{"counts", "x_edges", "y_edges"}`` 2D histogram (log colours by default)."""
     counts = np.asarray(hist["counts"], dtype=float).T.copy()
-    counts[counts <= 0] = np.nan
     x, y = np.asarray(hist["x_edges"]), np.asarray(hist["y_edges"])
-    high = np.nanmax(counts) if np.isfinite(counts).any() else 1.0
-    mapper = LogColorMapper(
-        Viridis256, low=1, high=max(high, 1.0), nan_color=(0, 0, 0, 0)
-    )
+    if log:
+        counts[counts <= 0] = np.nan
+        high = np.nanmax(counts) if np.isfinite(counts).any() else 1.0
+        mapper = LogColorMapper(Viridis256, low=1, high=max(high, 1.0),
+                                nan_color=(0, 0, 0, 0))  # fmt: skip
+    else:
+        mapper = LinearColorMapper(
+            Viridis256, low=np.nanmin(counts), high=np.nanmax(counts)
+        )
     p.image(image=[counts], x=x[0], y=y[0], dw=x[-1] - x[0], dh=y[-1] - y[0],
             color_mapper=mapper)  # fmt: skip
     p.x_range.range_padding = p.y_range.range_padding = 0
     p.add_layout(ColorBar(color_mapper=mapper, title=title_bar), "right")
-    p.hover.tooltips = [("x", "$x{0.000}"), ("y", "$y{0.000}"), ("counts", "@image")]
+    p.hover.tooltips = [("x", "$x{0.000}"), ("y", "$y{0.000}"), ("value", "@image")]
     return p
 
 

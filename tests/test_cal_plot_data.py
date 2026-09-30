@@ -259,3 +259,56 @@ def test_read_psd_set(tmp_path):
     data = read_group(path, "V00000A", "aoe", "dplms", "cut_fit_data")
     assert data["function"] == "SigmoidFit"
     assert data["pars"]["a"] == 90.0
+
+
+def test_dsp_builders():
+    from legenddashboard.geds.cal import native_dsp_plots as dspp
+
+    wf = {"waveforms": np.ones((5, 20), dtype=np.float32), "samples": np.arange(20),
+          "ylim": np.array([0.8, 1.1])}  # fmt: skip
+    p = dspp.plot_waveforms(wf, "x")
+    assert len(p.renderers) == 1  # one multi_line
+    assert p.y_range.start == 0.8
+
+    edges = np.linspace(-1, 1, 11)
+    slopes = {"edges": edges, "counts": np.ones(10), "mode": 0.0, "stdev": 0.1,
+              "inset": {"edges": edges / 4, "counts": np.ones(10)}}  # fmt: skip
+    assert isinstance(dspp.plot_slopes(slopes, "x"), GridPlot)
+    assert dspp.plot_slopes({"edges": edges, "counts": np.ones(10)}, "x").renderers
+
+    base = {"labels": {"0": "rise", "1": "flat"}, "samples_x": np.array([[1.0, 2.0], [2.0, 1.0]]),
+            "samples_y": np.array([3.0, 2.0]), "failed": np.array([False, True]),
+            "optimal_x": np.array([2.0, 1.0]), "y_min": 2.0,
+            "init_x": np.array([[1.0, 2.0]]), "init_y": np.array([3.0])}  # fmt: skip
+    one_d = {**base, "samples_x": np.array([[1.0], [2.0]]), "optimal_x": np.array([2.0]),
+             "init_x": np.array([[1.0]]), "grid": np.linspace(0, 3, 30),
+             "mean": np.ones(30), "std": 0.1 * np.ones(30), "acq": np.zeros(30)}  # fmt: skip
+    for which in ("kernel", "acq"):
+        assert dspp.plot_optimiser(one_d, "x", which).renderers
+    two_d = {**base, "grid_0": np.linspace(0, 3, 4), "grid_1": np.linspace(0, 2, 3),
+             "mean": np.ones((4, 3)), "acq": np.arange(12.0).reshape(4, 3)}  # fmt: skip
+    p = dspp.plot_optimiser(two_d, "x", "acq")
+    assert p.renderers[0].glyph.__class__.__name__ == "Image"
+
+    opt = {"par": np.array([1.0, 2.0, 3.0]), "fom": np.array([3.0, 2.0, 2.5]),
+           "fom_err": np.full(3, 0.1), "spline_x": np.linspace(1, 3, 20),
+           "spline_y": np.linspace(3, 2.5, 20), "best_par": 2.0, "best_par_err": 0.1,
+           "best_val": 2.0}  # fmt: skip
+    assert dspp.plot_nopt_optimization(opt, "x", "cusp").renderers
+    dists = {
+        "1.0": {"edges": edges, "counts": np.ones(10)},
+        "2.0": {"edges": edges, "counts": np.ones(10)},
+    }
+    assert len(dspp.plot_nopt_distributions(dists, "x").renderers) == 2
+    fft = {"frequency": np.linspace(0, 4, 50), "psd": np.linspace(1, 2, 50)}
+    assert dspp.plot_fft(fft, "x").renderers
+
+    sel = {"rough_energy": {"edges": edges, "initial": np.ones(10), "selected": np.ones(10)},
+           "centroid": {"edges": edges, "counts": np.ones(10), "cut": np.array([-0.5, 0.5])}}  # fmt: skip
+    assert isinstance(dspp.plot_dplms_selection(sel, "x"), GridPlot)
+    assert dspp.plot_dplms_filter(
+        {"coefficients": np.sin(np.linspace(0, 3, 50))}, "x"
+    ).renderers
+    for empty in (dspp.plot_waveforms({}, "x"), dspp.plot_optimiser({}, "x"),
+                  dspp.plot_dplms_filter({}, "x")):  # fmt: skip
+        assert isinstance(empty, figure)

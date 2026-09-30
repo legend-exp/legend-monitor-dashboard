@@ -41,7 +41,19 @@ lq_plots = [
 
 baseline_plots = ["baseline_timemap"]
 
-tau_plots = ["slope", "waveforms"]
+tau_plots = ["slope", "corrected_slope", "waveforms", "waveforms_zoomed"]
+
+nopt_plots = [
+    "fft",
+    "cusp_optimization",
+    "zac_optimization",
+    "etrap_optimization",
+    "cusp_distribution",
+    "zac_distribution",
+    "etrap_distribution",
+]
+
+dplms_plots = ["filter", "wf_sel", "wfs", "bls"]
 
 optimisation_plots = [
     "trap_kernel",
@@ -63,6 +75,8 @@ all_detailed_plots = {
     "LQ": lq_plots,
     "PZ": tau_plots,
     "Optimisation": optimisation_plots,
+    "Noise": nopt_plots,
+    "DPLMS": dplms_plots,
 }
 
 
