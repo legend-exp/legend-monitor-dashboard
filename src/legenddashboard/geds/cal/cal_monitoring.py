@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 
 import legenddashboard.geds.string_visulization as visu
 from legenddashboard.geds import cal
+from legenddashboard.geds.cal import native_dsp_plots as dspp
 from legenddashboard.geds.cal import native_plots
 from legenddashboard.geds.cal import native_psd_plots as psd
 from legenddashboard.geds.cal.plot_data import (
@@ -212,11 +213,7 @@ class CalMonitoring(GedMonitoring):
             elif self.plot_type_summary == "FFT Spectrum":
                 figure = cal.summary_plots[self.plot_type_summary](
                     self.prod_config,
-                    shelf_data_many(
-                        self.dsp_plot_dict,
-                        self.strings_dict[self.string],
-                        ("noise_optimisation", "nopt", "fft"),
-                    ),
+                    self._string_ffts(),
                     self.channel_map,
                     self.strings_dict[self.string],
                     self.string,
@@ -288,6 +285,7 @@ class CalMonitoring(GedMonitoring):
         self.dsp_plot_dict = (
             plt_base / f"dsp/cal/{self.period}/{self.run}" / f"{file_stem}-plt_dsp"
         )
+        self.dsp_plt_data = plt_data_path(self.dsp_plot_dict)
 
         self.plt_data = plt_data_path(self.plot_dict)
         if self.plt_data.exists():
@@ -338,6 +336,84 @@ class CalMonitoring(GedMonitoring):
         """``ecal[parameter]`` plot data, from the LH5 when present."""
         data = self._det_data("ecal", parameter)
         return data if data is not None else self.plot_dict_ch["ecal"][parameter]
+
+    def _dsp_data(self, *keys):
+        """DSP plot data of the current channel from the lh5, or None without it."""
+        return read_group(self.dsp_plt_data, self.channel[:9], *keys)
+
+    def _string_ffts(self):
+        """Noise PSDs of the current string, from the dsp plot lh5 or the shelf."""
+        dets = self.strings_dict[self.string]
+        keys = ("noise_optimisation", "nopt", "fft")
+        if not self.dsp_plt_data.exists():
+            return shelf_data_many(self.dsp_plot_dict, dets, keys)
+        ffts = {det: read_group(self.dsp_plt_data, det, *keys) for det in dets}
+        return {det: fft for det, fft in ffts.items() if fft is not None}
+
+    def _view_dsp(self):
+        """Native PZ / optimisation / noise / DPLMS plot, or None to use the PNG."""
+        plot = self.plot_type_details
+        title = f"{self.channel[:9]} | {self.parameter} | {plot}"
+        if self.parameter == "PZ":
+            if plot.endswith("slope"):
+                data = self._dsp_data("pz", f"{plot}_data")
+                return None if data is None else dspp.plot_slopes(data, title)
+            wfs = self._dsp_data("pz", "waveforms_data")
+            if wfs is None:
+                return None
+            if plot == "waveforms_zoomed":  # same waveforms, zoom window only
+                wfs = {**wfs, **(self._dsp_data("pz", "waveforms_zoomed_data") or {})}
+            return dspp.plot_waveforms(wfs, title, ylabel="Normalised ADU")
+        if self.parameter == "Optimisation":
+            filt, kind = plot.split("_")
+            data = self._dsp_data(f"{filt}_optimisation", "data")
+            if data is None:
+                return None
+            return dspp.plot_optimiser(
+                data, title, "kernel" if kind == "kernel" else "acq"
+            )
+        if self.parameter == "Noise":
+            if plot == "fft":
+                fft = self._dsp_data("noise_optimisation", "nopt", "fft")
+                return None if fft is None else dspp.plot_fft(fft, title)
+            filt, kind = plot.split("_")
+            data = self._dsp_data("noise_optimisation", "nopt", filt, f"{kind}_data")
+            if data is None:
+                return None
+            if kind == "optimization":
+                return dspp.plot_nopt_optimization(data, title, filt)
+            return dspp.plot_nopt_distributions(data, title)
+        if self.parameter == "DPLMS":
+            if plot == "filter":
+                coeffs = self._dsp_data("dplms", "coefficients")
+                return (
+                    None
+                    if coeffs is None
+                    else dspp.plot_dplms_filter({"coefficients": coeffs}, title)
+                )
+            data = self._dsp_data("dplms", f"{plot}_data")
+            if data is None:
+                return None
+            if plot == "wf_sel":
+                return dspp.plot_dplms_selection(data, title)
+            return dspp.plot_waveforms(data, title)
+        return None
+
+    def _dsp_figure(self):
+        """Pickled figure of a DSP plot from the dsp shelf."""
+        dsp, plot = self.dsp_dict, self.plot_type_details
+        if self.parameter == "PZ":
+            return dsp["pz"][plot]
+        if self.parameter == "Optimisation":
+            filt, kind = plot.split("_")
+            return dsp[f"{filt}_optimisation"][f"{kind}_space"]
+        if self.parameter == "Noise":
+            nopt = dsp["noise_optimisation"]["nopt"]
+            if plot == "fft":
+                return nopt["fft"]["fig"]
+            filt, kind = plot.split("_")
+            return nopt[filt][kind]
+        return dsp["dplms"][plot]
 
     def _det_pars(self):
         pars = load_run_pars(
@@ -516,9 +592,12 @@ class CalMonitoring(GedMonitoring):
         try:
             if self.parameter in {"A/E", "LQ"}:
                 section = "aoe" if self.parameter == "A/E" else "lq"
-                fig_pane = self._view_psd()
-                if fig_pane is None:
-                    fig_pane = self._png_pane(lambda: self._section_figure(section))
+                native = self._view_psd()
+                fig_pane = (
+                    native
+                    if native is not None
+                    else (self._png_pane(lambda: self._section_figure(section)))
+                )
             elif self.parameter == "Baseline":
                 hist = self._det_data("ecal", f"{self.plot_type_details}_data")
                 if hist is not None:
@@ -529,24 +608,22 @@ class CalMonitoring(GedMonitoring):
                     fig_pane = self._png_pane(
                         lambda: self.plot_dict_ch["ecal"][self.plot_type_details]
                     )
-            elif self.parameter == "PZ":
-                fig_pane = self._png_pane(
-                    lambda: self.dsp_dict["pz"][self.plot_type_details]
-                )
-            elif self.parameter == "Optimisation":
-                fig_pane = self._png_pane(
-                    lambda: self.dsp_dict[
-                        f"{self.plot_type_details.split('_')[0]}_optimisation"
-                    ][f"{self.plot_type_details.split('_')[1]}_space"]
+            elif self.parameter in {"PZ", "Optimisation", "Noise", "DPLMS"}:
+                native = self._view_dsp()
+                fig_pane = (
+                    native if native is not None else self._png_pane(self._dsp_figure)
                 )
             else:
-                fig_pane = self._view_energy()
-                if fig_pane is None:
-                    fig_pane = self._png_pane(
+                native = self._view_energy()
+                fig_pane = (
+                    native
+                    if native is not None
+                    else self._png_pane(
                         lambda: self.plot_dict_ch["ecal"][self.parameter][
                             self.plot_type_details
                         ]
                     )
+                )
         except Exception:
             log.exception(
                 "Failed to build detailed plot '%s'/'%s' for channel %s",
