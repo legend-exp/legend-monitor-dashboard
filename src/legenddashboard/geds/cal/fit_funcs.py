@@ -14,6 +14,7 @@ import importlib
 import numexpr as ne
 import numpy as np
 import pygama.math.distributions as pgd
+import pygama.pargen.data_cleaning as dc
 
 
 def peak_counts(pk_fit, x, bin_width):
@@ -39,6 +40,36 @@ def peak_counts(pk_fit, x, bin_width):
         return None
     pars = [pk_fit["parameters"][k] for k in func.required_args()]
     return func.get_pdf(np.asarray(x, dtype=float), *pars) * bin_width
+
+
+def qc_fit_counts(fit, x, bin_width):
+    """
+    Expected counts of a qc classifier fit (``qc/<cut>_data/fit``).
+
+    Parameters
+    ----------
+    fit : dict
+        ``function`` name (in ``pygama.pargen.data_cleaning`` or
+        ``pygama.math.distributions``) and ``pars`` array.
+    x : array_like
+        Bin centres.
+    bin_width : float
+        Width of the bins.
+
+    Returns
+    -------
+    ndarray or None
+        Counts per bin, or None if the function is unknown.
+    """
+    name = str(fit.get("function"))
+    x = np.asarray(x, dtype=float)
+    pars = np.asarray(fit["pars"], dtype=float)
+    if name == "skewed_fit":
+        return dc.skewed_fit(x, *pars)[1] * bin_width
+    func = getattr(dc, name, None) or getattr(pgd, name, None)
+    if func is None or not hasattr(func, "pdf_ext"):
+        return None
+    return func.pdf_ext(x, *pars)[1] * bin_width
 
 
 def fit_class(entry):

@@ -575,10 +575,28 @@ class CalMonitoring(GedMonitoring):
             io.BytesIO(render_png(key, get_figure)), sizing_mode="scale_width"
         )
 
+    def _qc_plots(self):
+        """QC cut names of the current channel (lh5 plot data, else the shelf)."""
+        qc = self._det_data("qc")
+        if qc is not None:
+            return sorted(k[: -len("_data")] for k in qc if k.endswith("_data"))
+        try:
+            return sorted(self.plot_dict_ch["qc"])
+        except Exception:
+            return []
+
+    @param.depends("channel", watch=True)
+    def update_qc_plots(self):
+        if self.parameter == "QC":  # cut names can change with the detector
+            self.update_plot_type_details()
+
     @param.depends("parameter", watch=True)
     def update_plot_type_details(self):
         start_time = time.time()
-        plots = cal.all_detailed_plots[self.parameter]
+        if self.parameter == "QC":
+            plots = self._qc_plots() or ["none"]
+        else:
+            plots = cal.all_detailed_plots[self.parameter]
         self.param.plot_type_details.objects = plots  # else the selector rejects them
         self.plot_type_details_objects = plots
         self.plot_type_details = plots[0]
@@ -608,6 +626,15 @@ class CalMonitoring(GedMonitoring):
                     fig_pane = self._png_pane(
                         lambda: self.plot_dict_ch["ecal"][self.plot_type_details]
                     )
+            elif self.parameter == "QC":
+                plot = self.plot_type_details
+                data = self._det_data("qc", f"{plot}_data")
+                if data is not None:
+                    fig_pane = native_plots.plot_qc_cut(
+                        data, f"{self.channel[:9]} | QC | {plot}"
+                    )
+                else:
+                    fig_pane = self._png_pane(lambda: self.plot_dict_ch["qc"][plot])
             elif self.parameter in {"PZ", "Optimisation", "Noise", "DPLMS"}:
                 native = self._view_dsp()
                 fig_pane = (
