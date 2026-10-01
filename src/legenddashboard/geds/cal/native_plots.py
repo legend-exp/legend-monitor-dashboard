@@ -15,7 +15,12 @@ from bokeh.models import ColorBar, ColumnDataSource, LogColorMapper, Span, Whisk
 from bokeh.palettes import Viridis256
 from bokeh.plotting import figure
 
-from legenddashboard.geds.cal.fit_funcs import eval_expression, eval_fit, peak_counts
+from legenddashboard.geds.cal.fit_funcs import (
+    eval_expression,
+    eval_fit,
+    peak_counts,
+    qc_fit_counts,
+)
 from legenddashboard.geds.phy.plot_style import (
     MPL_CYCLE,
     empty_figure,
@@ -349,4 +354,40 @@ def plot_peak_track(ecal_param, title):
     p.hover.tooltips = [("time", "$x{%F %H:%M}"), ("shift (%)", "$y{0.000}")]
     p.hover.formatters = {"$x": "datetime"}
     finish_legend(p, "bottom_left")
+    return p
+
+
+def plot_qc_cut(data, title):
+    """
+    Distribution of a quality-cut parameter with the cut values (and classifier fit).
+
+    Parameters
+    ----------
+    data : dict
+        ``qc/<cut>_data``: ``edges``, ``counts``, ``cuts`` (low, high; NaN if
+        one-sided), ``xlabel`` and, for fitted classifiers, ``fit``.
+    title : str
+        Plot title.
+
+    Returns
+    -------
+    bokeh.plotting.figure
+        Step histogram with dashed cut lines.
+    """
+    if not data:
+        return empty_figure(f"{title} | no data")
+    edges = np.asarray(data["edges"], dtype=float)
+    x = (edges[1:] + edges[:-1]) / 2
+    p = make_figure(title, x_axis_label=data.get("xlabel", ""), y_axis_label="Counts")
+    p.step(x, data["counts"], mode="center", color=MPL_CYCLE[0], legend_label="data")
+    fit = data.get("fit")
+    model = qc_fit_counts(fit, x, edges[1] - edges[0]) if fit else None
+    if model is not None:
+        p.line(x, model, color=MPL_CYCLE[1], line_width=2, legend_label=fit["function"])
+    for cut in np.asarray(data.get("cuts", []), dtype=float):
+        if np.isfinite(cut):
+            p.add_layout(Span(location=cut, dimension="height", line_color="red",
+                              line_dash="dashed"))  # fmt: skip
+    p.hover.tooltips = [("x", "$x{0.000}"), ("counts", "$y{0}")]
+    finish_legend(p, "top_right")
     return p

@@ -77,6 +77,7 @@ all_detailed_plots = {
     "Optimisation": optimisation_plots,
     "Noise": nopt_plots,
     "DPLMS": dplms_plots,
+    "QC": [],  # cut names differ per detector: filled from the plot data
 }
 
 

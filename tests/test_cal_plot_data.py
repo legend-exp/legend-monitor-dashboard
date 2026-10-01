@@ -312,3 +312,19 @@ def test_dsp_builders():
     for empty in (dspp.plot_waveforms({}, "x"), dspp.plot_optimiser({}, "x"),
                   dspp.plot_dplms_filter({}, "x")):  # fmt: skip
         assert isinstance(empty, figure)
+
+
+def test_qc_cut():
+    edges = np.arange(-10, 10.05, 0.1)
+    x = (edges[1:] + edges[:-1]) / 2
+    fit = {"function": "skewed_fit", "pars": np.array([1000.0, 0.0, 1.0, 0.0])}
+    counts = fit_funcs.qc_fit_counts(fit, x, 0.1)
+    assert counts.sum() == pytest.approx(1000, rel=0.01)
+    data = {"edges": edges, "counts": counts, "cuts": np.array([-4.0, np.nan]),
+            "xlabel": "bl_std_classifier", "fit": fit}  # fmt: skip
+    p = native_plots.plot_qc_cut(data, "x")
+    assert len(p.renderers) == 2  # data + fit
+    assert native_plots.plot_qc_cut(
+        {"edges": edges, "counts": counts, "cuts": np.array([1.0, 2.0])}, "x"
+    ).renderers
+    assert fit_funcs.qc_fit_counts({"function": "nope", "pars": [1.0]}, x, 0.1) is None
